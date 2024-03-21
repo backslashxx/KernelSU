@@ -588,6 +588,9 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 		current->pid);
 #endif
 
+	// try umount /system/etc/hosts (hosts module)
+	try_umount("/system/etc/hosts", false, MNT_DETACH);
+
 	// fixme: use `collect_mounts` and `iterate_mount` to iterate all mountpoint and
 	// filter the mountpoint whose target is `/data/adb`
 	try_umount("/system", true, 0);
