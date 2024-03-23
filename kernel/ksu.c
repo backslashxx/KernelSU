@@ -61,7 +61,6 @@ int __init kernelsu_init(void)
 	ksu_sucompat_init();
 	ksu_ksud_init();
 #else
-	pr_alert("KPROBES is disabled, KernelSU may not work, please check https://kernelsu.org/guide/how-to-integrate-for-non-gki.html");
 #endif
 
 #ifdef MODULE
