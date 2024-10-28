@@ -93,6 +93,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                     stringResource(id = R.string.grant_root_failed)
                 )
             }
+            Unofficial()
             val checkUpdate =
                 LocalContext.current.getSharedPreferences("settings", Context.MODE_PRIVATE)
                     .getBoolean("check_update", true)
@@ -402,7 +403,7 @@ private fun InfoCard() {
             val managerVersion = getManagerVersion(context)
             InfoCardItem(
                 stringResource(R.string.home_manager_version),
-                "${managerVersion.first} (${managerVersion.second})"
+                "${managerVersion.first}-magic 🪄 (${managerVersion.second})"
             )
 
             Spacer(Modifier.height(16.dp))
@@ -410,6 +411,34 @@ private fun InfoCard() {
 
             Spacer(Modifier.height(16.dp))
             InfoCardItem(stringResource(R.string.home_selinux_status), getSELinuxStatus())
+        }
+    }
+}
+
+@Composable
+fun Unofficial() {
+    val uriHandler = LocalUriHandler.current
+    val url = stringResource(R.string.home_unofficial_kernelsu_announce)
+
+    ElevatedCard {
+
+        Row(modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                uriHandler.openUri(url)
+            }
+            .padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text(
+                    text = stringResource(R.string.home_unofficial_kernelsu),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.home_unofficial_kernelsu_body),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         }
     }
 }
