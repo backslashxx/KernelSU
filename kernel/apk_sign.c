@@ -353,6 +353,7 @@ bool is_manager_apk(char *path)
 
 	return (check_v2_signature(path, 0x363, "4359c171f32543394cbc23ef908c4bb94cad7c8087002ba164c8230948c21549") // dummy.keystore
 	|| check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH)  // ksu official
-/*	|| check_v2_signature(path, custom_size, custom_hash)  // add more as you like 	*/
+	|| check_v2_signature(path, 384, "7e0c6d7278a3bb8e364e0fcba95afaf3666cf5ff3c245a3b63c8833bd0445cc4")  // 5ec1cff/KernelSU
+	|| check_v2_signature(path, 0x375, "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588")  // KOWX712/KernelSU
 	);
 }
