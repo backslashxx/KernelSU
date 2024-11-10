@@ -21,8 +21,8 @@ int ksu_handle_security_bounded_transition(u32 *old_sid, u32 *new_sid) {
 	if (*old_sid == *new_sid)
 		return 0;
 
-	const char *init_domain = INIT_DOMAIN;
-	const char *su_domain = KERNEL_SU_DOMAIN;
+	const char *init_domain = INIT_CONTEXT;
+	const char *su_domain = KERNEL_SU_CONTEXT;
 
 	error = security_secctx_to_secid(init_domain, strlen(init_domain), &init_sid);
 	if (error) {
