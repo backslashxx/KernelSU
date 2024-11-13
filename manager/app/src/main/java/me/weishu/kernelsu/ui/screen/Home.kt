@@ -280,31 +280,16 @@ private fun StatusCard(
                     }
                 }
 
-                kernelVersion.isGKI() -> {
-                    Icon(Icons.Outlined.Warning, stringResource(R.string.home_not_installed))
-                    Column(Modifier.padding(start = 20.dp)) {
-                        Text(
-                            text = stringResource(R.string.home_not_installed),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.home_click_to_install),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-
                 else -> {
-                    Icon(Icons.Outlined.Block, stringResource(R.string.home_unsupported))
+                    Icon(Icons.Outlined.Block, stringResource(R.string.home_failure))
                     Column(Modifier.padding(start = 20.dp)) {
                         Text(
-                            text = stringResource(R.string.home_unsupported),
+                            text = stringResource(R.string.home_failure),
                             style = MaterialTheme.typography.titleMedium
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = stringResource(R.string.home_unsupported_reason),
+                            text = stringResource(R.string.home_failure_reason),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
