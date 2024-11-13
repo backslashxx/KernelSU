@@ -475,8 +475,13 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 	if (check_mnt && !should_umount(&path)) {
 		return;
 	}
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) || defined(KSU_UMOUNT)
 	ksu_umount_mnt(&path, flags);
+#else
+	#error You should backport path_umount to fs/namespace.c !
+	#error Read: https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#how-to-backport-path-umount
+	#error Read: https://github.com/tiann/KernelSU/pull/1464
+#endif
 }
 
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
