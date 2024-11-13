@@ -10,6 +10,8 @@
     <string name="home_module_count">Modules: %d</string>
     <string name="home_unsupported">Unsupported</string>
     <string name="home_unsupported_reason">KernelSU only supports GKI kernels now</string>
+    <string name="home_failure">!kenrelsu || != size/hash</string>
+    <string name="home_failure_reason">Failure! ask your kernel dev about it.</string>
     <string name="home_kernel">Kernel</string>
     <string name="home_abi">ABI</string>
     <string name="home_manager_version">Manager version</string>
