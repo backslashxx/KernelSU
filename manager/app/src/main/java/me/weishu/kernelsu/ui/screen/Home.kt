@@ -508,31 +508,6 @@ private fun StatusCard(
                     }
                 }
             }
-
-            kernelVersion.isGKI() -> {
-                Card(
-                    onClick = {
-                        if (kernelVersion.isGKI()) onClickInstall()
-                    },
-                    showIndication = true,
-                    pressFeedbackType = PressFeedbackType.Sink
-                ) {
-                    BasicComponent(
-                        title = stringResource(R.string.home_not_installed),
-                        summary = stringResource(R.string.home_click_to_install),
-                        leftAction = {
-                            Icon(
-                                Icons.Rounded.ErrorOutline,
-                                stringResource(R.string.home_not_installed),
-                                modifier = Modifier
-                                    .padding(end = 16.dp),
-                                tint = colorScheme.onBackground,
-                            )
-                        }
-                    )
-                }
-            }
-
             else -> {
                 Card(
                     onClick = {
@@ -542,12 +517,12 @@ private fun StatusCard(
                     pressFeedbackType = PressFeedbackType.Sink
                 ) {
                     BasicComponent(
-                        title = stringResource(R.string.home_unsupported),
-                        summary = stringResource(R.string.home_unsupported_reason),
+                        title = stringResource(R.string.home_failure),
+                        summary = stringResource(R.string.home_failure_reason),
                         leftAction = {
                             Icon(
                                 Icons.Rounded.ErrorOutline,
-                                stringResource(R.string.home_unsupported),
+                                stringResource(R.string.home_failure),
                                 modifier = Modifier
                                     .padding(end = 16.dp),
                                 tint = colorScheme.onBackground,
