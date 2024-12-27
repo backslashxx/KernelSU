@@ -146,7 +146,7 @@ static void disable_seccomp()
 #endif
 }
 
-void escape_to_root(void)
+void ksu_escape_to_root(void)
 {
 	struct cred *cred;
 
