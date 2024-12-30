@@ -59,7 +59,6 @@ import me.weishu.kernelsu.ui.component.UninstallDialog
 import me.weishu.kernelsu.ui.component.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.rememberLoadingDialog
 import me.weishu.kernelsu.ui.util.execKsud
-import me.weishu.kernelsu.ui.util.shrinkModules
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -95,7 +94,6 @@ fun SettingPager(
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
     ) { innerPadding ->
         val loadingDialog = rememberLoadingDialog()
-        val shrinkDialog = rememberConfirmDialog()
 
         val showUninstallDialog = rememberSaveable { mutableStateOf(false) }
         val uninstallDialog = UninstallDialog(showUninstallDialog, navigator)
@@ -408,35 +406,12 @@ fun SettingPager(
                     }
                 }
 
-                val shrink = stringResource(id = R.string.shrink_sparse_image)
                 KsuIsValid {
                     Card(
                         modifier = Modifier
                             .padding(top = 12.dp)
                             .fillMaxWidth(),
                     ) {
-                        SuperArrow(
-                            title = shrink,
-                            leftAction = {
-                                Icon(
-                                    Icons.Rounded.Compress,
-                                    modifier = Modifier.padding(end = 16.dp),
-                                    contentDescription = shrink,
-                                    tint = colorScheme.onBackground
-                                )
-                            },
-                            onClick = {
-                                scope.launch {
-                                    val result = shrinkDialog.awaitConfirm(title = shrink)
-                                    if (result == ConfirmResult.Confirmed) {
-                                        loadingDialog.withLoading {
-                                            shrinkModules()
-                                        }
-                                    }
-                                }
-                            },
-                        )
-
                         val lkmMode = Natives.isLkmMode
                         if (lkmMode) {
                             val uninstall = stringResource(id = R.string.settings_uninstall)
