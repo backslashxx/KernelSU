@@ -258,7 +258,7 @@ fun ModulePager(
 
         val success = loadingDialog.withLoading {
             withContext(Dispatchers.IO) {
-                uninstallModule(module.id)
+                uninstallModule(module.dirId)
             }
         }
 
@@ -276,7 +276,7 @@ fun ModulePager(
     suspend fun onModuleToggle(module: ModuleViewModel.ModuleInfo) {
         val success = loadingDialog.withLoading {
             withContext(Dispatchers.IO) {
-                toggleModule(module.id, !module.enabled)
+                toggleModule(module.dirId, !module.enabled)
             }
         }
         if (success) {
@@ -522,7 +522,7 @@ fun ModulePager(
                                 }
                             },
                             onClick = {
-                                onModuleClick(it.id, it.name, it.hasWebUi)
+                                onModuleClick(it.dirId, it.name, it.hasWebUi)
                             }
                         )
                     }
@@ -715,7 +715,7 @@ private fun ModuleList(
                                 }
                             },
                             onClick = {
-                                onClickModule(it.id, it.name, it.hasWebUi)
+                                onClickModule(it.dirId, it.name, it.hasWebUi)
                             }
                         )
                     }
@@ -825,7 +825,7 @@ fun ModuleItem(
                             minHeight = 35.dp,
                             minWidth = 35.dp,
                             onClick = {
-                                navigator.navigate(ExecuteModuleActionScreenDestination(module.id)) {
+                                navigator.navigate(ExecuteModuleActionScreenDestination(module.dirId)) {
                                     launchSingleTop = true
                                 }
                                 viewModel.markNeedRefresh()
