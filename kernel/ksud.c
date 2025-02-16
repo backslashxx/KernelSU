@@ -14,14 +14,17 @@
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
 #include <linux/aio.h>
 #endif
-#include <linux/kprobes.h>
 #include <linux/printk.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/signal.h> /* fatal_signal_pending */
+#else
+#include <linux/sched.h> /* fatal_signal_pending */
+#endif
 
 #include "allowlist.h"
-#include "arch.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
 #include "kernel_compat.h"
@@ -54,15 +57,9 @@ static void stop_vfs_read_hook();
 static void stop_execve_hook();
 static void stop_input_hook();
 
-#ifdef CONFIG_KPROBES
-static struct work_struct stop_vfs_read_work;
-static struct work_struct stop_execve_hook_work;
-static struct work_struct stop_input_hook_work;
-#else
 bool ksu_vfs_read_hook __read_mostly = true;
 bool ksu_execveat_hook __read_mostly = true;
 bool ksu_input_hook __read_mostly = true;
-#endif
 
 u32 ksu_devpts_sid;
 
@@ -157,11 +154,10 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 			     struct user_arg_ptr *argv,
 			     struct user_arg_ptr *envp, int *flags)
 {
-#ifndef CONFIG_KPROBES
 	if (!ksu_execveat_hook) {
 		return 0;
 	}
-#endif
+
 	struct filename *filename;
 
 	static const char app_process[] = "/system/bin/app_process";
@@ -313,11 +309,11 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
 int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 			size_t *count_ptr, loff_t **pos)
 {
-#ifndef CONFIG_KPROBES
+
 	if (!ksu_vfs_read_hook) {
 		return 0;
 	}
-#endif
+
 	struct file *file;
 	char __user *buf;
 	size_t count;
@@ -355,7 +351,7 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 	// we only process the first read
 	static bool rc_inserted = false;
 	if (rc_inserted) {
-		// we don't need this kprobe, unregister it!
+		// we don't need this hook, unregister it!
 		stop_vfs_read_hook();
 		return 0;
 	}
@@ -426,11 +422,10 @@ static bool is_volumedown_enough(unsigned int count)
 int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 				  int *value)
 {
-#ifndef CONFIG_KPROBES
 	if (!ksu_input_hook) {
 		return 0;
 	}
-#endif
+
 	if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
 		int val = *value;
 		pr_info("KEY_VOLUMEDOWN val: %d\n", val);
@@ -468,199 +463,22 @@ bool ksu_is_safe_mode()
 	return false;
 }
 
-#ifdef CONFIG_KPROBES
-
-// https://elixir.bootlin.com/linux/v5.10.158/source/fs/exec.c#L1864
-static int execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	int *fd = (int *)&PT_REGS_PARM1(regs);
-	struct filename **filename_ptr =
-		(struct filename **)&PT_REGS_PARM2(regs);
-	struct user_arg_ptr argv;
-#ifdef CONFIG_COMPAT
-	argv.is_compat = PT_REGS_PARM3(regs);
-	if (unlikely(argv.is_compat)) {
-		argv.ptr.compat = PT_REGS_CCALL_PARM4(regs);
-	} else {
-		argv.ptr.native = PT_REGS_CCALL_PARM4(regs);
-	}
-#else
-	argv.ptr.native = PT_REGS_PARM3(regs);
-#endif
-
-	return ksu_handle_execveat_ksud(fd, filename_ptr, &argv, NULL, NULL);
-}
-
-static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	const char __user **filename_user =
-		(const char **)&PT_REGS_PARM1(real_regs);
-	const char __user *const __user *__argv =
-		(const char __user *const __user *)PT_REGS_PARM2(real_regs);
-	struct user_arg_ptr argv = { .ptr.native = __argv };
-	struct filename filename_in, *filename_p;
-	char path[32];
-
-	if (!filename_user)
-		return 0;
-
-	memset(path, 0, sizeof(path));
-	ksu_strncpy_from_user_nofault(path, *filename_user, 32);
-	filename_in.name = path;
-
-	filename_p = &filename_in;
-	return ksu_handle_execveat_ksud(AT_FDCWD, &filename_p, &argv, NULL,
-					NULL);
-}
-
-// remove this later!
-__maybe_unused static int vfs_read_handler_pre(struct kprobe *p,
-					       struct pt_regs *regs)
-{
-	struct file **file_ptr = (struct file **)&PT_REGS_PARM1(regs);
-	char __user **buf_ptr = (char **)&PT_REGS_PARM2(regs);
-	size_t *count_ptr = (size_t *)&PT_REGS_PARM3(regs);
-	loff_t **pos_ptr = (loff_t **)&PT_REGS_CCALL_PARM4(regs);
-
-	return ksu_handle_vfs_read(file_ptr, buf_ptr, count_ptr, pos_ptr);
-}
-
-static int sys_read_handler_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	unsigned int fd = PT_REGS_PARM1(real_regs);
-	char __user **buf_ptr = (char __user **)&PT_REGS_PARM2(real_regs);
-	size_t count_ptr = (size_t *)&PT_REGS_PARM3(real_regs);
-
-	return ksu_handle_sys_read(fd, buf_ptr, count_ptr);
-}
-
-static int input_handle_event_handler_pre(struct kprobe *p,
-					  struct pt_regs *regs)
-{
-	unsigned int *type = (unsigned int *)&PT_REGS_PARM2(regs);
-	unsigned int *code = (unsigned int *)&PT_REGS_PARM3(regs);
-	int *value = (int *)&PT_REGS_CCALL_PARM4(regs);
-	return ksu_handle_input_handle_event(type, code, value);
-}
-
-#if 1
-static struct kprobe execve_kp = {
-	.symbol_name = SYS_EXECVE_SYMBOL,
-	.pre_handler = sys_execve_handler_pre,
-};
-#else
-static struct kprobe execve_kp = {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
-	.symbol_name = "do_execveat_common",
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
-	.symbol_name = "__do_execve_file",
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
-	.symbol_name = "do_execveat_common",
-#endif
-	.pre_handler = execve_handler_pre,
-};
-#endif
-
-#if 1
-static struct kprobe vfs_read_kp = {
-	.symbol_name = SYS_READ_SYMBOL,
-	.pre_handler = sys_read_handler_pre,
-};
-#else
-static struct kprobe vfs_read_kp = {
-	.symbol_name = "vfs_read",
-	.pre_handler = vfs_read_handler_pre,
-};
-#endif
-
-static struct kprobe input_event_kp = {
-	.symbol_name = "input_event",
-	.pre_handler = input_handle_event_handler_pre,
-};
-
-static void do_stop_vfs_read_hook(struct work_struct *work)
-{
-	unregister_kprobe(&vfs_read_kp);
-}
-
-static void do_stop_execve_hook(struct work_struct *work)
-{
-	unregister_kprobe(&execve_kp);
-}
-
-static void do_stop_input_hook(struct work_struct *work)
-{
-	unregister_kprobe(&input_event_kp);
-}
-#endif
-
 static void stop_vfs_read_hook()
 {
-#ifdef CONFIG_KPROBES
-	bool ret = schedule_work(&stop_vfs_read_work);
-	pr_info("unregister vfs_read kprobe: %d!\n", ret);
-#else
 	ksu_vfs_read_hook = false;
 	pr_info("stop vfs_read_hook\n");
-#endif
 }
 
 static void stop_execve_hook()
 {
-#ifdef CONFIG_KPROBES
-	bool ret = schedule_work(&stop_execve_hook_work);
-	pr_info("unregister execve kprobe: %d!\n", ret);
-#else
 	ksu_execveat_hook = false;
 	pr_info("stop execve_hook\n");
-#endif
 }
 
 static void stop_input_hook()
 {
-	static bool input_hook_stopped = false;
-	if (input_hook_stopped) {
-		return;
-	}
-	input_hook_stopped = true;
-#ifdef CONFIG_KPROBES
-	bool ret = schedule_work(&stop_input_hook_work);
-	pr_info("unregister input kprobe: %d!\n", ret);
-#else
+	if (!ksu_input_hook) { return; }
 	ksu_input_hook = false;
 	pr_info("stop input_hook\n");
-#endif
 }
 
-// ksud: module support
-void ksu_ksud_init()
-{
-#ifdef CONFIG_KPROBES
-	int ret;
-
-	ret = register_kprobe(&execve_kp);
-	pr_info("ksud: execve_kp: %d\n", ret);
-
-	ret = register_kprobe(&vfs_read_kp);
-	pr_info("ksud: vfs_read_kp: %d\n", ret);
-
-	ret = register_kprobe(&input_event_kp);
-	pr_info("ksud: input_event_kp: %d\n", ret);
-
-	INIT_WORK(&stop_vfs_read_work, do_stop_vfs_read_hook);
-	INIT_WORK(&stop_execve_hook_work, do_stop_execve_hook);
-	INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
-#endif
-}
-
-void ksu_ksud_exit()
-{
-#ifdef CONFIG_KPROBES
-	unregister_kprobe(&execve_kp);
-	// this should be done before unregister vfs_read_kp
-	// unregister_kprobe(&vfs_read_kp);
-	unregister_kprobe(&input_event_kp);
-#endif
-}
