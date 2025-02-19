@@ -533,6 +533,8 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 		return;
 	}
 
+	// debug
+	pr_info("try_umount: umounting '%s'\n", mnt);
 	ksu_umount_mnt(&path, flags);
 }
 
