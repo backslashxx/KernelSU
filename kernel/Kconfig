@@ -31,4 +31,12 @@ config KSU_ALLOWLIST_WORKAROUND
           Enable session keyring init workaround for problematic devices.
           Useful for situations where the SU allowlist is not kept after a reboot.
 
+config KSU_LSM_SECURITY_HOOKS
+	bool "Use LSM security hooks"
+        depends on KSU
+        default y
+	help
+	  Disabling this is mostly useful for kernels < 4.2 and > 6.8.
+	  Make sure to implement manual hooks on security/security.c.
+
 endmenu
