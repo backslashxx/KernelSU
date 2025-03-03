@@ -1,3 +1,9 @@
+#ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
+#define LSM_HANDLER_TYPE static int
+#else
+#define LSM_HANDLER_TYPE int
+#endif
+
 static bool ksu_kernel_umount_enabled = true;
 
 static int kernel_umount_feature_get(u64 *value)
@@ -21,7 +27,7 @@ static const struct ksu_feature_handler kernel_umount_handler = {
 	.set_handler = kernel_umount_feature_set,
 };
 
-int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
+LSM_HANDLER_TYPE ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 {
 	if (!current->mm) {
 		// skip kernel threads
@@ -90,7 +96,7 @@ static void try_umount(const char *mnt, int flags)
 	ksu_umount_mnt(mnt, &path, flags);
 }
 
-int ksu_handle_setuid(struct cred *new, const struct cred *old)
+LSM_HANDLER_TYPE ksu_handle_setuid(struct cred *new, const struct cred *old)
 {
 	if (!new || !old) {
 		return 0;
@@ -171,7 +177,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 	return 0;
 }
 
-int ksu_bprm_check(struct linux_binprm *bprm)
+LSM_HANDLER_TYPE ksu_bprm_check(struct linux_binprm *bprm)
 {
 	if (likely(!ksu_execveat_hook))
 		return 0;
@@ -186,7 +192,7 @@ int ksu_bprm_check(struct linux_binprm *bprm)
 bool ksu_vfs_read_hook __read_mostly;
 static void ksu_handle_initrc(struct file *file);
 
-int ksu_file_permission(struct file *file, int mask)
+LSM_HANDLER_TYPE ksu_file_permission(struct file *file, int mask)
 {
 	if (likely(!ksu_vfs_read_hook))
 		return 0;
@@ -196,6 +202,7 @@ int ksu_file_permission(struct file *file, int mask)
 	return 0;
 }
 
+#ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
 static int ksu_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 			    struct inode *new_inode, struct dentry *new_dentry)
 {
@@ -209,6 +216,7 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
+#include <linux/lsm_hooks.h>
 static struct security_hook_list ksu_hooks[] = {
 	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
@@ -229,6 +237,13 @@ static void ksu_lsm_hook_init(void)
 }
 #endif // 4.11
 #endif // 4.2
+
+#else
+void __init ksu_lsm_hook_init(void)
+{
+	// nothing, no-op
+}
+#endif // CONFIG_KSU_LSM_SECURITY_HOOKS
 
 void __init ksu_core_init(void)
 {
