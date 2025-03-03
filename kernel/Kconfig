@@ -23,4 +23,12 @@ config KSU_THRONE_TRACKER_ALWAYS_THREADED
 	  boot time, but can cause crowning failure on some FDE/FBEv1 setups.
 	  If unsure, say n.
 
+config KSU_LSM_SECURITY_HOOKS
+	bool "Use LSM security hooks"
+        depends on KSU
+        default y
+	help
+	  Disabling this is mostly useful for kernel > 6.8.
+	  Make sure to implement manual hooks on security/security.c.
+
 endmenu
