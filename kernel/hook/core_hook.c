@@ -1,4 +1,10 @@
-int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
+#ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
+#define LSM_HANDLER_TYPE static int
+#else
+#define LSM_HANDLER_TYPE int
+#endif
+
+LSM_HANDLER_TYPE ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 {
 	// skip kernel threads
 	if (!current->mm)
@@ -32,7 +38,7 @@ int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 	return 0;
 }
 
-int ksu_handle_setuid(struct cred *new, const struct cred *old)
+LSM_HANDLER_TYPE ksu_handle_setuid(struct cred *new, const struct cred *old)
 {
 	if (!new || !old) {
 		return 0;
@@ -65,12 +71,12 @@ kill_seccomp:
 	return 0;
 }
 
-int ksu_bprm_check(struct linux_binprm *bprm)
+LSM_HANDLER_TYPE ksu_bprm_check(struct linux_binprm *bprm)
 {
 	return 0;
 }
 
-int ksu_file_permission(struct file *file, int mask)
+LSM_HANDLER_TYPE ksu_file_permission(struct file *file, int mask)
 {
 #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
 #ifdef KSU_CAN_USE_JUMP_LABEL
@@ -85,6 +91,7 @@ int ksu_file_permission(struct file *file, int mask)
 	return 0;
 }
 
+#ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
 static int ksu_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 			    struct inode *new_inode, struct dentry *new_dentry)
 {
@@ -120,6 +127,10 @@ static void ksu_lsm_hook_init(void)
 }
 #endif // 4.11
 #endif // 4.2
+
+#else
+void __init ksu_lsm_hook_init(void) { } // nothing, no-op
+#endif // CONFIG_KSU_LSM_SECURITY_HOOKS
 
 void __init ksu_core_init(void)
 {
