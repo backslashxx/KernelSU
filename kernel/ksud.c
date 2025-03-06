@@ -477,6 +477,41 @@ bool ksu_is_safe_mode()
 	return false;
 }
 
+// execve_ksud handlers for non kprobe
+static int ksu_common_execve_ksud(const char __user *filename_user,
+			struct user_arg_ptr *argv)
+{
+	char path[32];
+
+	// return early if disabled.
+	if (!ksu_execveat_hook)
+		return 0;
+
+	if (!filename_user)
+		return 0;
+
+	memset(path, 0, sizeof(path));
+	ksu_strncpy_from_user_nofault(path, filename_user, 32);
+
+	return __ksu_handle_execveat_ksud(AT_FDCWD, path, argv, NULL, NULL);
+}
+
+int ksu_handle_execve_ksud(const char __user *filename_user,
+			const char __user *const __user *__argv)
+{
+	struct user_arg_ptr argv = { .ptr.native = __argv };
+	return ksu_common_execve_ksud(filename_user, &argv);
+}
+
+#if defined(CONFIG_COMPAT)
+int ksu_handle_compat_execve_ksud(const char __user *filename_user,
+			const compat_uptr_t __user *__argv)
+{
+	struct user_arg_ptr argv = { .ptr.compat = __argv };
+	return ksu_common_execve_ksud(filename_user, &argv);
+}
+#endif
+
 static void stop_vfs_read_hook()
 {
 	ksu_vfs_read_hook = false;
