@@ -3,7 +3,7 @@ use crate::module::{handle_updated_modules, prune_modules};
 use log::{info, warn};
 use crate::utils::is_safe_mode;
 
-use rustix::fs::{mount, MountFlags};
+use rustix::fs::{MountFlags, mount};
 use std::path::Path;
 
 use crate::{
