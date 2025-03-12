@@ -6,12 +6,23 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 #include <linux/input-event-codes.h>
+#else
+#include <uapi/linux/input.h>
+#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+#include <linux/aio.h>
+#endif
 #include <linux/printk.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
-#include <linux/sched/signal.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/signal.h> /* fatal_signal_pending */
+#else
+#include <linux/sched.h> /* fatal_signal_pending */
+#endif
 
 #include "allowlist.h"
 #include "klog.h" // IWYU pragma: keep
@@ -143,7 +154,6 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 			     struct user_arg_ptr *argv,
 			     struct user_arg_ptr *envp, int *flags)
 {
-
 	if (!ksu_execveat_hook) {
 		return 0;
 	}
@@ -341,7 +351,7 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 	// we only process the first read
 	static bool rc_inserted = false;
 	if (rc_inserted) {
-		// we don't need this kprobe, unregister it!
+		// we don't need this hook, unregister it!
 		stop_vfs_read_hook();
 		return 0;
 	}
@@ -412,7 +422,6 @@ static bool is_volumedown_enough(unsigned int count)
 int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 				  int *value)
 {
-
 	if (!ksu_input_hook) {
 		return 0;
 	}

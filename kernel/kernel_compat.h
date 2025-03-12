@@ -1,9 +1,9 @@
 #ifndef __KSU_H_KERNEL_COMPAT
 #define __KSU_H_KERNEL_COMPAT
 
-#include <linux/fs.h>
-#include <linux/version.h>
-#include "ss/policydb.h"
+#include "linux/fs.h"
+#include "linux/key.h"
+#include "linux/version.h"
 #include "linux/key.h"
 #include <linux/list.h>
 
@@ -53,6 +53,10 @@ static inline __maybe_unused size_t list_count_nodes(const struct list_head *hea
 extern long ksu_strncpy_from_user_nofault(char *dst,
 					  const void __user *unsafe_addr,
 					  long count);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+extern struct key *init_session_keyring;
+#endif
 
 extern void ksu_android_ns_fs_check();
 extern struct file *ksu_filp_open_compat(const char *filename, int flags,
