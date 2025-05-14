@@ -180,36 +180,35 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 						      .private_data = uid_data,
 						      .depth = pos->depth,
 						      .stop = &stop };
-			struct file *file;
 
-			if (!stop) {
-				file = filp_open(pos->dirpath, O_RDONLY | O_NOFOLLOW, 0);
-				if (IS_ERR(file)) {
-					pr_err("Failed to open directory: %s, err: %ld\n", pos->dirpath, PTR_ERR(file));
-					goto skip_iterate;
-				}
+			if (stop)
+				goto skip_iterate;
+
+			struct file *file = filp_open(pos->dirpath, O_RDONLY | O_NOFOLLOW | O_DIRECTORY, 0);
+			if (IS_ERR(file)) {
+				pr_err("Failed to open directory: %s, err: %ld\n", pos->dirpath, PTR_ERR(file));
+				goto skip_iterate;
+			}
 				
-				// grab magic on first folder, which is /data/app
-				if (!data_app_magic) {
-					if (file->f_inode->i_sb->s_magic) {
-						data_app_magic = file->f_inode->i_sb->s_magic;
-						pr_info("%s: dir: %s got magic! 0x%lx\n", __func__, pos->dirpath, data_app_magic);
-					} else {
-						filp_close(file, NULL);
-						goto skip_iterate;
-					}
-				}
-				
-				if (file->f_inode->i_sb->s_magic != data_app_magic) {
-					pr_info("%s: skip: %s magic: 0x%lx expected: 0x%lx\n", __func__, pos->dirpath, 
-						file->f_inode->i_sb->s_magic, data_app_magic);
+			// grab magic on first folder, which is /data/app
+			if (!data_app_magic) {
+				if (file->f_inode->i_sb->s_magic) {
+					data_app_magic = file->f_inode->i_sb->s_magic;
+					pr_info("%s: dir: %s got magic! 0x%lx\n", __func__, pos->dirpath, data_app_magic);
+				} else {
 					filp_close(file, NULL);
 					goto skip_iterate;
 				}
-
-				iterate_dir(file, &ctx.ctx);
-				filp_close(file, NULL);
 			}
+				
+			if (file->f_inode->i_sb->s_magic != data_app_magic) {
+				pr_info("%s: skip: %s magic: 0x%lx expected: 0x%lx\n", __func__, pos->dirpath, file->f_inode->i_sb->s_magic, data_app_magic);
+				filp_close(file, NULL);
+				goto skip_iterate;
+			}
+
+			iterate_dir(file, &ctx.ctx);
+			filp_close(file, NULL);
 skip_iterate:
 			list_del(&pos->list);
 			if (pos != &data)
@@ -242,15 +241,34 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 	return exist;
 }
 
-void track_throne(bool prune_only)
+static void throne_tracker_fn(bool prune_only)
 {
-	struct file *fp =
-		filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
-	if (IS_ERR(fp)) {
-		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n",
-		       __func__, PTR_ERR(fp));
-		return;
+	struct file *fp = NULL;
+	int tries = 0;
+
+	if (unlikely(!(current->flags & PF_KTHREAD))) {
+		pr_info("%s: not a kthread! skip retry for: %s\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
+		fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
+		goto skip_retry;
 	}
+
+	while (tries++ < 10) {
+		if (!is_lock_held(SYSTEM_PACKAGES_LIST_PATH)) {
+			fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
+			if (!IS_ERR(fp)) 
+				break;
+		}
+		
+		pr_info("%s: waiting for %s\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
+		msleep(100); // migth as well add a delay
+	};
+
+skip_retry:
+	if (IS_ERR(fp)) {
+		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n", __func__, PTR_ERR(fp));
+		return;
+	} else
+		pr_info("%s: %s found!\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
 
 	struct list_head uid_list;
 	INIT_LIST_HEAD(&uid_list);
@@ -322,7 +340,9 @@ void track_throne(bool prune_only)
 		if (ksu_is_manager_appid_valid()) {
 			pr_info("manager is uninstalled, invalidate it!\n");
 			ksu_invalidate_manager_uid();
-			goto prune;
+			// we can now afford this on a kthread
+			// see: https://github.com/tiann/KernelSU/pull/2584
+			// goto prune;
 		}
 		pr_info("Searching manager...\n");
 		search_manager("/data/app", 2, &uid_list);
@@ -338,6 +358,46 @@ out:
 		list_del(&np->list);
 		kfree(np);
 	}
+}
+
+static DEFINE_MUTEX(throne_tracker_mutex);
+
+static int throne_tracker_thread(void *data)
+{
+	// now de-void it here
+	bool prune_only = (bool)data;
+
+	pr_info("throne_tracker: pid: %d started\n", current->pid);
+
+	mutex_lock(&throne_tracker_mutex);
+
+	// lessen that window where user opens manager right away, yet its not crowned
+	set_user_nice(current, -20);
+
+	escape_to_root_forced();
+	throne_tracker_fn(prune_only);
+
+	mutex_unlock(&throne_tracker_mutex);
+
+	pr_info("throne_tracker: pid: %d exit!\n", current->pid);
+	return 0;
+}
+
+void track_throne(bool prune_only)
+{
+#ifndef CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED
+	static bool throne_tracker_first_run __read_mostly = true;
+	if (unlikely(throne_tracker_first_run)) {
+		mutex_lock(&throne_tracker_mutex);
+		throne_tracker_fn(prune_only);
+		mutex_unlock(&throne_tracker_mutex);
+		throne_tracker_first_run = false;
+		return;
+	}
+#endif
+
+	// HACK: force cast prune_only to be a void *
+	kthread_run(throne_tracker_thread, (void *)prune_only, "ksu_throne");
 }
 
 void ksu_throne_tracker_init()
