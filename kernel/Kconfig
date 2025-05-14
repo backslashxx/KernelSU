@@ -16,4 +16,13 @@ config KSU_DEBUG
 	help
 	  Enable KernelSU debug mode.
 
+config KSU_THRONE_TRACKER_ALWAYS_THREADED
+	bool "Always run throne_tracker in a kthread"
+	default n
+	help
+	  Runs throne_tracker in a separate kthread, including the first run.
+	  Significantly decreases boot time, but can cause crowning failure
+	  on some FDE or FBEv1 setups.
+	  If unsure, say n.
+
 endmenu
