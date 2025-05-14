@@ -6,9 +6,13 @@
 #include <linux/types.h>
 #include <linux/version.h>
 
+#include <linux/kthread.h>
+#include <linux/sched.h>
+
 uid_t ksu_manager_appid = KSU_INVALID_APPID;
 
-#define SYSTEM_PACKAGES_LIST_PATH "/data/system/packages.list.tmp"
+static struct task_struct *throne_thread = NULL;
+#define SYSTEM_PACKAGES_LIST_PATH "/data/system/packages.list"
 
 struct uid_data {
 	struct list_head list;
@@ -188,36 +192,35 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 						      .private_data = uid_data,
 						      .depth = pos->depth,
 						      .stop = &stop };
-			struct file *file;
 
-			if (!stop) {
-				file = ksu_filp_open_compat(pos->dirpath, O_RDONLY | O_NOFOLLOW, 0);
-				if (IS_ERR(file)) {
-					pr_err("Failed to open directory: %s, err: %ld\n", pos->dirpath, PTR_ERR(file));
-					goto skip_iterate;
-				}
+			if (stop)
+				goto skip_iterate;
+
+			struct file *file = ksu_filp_open_compat(pos->dirpath, O_RDONLY | O_NOFOLLOW | O_DIRECTORY, 0);
+			if (IS_ERR(file)) {
+				pr_err("Failed to open directory: %s, err: %ld\n", pos->dirpath, PTR_ERR(file));
+				goto skip_iterate;
+			}
 				
-				// grab magic on first folder, which is /data/app
-				if (!data_app_magic) {
-					if (file->f_inode->i_sb->s_magic) {
-						data_app_magic = file->f_inode->i_sb->s_magic;
-						pr_info("%s: dir: %s got magic! 0x%lx\n", __func__, pos->dirpath, data_app_magic);
-					} else {
-						filp_close(file, NULL);
-						goto skip_iterate;
-					}
-				}
-				
-				if (file->f_inode->i_sb->s_magic != data_app_magic) {
-					pr_info("%s: skip: %s magic: 0x%lx expected: 0x%lx\n", __func__, pos->dirpath, 
-						file->f_inode->i_sb->s_magic, data_app_magic);
+			// grab magic on first folder, which is /data/app
+			if (!data_app_magic) {
+				if (file->f_inode->i_sb->s_magic) {
+					data_app_magic = file->f_inode->i_sb->s_magic;
+					pr_info("%s: dir: %s got magic! 0x%lx\n", __func__, pos->dirpath, data_app_magic);
+				} else {
 					filp_close(file, NULL);
 					goto skip_iterate;
 				}
-
-				iterate_dir(file, &ctx.ctx);
-				filp_close(file, NULL);
 			}
+				
+			if (file->f_inode->i_sb->s_magic != data_app_magic) {
+				pr_info("%s: skip: %s magic: 0x%lx expected: 0x%lx\n", __func__, pos->dirpath, file->f_inode->i_sb->s_magic, data_app_magic);
+				filp_close(file, NULL);
+				goto skip_iterate;
+			}
+
+			iterate_dir(file, &ctx.ctx);
+			filp_close(file, NULL);
 skip_iterate:
 			list_del(&pos->list);
 			if (pos != &data)
@@ -250,15 +253,27 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 	return exist;
 }
 
-void track_throne(bool prune_only)
+static void throne_tracker_fn(bool prune_only)
 {
-	struct file *fp =
-		ksu_filp_open_compat(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
+	struct file *fp;
+	int tries = 0;
+
+	while (tries++ < 10) {
+		if (!is_lock_held(SYSTEM_PACKAGES_LIST_PATH)) {
+			fp = ksu_filp_open_compat(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
+			if (!IS_ERR(fp)) 
+				break;
+		}
+		
+		pr_info("%s: waiting for %s\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
+		msleep(100); // migth as well add a delay
+	};
+	
 	if (IS_ERR(fp)) {
-		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n",
-		       __func__, PTR_ERR(fp));
+		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n", __func__, PTR_ERR(fp));
 		return;
-	}
+	} else
+		pr_info("%s: %s found!\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
 
 	struct list_head uid_list;
 	INIT_LIST_HEAD(&uid_list);
@@ -341,6 +356,49 @@ out:
 	list_for_each_entry_safe (np, n, &uid_list, list) {
 		list_del(&np->list);
 		kfree(np);
+	}
+}
+
+static int throne_tracker_thread(void *data)
+{
+	// now de-void it here
+	bool prune_only = (bool)data;
+
+	pr_info("throne_tracker: pid: %d started\n", current->pid);
+
+	// this is normally not needed, but it wont hurt
+	escape_to_root_forced();
+
+	throne_tracker_fn(prune_only);
+	throne_thread = NULL;
+	smp_mb();
+	pr_info("throne_tracker: pid: %d exit!\n", current->pid);
+	return 0;
+}
+
+void track_throne(bool prune_only)
+{
+#ifndef CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED
+	static bool throne_tracker_first_run __read_mostly = true;
+	if (unlikely(throne_tracker_first_run)) {
+		throne_tracker_fn(prune_only);
+		throne_tracker_first_run = false;
+		return;
+	}
+#endif
+	smp_mb();
+	if (throne_thread != NULL) // single instance lock
+		return;
+
+	// HACK: force cast prune_only to be a void *
+	// this way we won't need to create a struct.
+	// there is only one argument anyway for track_throne()
+	// so yes, true or false is now a void pointer.
+	// reality is what I want to be.
+	throne_thread = kthread_run(throne_tracker_thread, (void *)prune_only, "throne_tracker");
+	if (IS_ERR(throne_thread)) {
+		throne_thread = NULL;
+		return;
 	}
 }
 
