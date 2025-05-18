@@ -155,16 +155,10 @@ static int __maybe_unused count(struct user_arg_ptr argv, int max)
 }
 
 // IMPORTANT NOTE: the call from execve_handler_pre WON'T provided correct value for envp and flags in GKI version
-int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
+static int __ksu_handle_execveat_ksud(int *fd, char *filename,
 			     struct user_arg_ptr *argv,
 			     struct user_arg_ptr *envp, int *flags)
 {
-	if (!ksu_execveat_hook) {
-		return 0;
-	}
-
-	struct filename *filename;
-
 	static const char app_process[] = "/system/bin/app_process";
 	static bool first_app_process = true;
 
@@ -174,15 +168,10 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 	static const char old_system_init[] = "/init";
 	static bool init_second_stage_executed = false;
 
-	if (!filename_ptr)
+	if (!filename)
 		return 0;
 
-	filename = *filename_ptr;
-	if (IS_ERR(filename)) {
-		return 0;
-	}
-
-	if (unlikely(!memcmp(filename->name, system_bin_init,
+	if (unlikely(!memcmp(filename, system_bin_init,
 			     sizeof(system_bin_init) - 1) &&
 		     argv)) {
 		// /system/bin/init executed
@@ -206,7 +195,7 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 				pr_err("/system/bin/init parse args err!\n");
 			}
 		}
-	} else if (unlikely(!memcmp(filename->name, old_system_init,
+	} else if (unlikely(!memcmp(filename, old_system_init,
 				    sizeof(old_system_init) - 1) &&
 			    argv)) {
 		// /init executed
@@ -269,7 +258,7 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 		}
 	}
 
-	if (unlikely(first_app_process && !memcmp(filename->name, app_process,
+	if (unlikely(first_app_process && !memcmp(filename, app_process,
 						  sizeof(app_process) - 1))) {
 		first_app_process = false;
 		pr_info("exec app_process, /data prepared, second_stage: %d\n",
@@ -279,6 +268,26 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 	}
 
 	return 0;
+}
+
+// keep this for manually hooked builds
+__maybe_unused int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
+			     struct user_arg_ptr *argv, struct user_arg_ptr *envp,
+			     int *flags)
+{
+	// return early when disabled
+	if (!ksu_execveat_hook) {
+		return 0;
+	}
+
+	if (!filename_ptr)
+		return 0;
+
+	struct filename *filename = *filename_ptr;
+	if (IS_ERR(filename))
+		return 0;
+
+	return __ksu_handle_execveat_ksud(fd, (char *)filename->name, argv, envp, flags);
 }
 
 static ssize_t (*orig_read)(struct file *, char __user *, size_t, loff_t *);
