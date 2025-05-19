@@ -490,8 +490,11 @@ static int ksu_common_execve_ksud(const char __user *filename_user,
 	if (!filename_user)
 		return 0;
 
-	memset(path, 0, sizeof(path));
-	ksu_strncpy_from_user_nofault(path, filename_user, 32);
+	long len = ksu_strncpy_from_user_nofault(path, filename_user, 32);
+	if (len <= 0)
+		return 0;
+
+	path[sizeof(path) - 1] = '\0';
 
 	return __ksu_handle_execveat_ksud(AT_FDCWD, path, argv, NULL, NULL);
 }
