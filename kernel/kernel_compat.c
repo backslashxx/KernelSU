@@ -93,3 +93,11 @@ out:
 	return ret;
 }
 #endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0) || !defined(CONFIG_EXT4_FS)
+__weak void ext4_unregister_sysfs(struct super_block *sb)
+{
+	pr_info("%s: feature not implemented!\n", __func__);
+}
+#endif
+
