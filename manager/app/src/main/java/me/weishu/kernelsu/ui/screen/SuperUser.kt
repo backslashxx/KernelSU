@@ -149,6 +149,7 @@ fun SuperUserPager(
                                             putBoolean("show_system_apps", viewModel.showSystemApps)
                                         }
                                         scope.launch {
+                                            viewModel.updateShowSystemApps(!viewModel.showSystemApps)
                                             viewModel.fetchAppList()
                                         }
                                         showTopPopup.value = false
