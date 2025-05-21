@@ -103,11 +103,12 @@ void on_post_fs_data(void)
 	pr_info("ksu_file sid: %d\n", ksu_file_sid);
 }
 
+#if defined(CONFIG_EXT4_FS) && ( LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) || defined(KSU_HAS_MODERN_EXT4) )
 extern void ext4_unregister_sysfs(struct super_block *sb);
 void nuke_ext4_sysfs(const char *custompath)
 {
 	struct path path;
-	int err = kern_path("/data/adb/modules", 0, &path);
+	int err = kern_path(custompath, 0, &path);
 	if (err) {
 		pr_err("nuke path err: %d\n", err);
 		return;
@@ -124,6 +125,11 @@ void nuke_ext4_sysfs(const char *custompath)
 	ext4_unregister_sysfs(sb);
 	path_put(&path);
 }
+#else
+void nuke_ext4_sysfs(const char *custompath) {
+	pr_info("%s: feature not implemented!\n", __func__);
+}
+#endif
 
 void on_module_mounted(void){
 	pr_info("on_module_mounted!\n");
