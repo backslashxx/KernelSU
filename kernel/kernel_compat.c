@@ -132,6 +132,13 @@ __weak int path_mount(const char *dev_name, struct path *path,
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+__weak void ext4_unregister_sysfs(struct super_block *sb)
+{
+	pr_info("%s: feature not implemented!\n", __func__);
+}
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0) 
 __weak long copy_from_user_nofault(void *dst, const void __user *src, size_t size)
 {
