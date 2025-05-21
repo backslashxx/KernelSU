@@ -345,4 +345,11 @@ static inline __s64 ksu_sign_extend64(__u64 value, int index)
 #endif
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0) || !defined(CONFIG_EXT4_FS)
+__weak void ext4_unregister_sysfs(struct super_block *sb)
+{
+	pr_info("%s: feature not implemented!\n", __func__);
+}
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
