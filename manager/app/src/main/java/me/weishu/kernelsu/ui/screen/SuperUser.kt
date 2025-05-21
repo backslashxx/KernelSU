@@ -148,7 +148,7 @@ fun SuperUserPager(
                                     optionSize = 2,
                                     onSelectedIndexChange = {
                                         scope.launch {
-                                            viewModel.showSystemApps = !viewModel.showSystemApps
+                                            viewModel.updateShowSystemApps(!viewModel.showSystemApps)
                                             viewModel.fetchAppList()
                                         }
                                         showTopPopup.value = false
