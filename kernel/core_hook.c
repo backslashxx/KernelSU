@@ -234,6 +234,7 @@ LSM_HANDLER_TYPE ksu_handle_rename(struct dentry *old_dentry, struct dentry *new
 	return 0;
 }
 
+#if defined(CONFIG_EXT4_FS) && ( LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) || defined(KSU_HAS_MODERN_EXT4) )
 static void nuke_ext4_sysfs(const char *custompath) {
 	struct path path;
 	int err = kern_path(custompath, 0, &path);
@@ -255,6 +256,11 @@ static void nuke_ext4_sysfs(const char *custompath) {
 	ext4_unregister_sysfs(sb);
 	path_put(&path);
 }
+#else
+static void nuke_ext4_sysfs(const char *custompath) {
+	pr_info("%s: feature not implemented!\n", __func__);
+}
+#endif
 
 static bool is_system_bin_su()
 {
