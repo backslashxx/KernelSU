@@ -18,6 +18,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.ipc.RootService
@@ -37,6 +38,7 @@ import java.text.Collator
 import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import androidx.core.content.edit
 
 class SuperUserViewModel : ViewModel() {
 
@@ -86,9 +88,15 @@ class SuperUserViewModel : ViewModel() {
             }
     }
 
-    var showSystemApps by mutableStateOf(false)
+    private val prefs = ksuApp.getSharedPreferences("settings", Context.MODE_PRIVATE)!!
+    var showSystemApps by mutableStateOf(prefs.getBoolean("show_system_apps", false))
     var isRefreshing by mutableStateOf(false)
         private set
+
+    fun updateShowSystemApps(newValue: Boolean) {
+        showSystemApps = newValue
+        prefs.edit { putBoolean("show_system_apps", newValue) }
+    }
 
     private val _searchResults = mutableStateOf<List<AppInfo>>(emptyList())
     val searchResults: State<List<AppInfo>> = _searchResults
