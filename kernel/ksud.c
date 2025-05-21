@@ -84,6 +84,7 @@ void on_post_fs_data(void)
 	stop_input_hook();
 }
 
+#if defined(CONFIG_EXT4_FS) && ( LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) || defined(KSU_HAS_MODERN_EXT4) )
 extern void ext4_unregister_sysfs(struct super_block *sb);
 int nuke_ext4_sysfs(const char *mnt)
 {
@@ -106,6 +107,12 @@ int nuke_ext4_sysfs(const char *mnt)
 	path_put(&path);
 	return 0;
 }
+#else
+int nuke_ext4_sysfs(const char* mnt) {
+	pr_info("%s: feature not implemented!\n", __func__);
+	return 0;
+}
+#endif
 
 void on_module_mounted(void)
 {
