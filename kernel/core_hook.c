@@ -25,6 +25,9 @@
 #include <linux/mount.h>
 #include <linux/fs.h>
 #include <linux/namei.h>
+#if !(LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)) && !defined(KSU_HAS_PATH_UMOUNT) 
+#include <linux/syscalls.h> // sys_umount
+#endif
 
 #include "allowlist.h"
 #include "core_hook.h"
@@ -132,13 +135,31 @@ int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 	return 0;
 }
 
-static void ksu_umount_mnt(struct path *path, int flags)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) || defined(KSU_HAS_PATH_UMOUNT)
+static void ksu_path_umount(const char *mnt, struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
-	if (err) {
-		pr_info("umount %s failed: %d\n", path->dentry->d_iname, err);
-	}
+	pr_info("path_umount: %s code: %d\n", mnt, err);
 }
+#else
+static void ksu_sys_umount(const char *mnt, int flags)
+{
+	char __user *usermnt = (char __user *)mnt;
+
+	mm_segment_t old_fs = get_fs();
+	set_fs(KERNEL_DS);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	int ret = ksys_umount(usermnt, flags);
+	set_fs(old_fs);
+	pr_info("ksys_umount: %s code: %d \n", mnt, ret);
+#else
+	long ret = sys_umount(usermnt, flags); // cuz asmlinkage long sys##name
+	set_fs(old_fs);
+	pr_info("sys_umount: %s code: %d \n", mnt, ret);
+#endif
+	return;
+}
+#endif // KSU_HAS_PATH_UMOUNT
 
 static void try_umount(const char *mnt, int flags)
 {
@@ -154,7 +175,16 @@ static void try_umount(const char *mnt, int flags)
 		return;
 	}
 
-	ksu_umount_mnt(&path, flags);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) || defined(KSU_HAS_PATH_UMOUNT)
+	ksu_path_umount(mnt, &path, flags);
+	// dont call path_put here!!
+	// path_umount releases ref for us
+#else
+	ksu_sys_umount(mnt, flags);
+	// release ref here! user_path_at increases it
+	// then only cleans for itself
+	path_put(&path);
+#endif
 }
 
 static inline void ksu_force_sig(int sig)
