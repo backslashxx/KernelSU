@@ -62,12 +62,15 @@ int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 
 extern int path_umount(struct path *path, int flags);
 
-static void ksu_umount_mnt(struct path *path, int flags)
+static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
-	if (err) {
-		pr_info("umount %s failed: %d\n", path->dentry->d_iname, err);
-	}
+
+	// upstream actually has a UAF here: path->dentry after dput
+	// but its fine as umount always succeeds
+	// that code path is very cold
+	if (err)
+		pr_info("umount %s failed: %d\n", mnt, err);
 }
 
 static void try_umount(const char *mnt, int flags)
@@ -84,7 +87,7 @@ static void try_umount(const char *mnt, int flags)
 		return;
 	}
 
-	ksu_umount_mnt(&path, flags);
+	ksu_umount_mnt(mnt, &path, flags);
 }
 
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
