@@ -19,3 +19,35 @@ __weak int path_mount(const char *dev_name, struct path *path,
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+__weak int path_umount(struct path *path, int flags)
+{
+	char buf[256] = {0};
+	int ret;
+
+	// -1 on the size as implicit null termination
+	// as we zero init the thing
+	char *usermnt = d_path(path, buf, sizeof(buf) - 1);
+	if (!(usermnt && usermnt != buf)) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	mm_segment_t old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	ret = ksys_umount((char __user *)usermnt, flags);
+#else
+	ret = (int)sys_umount((char __user *)usermnt, flags);
+#endif
+
+	set_fs(old_fs);
+
+	// release ref here! user_path_at increases it
+	// then only cleans for itself
+out:
+	path_put(path); 
+	return ret;
+}
+#endif
