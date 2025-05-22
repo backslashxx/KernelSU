@@ -57,10 +57,28 @@ ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
 
 ifeq ($(shell grep -q "int path_umount" $(srctree)/fs/namespace.c; echo $$?),0)
-ccflags-y += -DKSU_UMOUNT
-else
-$(info -- Did you know you can backport path_umount to fs/namespace.c from 5.9?)
-$(info -- Read: https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#how-to-backport-path-umount)
+$(info -- KernelSU/compat: path_umount found)
+ccflags-y += -DKSU_HAS_PATH_UMOUNT
+endif
+
+ifeq ($(shell grep -q "strncpy_from_user_nofault" $(srctree)/include/linux/uaccess.h; echo $$?),0)
+$(info -- KernelSU/compat: strncpy_from_user_nofault found)
+ccflags-y += -DKSU_STRNCPY_FROM_USER_NOFAULT
+endif
+
+ifeq ($(shell grep -q "strncpy_from_unsafe_user" $(srctree)/include/linux/uaccess.h; echo $$?),0)
+$(info -- KernelSU/compat: strncpy_from_unsafe_user found)
+ccflags-y += -DKSU_STRNCPY_FROM_UNSAFE_USER
+endif
+
+ifeq ($(shell grep -q "ssize_t kernel_read" $(srctree)/fs/read_write.c; echo $$?),0)
+$(info -- KernelSU/compat: newer kernel_read found)
+ccflags-y += -DKSU_NEW_KERNEL_READ
+endif
+
+ifeq ($(shell grep "ssize_t kernel_write" $(srctree)/fs/read_write.c | grep -q "const void" ; echo $$?),0)
+$(info -- KernelSU/compat: newer kernel_write found)
+ccflags-y += -DKSU_NEW_KERNEL_WRITE
 endif
 
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
