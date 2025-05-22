@@ -25,6 +25,7 @@
 #include <linux/mount.h>
 #include <linux/fs.h>
 #include <linux/namei.h>
+#include <linux/syscalls.h> // sys_umount
 
 static bool ksu_kernel_umount_enabled = true;
 
@@ -88,12 +89,48 @@ int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 	return 0;
 }
 
-static void ksu_umount_mnt(struct path *path, int flags)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+__weak int path_umount(struct path *path, int flags)
+{
+	char buf[256] = {0};
+	int ret;
+
+	// -1 on the size as implicit null termination
+	// as we zero init the thing
+	char *usermnt = d_path(path, buf, sizeof(buf) - 1);
+	if (!(usermnt && usermnt != buf)) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	mm_segment_t old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	ret = ksys_umount((char __user *)usermnt, flags);
+#else
+	ret = (int)sys_umount((char __user *)usermnt, flags);
+#endif
+
+	set_fs(old_fs);
+
+	// release ref here! user_path_at increases it
+	// then only cleans for itself
+out:
+	path_put(path); 
+	return ret;
+}
+#endif
+
+static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
-	if (err) {
-		pr_info("umount %s failed: %d\n", path->dentry->d_iname, err);
-	}
+
+	// upstream actually has a UAF here: path->dentry after dput
+	// but its fine as umount always succeeds
+	// that code path is very cold
+	if (err)
+		pr_info("umount %s failed: %d\n", mnt, err);
 }
 
 static void try_umount(const char *mnt, int flags)
@@ -110,7 +147,7 @@ static void try_umount(const char *mnt, int flags)
 		return;
 	}
 
-	ksu_umount_mnt(&path, flags);
+	ksu_umount_mnt(mnt, &path, flags);
 }
 
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
