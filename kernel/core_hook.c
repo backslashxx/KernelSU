@@ -25,6 +25,7 @@
 #include <linux/mount.h>
 #include <linux/fs.h>
 #include <linux/namei.h>
+#include <linux/syscalls.h> // sys_umount
 
 static bool ksu_kernel_umount_enabled = true;
 static bool ksu_enhanced_security_enabled = false;
@@ -110,13 +111,38 @@ int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 	return 0;
 }
 
-static void ksu_umount_mnt(struct path *path, int flags)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) || defined(KSU_HAS_PATH_UMOUNT)
+static inline void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
-	if (err) {
-		pr_info("umount %s failed: %d\n", path->dentry->d_iname, err);
-	}
+
+	// upstream actually has a UAF here: path->dentry after dput
+	// but its fine as umount always succeeds
+	// that code path is very cold
+
+	pr_info("path_umount: %s code: %d\n", mnt, err);
 }
+#else
+static inline void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
+{
+	mm_segment_t old_fs = get_fs();
+	set_fs(KERNEL_DS); // to allow access to kernel's data segment
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	int ret = ksys_umount((char __user *)mnt, flags);
+#else
+	long ret = sys_umount((char __user *)mnt, flags); // cuz asmlinkage long sys##name
+#endif
+
+	set_fs(old_fs);
+	
+	pr_info("sys_umount: %s code: %d \n", mnt, ret);
+
+	// release ref here! user_path_at increases it
+	// then only cleans for itself
+	path_put(path);
+}
+#endif // KSU_HAS_PATH_UMOUNT
 
 static void try_umount(const char *mnt, int flags)
 {
@@ -132,7 +158,7 @@ static void try_umount(const char *mnt, int flags)
 		return;
 	}
 
-	ksu_umount_mnt(&path, flags);
+	ksu_umount_mnt(mnt, &path, flags);
 }
 
 static inline void ksu_force_sig(int sig)
