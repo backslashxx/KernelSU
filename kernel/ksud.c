@@ -561,6 +561,51 @@ bool ksu_is_safe_mode()
 	return false;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0) // is_ksu_transition
+u32 ksud_init_sid = 0;
+u32 ksud_su_sid = 0;
+
+int grab_transition_sids()
+{
+	int error = security_secctx_to_secid("u:r:init:s0", strlen("u:r:init:s0"), &ksud_init_sid);
+	if (error)
+		return 1;
+
+	pr_info("is_ksu_transition: got init sid: %d\n", ksud_init_sid);
+
+	error = security_secctx_to_secid(KERNEL_SU_CONTEXT, strlen(KERNEL_SU_CONTEXT), &ksud_su_sid);
+	if (error)
+		return 1;
+
+	pr_info("is_ksu_transition: got su sid: %d\n", ksud_su_sid);
+	
+	return 0;
+}
+
+bool is_ksu_transition(const struct task_security_struct *old_tsec,
+			const struct task_security_struct *new_tsec)
+{
+
+	// we don't need this hook anymore after the third ksud run, which is boot-complete.
+	if (likely(ksu_boot_completed))
+		return false;
+
+	if (!ksud_su_sid || !ksud_init_sid) {
+		int ret = grab_transition_sids();
+		if (ret)
+			return false;
+	}
+
+	// if its init transitioning to su, allow it
+	if (old_tsec->sid == ksud_init_sid && new_tsec->sid == ksud_su_sid) {
+		pr_info("%s: allowing init (%d) -> su (%d)\n", __func__, ksud_init_sid, ksud_su_sid);
+		return true;
+	}
+
+	return false;
+}
+#endif // is_ksu_transition
+
 static void stop_vfs_read_hook()
 {
 	ksu_vfs_read_hook = false;
