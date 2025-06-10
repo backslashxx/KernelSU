@@ -109,8 +109,46 @@ struct cred* ksu_cred;
 
 extern void ksu_supercalls_init();
 
+// track backports and other quirks here
+// ref: kernel_compat.c, Makefile
+// yes looks nasty
+#if defined(CONFIG_KSU_DEBUG)
+	#define FEAT_1 " +debug"
+#else
+	#define FEAT_1 ""
+#endif
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	#define FEAT_2 " +kp_ksud"
+#else
+	#define FEAT_2 ""
+#endif
+#if defined(CONFIG_KSU_EXTRAS)
+	#define FEAT_3 " +extras"
+#else
+	#define FEAT_3 ""
+#endif
+#if defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	#define FEAT_4 " +syscall_table_hook"
+#else
+	#define FEAT_4 ""
+#endif
+#if !defined(CONFIG_KSU_LSM_SECURITY_HOOKS)
+	#define FEAT_5 " -lsm_hooks"
+#else
+	#define FEAT_5 ""
+#endif
+#if defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
+	#define FEAT_6 " +policy_rwlock"
+#else
+	#define FEAT_6 ""
+#endif
+
+#define EXTRA_FEATURES FEAT_1 FEAT_2 FEAT_3 FEAT_4 FEAT_5 FEAT_6
+
 int __init kernelsu_init(void)
 {
+	pr_info("Initialized on: %s (%s) with ksuver: %s%s\n", UTS_RELEASE, UTS_MACHINE, __stringify(KSU_VERSION), EXTRA_FEATURES);
+
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert("*************************************************************");
 	pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
