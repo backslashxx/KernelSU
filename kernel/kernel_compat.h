@@ -273,4 +273,8 @@ __weak ssize_t strscpy_pad(char *dest, const char *src, size_t count)
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#define d_is_reg(dentry) S_ISREG((dentry)->d_inode->i_mode)
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
