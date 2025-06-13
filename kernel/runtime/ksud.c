@@ -280,6 +280,7 @@ append_module_rc:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0) || defined(KSU_HAS_FOP_READ_ITER)
 static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
 {
 	ssize_t ret = 0;
@@ -331,6 +332,7 @@ append_module_rc:
 	}
 	return ret;
 }
+#endif
 
 static bool is_init_rc(struct file *fp)
 {
@@ -410,10 +412,12 @@ static noinline void ksu_install_rc_hook(struct file *file)
 	if (orig_read) {
 		fops_proxy.read = read_proxy;
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0) || defined(KSU_HAS_FOP_READ_ITER)
 	orig_read_iter = file->f_op->read_iter;
 	if (orig_read_iter) {
 		fops_proxy.read_iter = read_iter_proxy;
 	}
+#endif
 	// replace the file_operations
 	file->f_op = &fops_proxy;
 
