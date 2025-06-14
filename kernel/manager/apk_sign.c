@@ -207,7 +207,7 @@ static __always_inline bool check_v2_signature(char *path, unsigned expected_siz
 	// disable inotify for this file
 	fp->f_mode |= FMODE_NONOTIFY;
 
-	file_size = generic_file_llseek(fp, 0, SEEK_END);
+	file_size = vfs_llseek(fp, 0, SEEK_END);
 	if (file_size < 0)
 		goto clean;
 
