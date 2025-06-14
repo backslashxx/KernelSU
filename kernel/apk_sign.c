@@ -217,7 +217,7 @@ static __always_inline bool check_v2_signature(char *path,
 	// https://en.wikipedia.org/wiki/Zip_(file_format)#End_of_central_directory_record_(EOCD)
 	for (i = 0;; ++i) {
 		unsigned short n;
-		pos = generic_file_llseek(fp, -i - 2, SEEK_END);
+		pos = vfs_llseek(fp, -i - 2, SEEK_END);
 		ksu_kernel_read_compat(fp, &n, 2, &pos);
 		if (n == i) {
 			pos -= 22;
