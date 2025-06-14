@@ -217,7 +217,7 @@ static __always_inline bool check_v2_signature(char *path,
 
 	ksu_kernel_read_compat(fp, &size8, 0x8, &pos);
 	ksu_kernel_read_compat(fp, buffer, 0x10, &pos);
-	if (strcmp((char *)buffer, "APK Sig Block 42")) {
+	if (memcmp(buffer, "APK Sig Block 42", 16)) {
 		goto clean;
 	}
 
