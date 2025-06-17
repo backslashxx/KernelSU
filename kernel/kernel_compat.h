@@ -63,4 +63,16 @@ static long ksu_copy_from_user_retry(void *to,
 	return copy_from_user(to, from, count);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0) && !defined(KSU_HAS_ITERATE_DIR)
+struct dir_context {
+	const filldir_t actor;
+	loff_t pos;
+};
+
+static int iterate_dir(struct file *file, struct dir_context *ctx)
+{
+	return vfs_readdir(file, ctx->actor, ctx);
+}
+#endif // KSU_HAS_ITERATE_DIR
+
 #endif
