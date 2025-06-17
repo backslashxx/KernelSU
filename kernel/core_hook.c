@@ -32,6 +32,7 @@
 #include "kernel_compat.h"
 
 static bool ksu_module_mounted = false;
+static unsigned int ksu_unmountable_count = 0;
 
 extern int handle_sepolicy(unsigned long arg3, void __user *arg4);
 
@@ -565,6 +566,10 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 	if (!ksu_module_mounted) {
 		return 0;
 	}
+	
+	// we dont need to unmount if theres no unmountable
+	if (!ksu_unmountable_count)
+		return 0;
 
 	if (!new || !old) {
 		return 0;
@@ -647,7 +652,8 @@ static int ksu_mount_monitor(const char *dev_name, const char *dirname, const ch
 		if (new_entry) {
 			new_entry->umountable = kstrdup(dirname, GFP_KERNEL);
 			list_add(&new_entry->list, &mount_list);
-			pr_info("%s: devicename %s fstype: %s path: %s\n", __func__, string_devname, string_fstype, new_entry->umountable);
+			ksu_unmountable_count++;
+			pr_info("%s: devicename: %s fstype: %s path: %s count: %d\n", __func__, string_devname, string_fstype, new_entry->umountable, ksu_unmountable_count);
 		}
 	}
 out:
