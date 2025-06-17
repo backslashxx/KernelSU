@@ -553,9 +553,12 @@ LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long 
 				return 0;
 			}
 			error = susfs_add_try_umount((struct st_susfs_try_umount __user*)arg3);
-			pr_info("susfs: CMD_SUSFS_ADD_TRY_UMOUNT -> ret: %d\n", error);
 			if (copy_to_user((void __user*)arg5, &error, sizeof(error)))
 				pr_info("susfs: copy_to_user() failed\n");
+			else {
+				ksu_unmountable_count++;
+				pr_info("susfs: CMD_SUSFS_ADD_TRY_UMOUNT -> ret: %d, count: %d\n", error, ksu_unmountable_count);
+			}
 			return 0;
 		}
 		if (arg2 == CMD_SUSFS_RUN_UMOUNT_FOR_CURRENT_MNT_NS) {
