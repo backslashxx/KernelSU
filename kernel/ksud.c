@@ -85,19 +85,6 @@ void on_post_fs_data(void)
 	pr_info("devpts sid: %d\n", ksu_devpts_sid);
 }
 
-#define MAX_ARG_STRINGS 0x7FFFFFFF
-struct user_arg_ptr {
-#ifdef CONFIG_COMPAT
-	bool is_compat;
-#endif
-	union {
-		const char __user *const __user *native;
-#ifdef CONFIG_COMPAT
-		const compat_uptr_t __user *compat;
-#endif
-	} ptr;
-};
-
 // since _ksud handler only uses argv and envp for comparisons
 // this can probably work
 // adapted from ksu_handle_execveat_ksud
@@ -244,25 +231,6 @@ int ksu_handle_pre_ksud(const char *filename)
 		argv1 = "";
 
 	return ksu_handle_bprm_ksud(filename, argv1, envp, envp_copy_len);
-}
-
-// keep this for manually hooked builds
-__maybe_unused int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
-			     struct user_arg_ptr *argv, struct user_arg_ptr *envp,
-			     int *flags)
-{
-	// return early when disabled
-	if (!ksu_execveat_hook)
-		return 0;
-
-	if (!filename_ptr)
-		return 0;
-
-	struct filename *filename = *filename_ptr;
-	if (IS_ERR(filename))
-		return 0;
-
-	return ksu_handle_pre_ksud((char *)filename->name);
 }
 
 static ssize_t (*orig_read)(struct file *, char __user *, size_t, loff_t *);
@@ -452,41 +420,17 @@ bool ksu_is_safe_mode()
 	return false;
 }
 
-// execve_ksud handlers for non kprobe
-static int ksu_common_execve_ksud(const char __user *filename_user,
-			struct user_arg_ptr *argv)
-{
-	char path[32];
-
-	// return early if disabled.
-	if (!ksu_execveat_hook)
-		return 0;
-
-	if (!filename_user)
-		return 0;
-
-	long len = ksu_strncpy_from_user_nofault(path, filename_user, 32);
-	if (len <= 0)
-		return 0;
-
-	path[sizeof(path) - 1] = '\0';
-
-	return ksu_handle_pre_ksud(path);
-}
-
 __maybe_unused int ksu_handle_execve_ksud(const char __user *filename_user,
 			const char __user *const __user *__argv)
 {
-	struct user_arg_ptr argv = { .ptr.native = __argv };
-	return ksu_common_execve_ksud(filename_user, &argv);
+	return 0;
 }
 
 #if defined(CONFIG_COMPAT)
 __maybe_unused int ksu_handle_compat_execve_ksud(const char __user *filename_user,
 			const compat_uptr_t __user *__argv)
 {
-	struct user_arg_ptr argv = { .ptr.compat = __argv };
-	return ksu_common_execve_ksud(filename_user, &argv);
+	return 0;
 }
 #endif
 
