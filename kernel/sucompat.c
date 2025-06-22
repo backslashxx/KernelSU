@@ -23,7 +23,7 @@
 #define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
 
-extern void escape_to_root();
+extern void ksu_escape_to_root();
 
 static bool ksu_sucompat_non_kp __read_mostly = true;
 
@@ -85,7 +85,7 @@ static int ksu_sucompat_user_common(const char __user **filename_user,
 	if (escalate) {
 		pr_info("%s su found\n", syscall_name);
 		*filename_user = ksud_user_path();
-		escape_to_root(); // escalate !!
+		ksu_escape_to_root(); // escalate !!
 	} else {
 		pr_info("%s su->sh!\n", syscall_name);
 		*filename_user = sh_user_path();
@@ -145,7 +145,7 @@ static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_n
 	if (escalate) {
 		pr_info("%s su found\n", function_name);
 		memcpy(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH));
-		escape_to_root();
+		ksu_escape_to_root();
 	} else {
 		pr_info("%s su->sh\n", function_name);
 		memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
