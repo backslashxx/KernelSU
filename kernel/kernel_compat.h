@@ -30,7 +30,9 @@ extern long ksu_copy_from_user_nofault(void *dst, const void __user *src, size_t
  * try nofault copy first, if it fails, try with plain
  * paramters are the same as copy_from_user
  * 0 = success
+ * + hot since this is reused on sucompat
  */
+__attribute__((hot))
 static long ksu_copy_from_user_retry(void *to, 
 		const void __user *from, unsigned long count)
 {
