@@ -124,6 +124,18 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 	return ksu_sucompat_user_common(filename_user, "sys_execve", true);
 }
 
+// getname_flags on fs/namei.c, this hooks ALL fs-related syscalls.
+// NOT RECOMMENDED for daily use. mostly for debugging purposes.
+int ksu_getname_flags_user(const char __user **filename_user, int flags)
+{
+	if (!is_su_allowed((const void *)filename_user))
+		return 0;
+
+	// sys_execve always calls getname, which sets flags = 0 on getname_flags
+	// we can use it to deduce if caller is likely execve
+	return ksu_sucompat_user_common(filename_user, "getname_flags", !!!flags);
+}
+
 static int ksu_do_execveat_common(void *filename_ptr, const char *function_name)
 {
 	const char sh[] = KSUD_PATH;
