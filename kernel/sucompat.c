@@ -148,7 +148,6 @@ int ksu_getname_flags_user(const char __user **filename_user, int flags)
 	return ksu_sucompat_user_common(filename_user, "getname_flags", !!!flags);
 }
 
-
 static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_name, bool escalate)
 {
 
@@ -205,6 +204,17 @@ int ksu_legacy_execve_sucompat(const char **filename_ptr,
 	return ksu_sucompat_kernel_common((void *)*filename_ptr, "do_execve_common", true);
 }
 #endif
+
+// getname_flags on fs/namei.c, this hooks ALL fs-related syscalls.
+// put the hook right after usercopy
+// NOT RECOMMENDED for daily use. mostly for debugging purposes.
+int ksu_getname_flags_kernel(char **kname, int flags)
+{
+	if (!is_su_allowed((const void **)kname))
+		return 0;
+
+	return ksu_sucompat_kernel_common((void *)*kname, "getname_flags", !!!flags);
+}
 
 static void ksu_sucompat_enable()
 {
