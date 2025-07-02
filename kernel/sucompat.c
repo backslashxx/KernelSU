@@ -136,17 +136,20 @@ int ksu_getname_flags_user(const char __user **filename_user, int flags)
 	return ksu_sucompat_user_common(filename_user, "getname_flags", !!!flags);
 }
 
-static int ksu_do_execveat_common(void *filename_ptr, const char *function_name)
+static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_name, bool escalate)
 {
-	const char sh[] = KSUD_PATH;
-	const char su[] = SU_PATH;
 
-	if (likely(memcmp(filename_ptr, su, sizeof(su))))
+	if (likely(memcmp(filename_ptr, SU_PATH, sizeof(SU_PATH))))
 		return 0;
 
-	pr_info("%s su found\n", function_name);
-	memcpy(filename_ptr, sh, sizeof(sh));
-	escape_to_root();
+	if (escalate) {
+		pr_info("%s su found\n", function_name);
+		memcpy(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH));
+		escape_to_root();
+	} else {
+		pr_info("%s su->sh\n", function_name);
+		memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
+	}
 	return 0;
 }
 
@@ -164,7 +167,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	// return ksu_do_execveat_common((void *)filename->name, "do_execveat_common");
 	// nvm this, just inline
 
-	return ksu_do_execveat_common((void *)(*filename_ptr)->name, "do_execveat_common");
+	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
 }
 
 int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
@@ -182,9 +185,20 @@ int ksu_legacy_execve_sucompat(const char **filename_ptr,
 	if (!is_su_allowed((const void *)filename_ptr))
 		return 0;
 
-	return ksu_do_execveat_common((void *)*filename_ptr, "do_execve_common");
+	return ksu_sucompat_kernel_common((void *)*filename_ptr, "do_execve_common", true);
 }
 #endif
+
+// getname_flags on fs/namei.c, this hooks ALL fs-related syscalls.
+// put the hook right after usercopy
+// NOT RECOMMENDED for daily use. mostly for debugging purposes.
+int ksu_getname_flags_kernel(char **kname, int flags)
+{
+	if (!is_su_allowed((const void *)kname))
+		return 0;
+
+	return ksu_sucompat_kernel_common((void *)*kname, "getname_flags", !!!flags);
+}
 
 // dummified
 int ksu_handle_devpts(struct inode *inode)
