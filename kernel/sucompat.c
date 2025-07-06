@@ -194,6 +194,19 @@ int ksu_handle_devpts(struct inode *inode)
 
 #ifdef CONFIG_KPROBES
 
+// struct filename *getname_flags(const char __user *filename, int flags, int *empty)
+
+static int getname_flags_handler_pre(struct kprobe *p, struct pt_regs *regs)
+{
+	struct pt_regs *real_regs = PT_REAL_REGS(regs);
+
+	const char __user **filename_user = (const char **)&PT_REGS_PARM1(real_regs);
+
+	int flags = (int)PT_REGS_PARM2(real_regs);
+
+	return ksu_getname_flags_user(filename_user, flags);
+}
+
 static int faccessat_handler_pre(struct kprobe *p, struct pt_regs *regs)
 {
 	struct pt_regs *real_regs = PT_REAL_REGS(regs);
@@ -265,17 +278,15 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
 	*kp_ptr = NULL;
 }
 
-static struct kprobe *su_kps[4];
+static struct kprobe *su_kps[2];
 #endif
 
 // sucompat: permited process can execute 'su' to gain root access.
 void ksu_sucompat_init()
 {
 #ifdef CONFIG_KPROBES
-	su_kps[0] = init_kprobe(SYS_EXECVE_SYMBOL, execve_handler_pre);
-	su_kps[1] = init_kprobe(SYS_FACCESSAT_SYMBOL, faccessat_handler_pre);
-	su_kps[2] = init_kprobe(SYS_NEWFSTATAT_SYMBOL, newfstatat_handler_pre);
-	su_kps[3] = init_kprobe("pts_unix98_lookup", pts_unix98_lookup_pre);
+	su_kps[0] = init_kprobe("getname_flags", getname_flags_handler_pre);
+	su_kps[1] = init_kprobe("pts_unix98_lookup", pts_unix98_lookup_pre);
 #endif
 }
 
