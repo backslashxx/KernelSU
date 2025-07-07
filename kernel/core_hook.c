@@ -286,6 +286,42 @@ skip_check:
 	if (KERNEL_SU_OPTION != option)
 		return 0;
 
+#ifdef CONFIG_KSU_DEBUG
+	pr_info("option: 0x%x, cmd: %ld\n", option, arg2);
+#endif
+
+	if (arg2 == CMD_GRANT_ROOT) {
+		pr_info("allow root for: %d\n", current_uid().val);
+		escape_to_root();
+		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
+			pr_err("grant_root: prctl reply error\n");
+		}
+		return 0;
+	}
+
+	if (arg2 == CMD_ENABLE_SU) {
+		bool enabled = (arg3 != 0);
+		if (enabled == ksu_su_compat_enabled) {
+			pr_info("cmd enable su but no need to change.\n");
+			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
+				pr_err("prctl reply error, cmd: %lu\n", arg2);
+			}
+			return 0;
+		}
+
+		if (enabled) {
+			ksu_sucompat_init();
+		} else {
+			ksu_sucompat_exit();
+		}
+		ksu_su_compat_enabled = enabled;
+
+		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
+			pr_err("prctl reply error, cmd: %lu\n", arg2);
+		}
+		return 0;
+	}
+
 	// just continue old logic
 	bool from_root = !current_uid().val;
 	bool from_manager = is_manager();
@@ -294,10 +330,6 @@ skip_check:
 		// only root or manager can access this interface
 		return 0;
 	}
-
-#ifdef CONFIG_KSU_DEBUG
-	pr_info("option: 0x%x, cmd: %ld\n", option, arg2);
-#endif
 
 	if (arg2 == CMD_ADD_TRY_UMOUNT) {
 		struct mount_entry *new_entry, *entry;
@@ -364,17 +396,6 @@ skip_check:
 				pr_err("become_manager: prctl reply error\n");
 			}
 			return 0;
-		}
-		return 0;
-	}
-
-	if (arg2 == CMD_GRANT_ROOT) {
-		if (is_allow_su()) {
-			pr_info("allow root for: %d\n", current_uid().val);
-			escape_to_root();
-			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
-				pr_err("grant_root: prctl reply error\n");
-			}
 		}
 		return 0;
 	}
@@ -557,30 +578,6 @@ skip_check:
 		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
 			pr_err("prctl reply error, cmd: %lu\n", arg2);
 		}
-		return 0;
-	}
-
-	if (arg2 == CMD_ENABLE_SU) {
-		bool enabled = (arg3 != 0);
-		if (enabled == ksu_su_compat_enabled) {
-			pr_info("cmd enable su but no need to change.\n");
-			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
-				pr_err("prctl reply error, cmd: %lu\n", arg2);
-			}
-			return 0;
-		}
-
-		if (enabled) {
-			ksu_sucompat_init();
-		} else {
-			ksu_sucompat_exit();
-		}
-		ksu_su_compat_enabled = enabled;
-
-		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
-			pr_err("prctl reply error, cmd: %lu\n", arg2);
-		}
-
 		return 0;
 	}
 
