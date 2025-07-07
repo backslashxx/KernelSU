@@ -61,14 +61,14 @@ $(info -- KernelSU/compat: path_umount found)
 ccflags-y += -DKSU_HAS_PATH_UMOUNT
 endif
 
-ifeq ($(shell grep -q "strncpy_from_user_nofault" $(srctree)/include/linux/uaccess.h; echo $$?),0)
-$(info -- KernelSU/compat: strncpy_from_user_nofault found)
-ccflags-y += -DKSU_STRNCPY_FROM_USER_NOFAULT
+ifeq ($(shell grep -q "^long copy_from_user_nofault" $(srctree)/include/linux/uaccess.h; echo $$?),0)
+$(info -- KernelSU/compat: copy_from_user_nofault found)
+ccflags-y += -DKSU_COPY_FROM_USER_NOFAULT
 endif
 
-ifeq ($(shell grep -q "strncpy_from_unsafe_user" $(srctree)/include/linux/uaccess.h; echo $$?),0)
-$(info -- KernelSU/compat: strncpy_from_unsafe_user found)
-ccflags-y += -DKSU_STRNCPY_FROM_UNSAFE_USER
+ifeq ($(shell grep -q "^extern long probe_user_read" $(srctree)/include/linux/uaccess.h; echo $$?),0)
+$(info -- KernelSU/compat: probe_user_read found)
+ccflags-y += -DKSU_PROBE_USER_READ
 endif
 
 ifeq ($(shell grep -q "ssize_t kernel_read" $(srctree)/fs/read_write.c; echo $$?),0)
