@@ -256,6 +256,16 @@ static void nuke_ext4_sysfs(const char *custompath) {
 }
 #endif
 
+static bool is_system_bin_su()
+{
+	// YES in_execve becomes 0 when it succeeds.
+	if (!current->mm || current->in_execve) 
+		return false;
+
+	// quick af check
+	return (current->mm->exe_file && !strcmp(current->mm->exe_file->f_path.dentry->d_name.name, "su"));
+}
+
 struct mount_entry {
     char *umountable;
     struct list_head list;
@@ -284,7 +294,8 @@ LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long 
 	bool from_root = 0 == current_uid().val;
 	bool from_manager = is_manager();
 
-	if (!from_root && !from_manager) {
+	if (!from_root && !from_manager 
+		&& !(is_allow_su() && is_system_bin_su())) {
 		// only root or manager can access this interface
 		return 0;
 	}
@@ -497,6 +508,29 @@ LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long 
 		return 0;
 	}
 
+	if (arg2 == CMD_ENABLE_SU) {
+		bool enabled = (arg3 != 0);
+		if (enabled == ksu_su_compat_enabled) {
+			pr_info("cmd enable su but no need to change.\n");
+			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
+				pr_err("prctl reply error, cmd: %lu\n", arg2);
+			}
+			return 0;
+		}
+
+		if (enabled) {
+			ksu_sucompat_init();
+		} else {
+			ksu_sucompat_exit();
+		}
+		ksu_su_compat_enabled = enabled;
+
+		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
+			pr_err("prctl reply error, cmd: %lu\n", arg2);
+		}
+		return 0;
+	}
+
 	// all other cmds are for 'root manager'
 	if (!from_manager) {
 		return 0;
@@ -548,30 +582,6 @@ LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long 
 		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
 			pr_err("prctl reply error, cmd: %lu\n", arg2);
 		}
-		return 0;
-	}
-
-	if (arg2 == CMD_ENABLE_SU) {
-		bool enabled = (arg3 != 0);
-		if (enabled == ksu_su_compat_enabled) {
-			pr_info("cmd enable su but no need to change.\n");
-			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
-				pr_err("prctl reply error, cmd: %lu\n", arg2);
-			}
-			return 0;
-		}
-
-		if (enabled) {
-			ksu_sucompat_init();
-		} else {
-			ksu_sucompat_exit();
-		}
-		ksu_su_compat_enabled = enabled;
-
-		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
-			pr_err("prctl reply error, cmd: %lu\n", arg2);
-		}
-
 		return 0;
 	}
 
