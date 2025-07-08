@@ -955,6 +955,23 @@ LSM_HANDLER_TYPE ksu_sb_mount(const char *dev_name, const struct path *path,
 	}
 }
 
+__attribute__((hot))
+static __always_inline int check_sus_inode(struct inode *inode, uid_t uid)
+{
+	if (!inode->i_state)
+		return 0;
+	
+	if (unlikely(inode->i_state & INODE_STATE_SUS_PATH)
+		&& likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC) ) {
+#ifdef CONFIG_KSU_DEBUG		
+		pr_info("%s: blocked inode access: %s with uid %u\n", __func__, current->comm, uid);
+#endif
+		return -ENOENT;
+	}
+
+	return 0;
+}
+
 #ifndef DEVPTS_SUPER_MAGIC
 #define DEVPTS_SUPER_MAGIC	0x1cd1
 #endif
@@ -968,7 +985,44 @@ LSM_HANDLER_TYPE ksu_inode_permission(struct inode *inode, int mask)
 		pr_info("%s: handling devpts for: %s \n", __func__, current->comm);
 		__ksu_handle_devpts(inode);
 	}
-	return 0;
+
+	if (!boot_complete_lock)
+		return 0;
+
+	uid_t uid = __kuid_val(current->cred->uid);
+	if (!ksu_uid_should_umount(uid) || (uid % 100000) < 10000 )
+		return 0;
+
+	return check_sus_inode(inode, uid);
+}
+
+LSM_HANDLER_TYPE ksu_file_open(struct file *file, const struct cred *cred)
+{
+	
+	if (!boot_complete_lock)
+		return 0;
+
+	uid_t uid = __kuid_val(current->cred->uid);
+	if (!ksu_uid_should_umount(uid) || (uid % 100000) < 10000 )
+		return 0;
+
+	return check_sus_inode(file->f_inode, uid);
+}
+
+LSM_HANDLER_TYPE ksu_file_stat(const struct path *path)
+{
+	if (!boot_complete_lock)
+		return 0;
+
+	uid_t uid = __kuid_val(current->cred->uid);
+	if (!ksu_uid_should_umount(uid) || (uid % 100000) < 10000 )
+		return 0;
+
+	struct inode *inode = d_backing_inode(path->dentry);
+	if (!inode)
+		return 0;
+
+	return check_sus_inode(inode, uid);
 }
 
 #ifdef CONFIG_COMPAT
@@ -1056,6 +1110,8 @@ static struct security_hook_list ksu_hooks[] = {
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
 	LSM_HOOK_INIT(sb_mount, ksu_sb_mount),
 	LSM_HOOK_INIT(inode_permission, ksu_inode_permission),
+	LSM_HOOK_INIT(file_open, ksu_file_open),
+	LSM_HOOK_INIT(inode_getattr, ksu_file_stat),
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 	LSM_HOOK_INIT(key_permission, ksu_key_permission)
 #endif
