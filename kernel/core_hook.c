@@ -83,6 +83,7 @@ static inline void susfs_on_post_fs_data(void) {
 
 static bool ksu_module_mounted = false;
 static unsigned int ksu_unmountable_count = 0;
+static bool boot_complete_lock __read_mostly = false;
 
 extern int ksu_handle_sepolicy(unsigned long arg3, void __user *arg4);
 
@@ -384,7 +385,6 @@ LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long 
 			break;
 		}
 		case EVENT_BOOT_COMPLETED: {
-			static bool boot_complete_lock = false;
 			if (!boot_complete_lock) {
 				boot_complete_lock = true;
 				pr_info("boot_complete triggered\n");
