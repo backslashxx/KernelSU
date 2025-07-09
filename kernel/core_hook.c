@@ -996,7 +996,11 @@ LSM_HANDLER_TYPE ksu_inode_permission(struct inode *inode, int mask)
 	return check_sus_inode(inode, uid);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+LSM_HANDLER_TYPE ksu_file_open(struct file *file)
+#else
 LSM_HANDLER_TYPE ksu_file_open(struct file *file, const struct cred *cred)
+#endif
 {
 	
 	if (!boot_complete_lock)
