@@ -1,4 +1,4 @@
-use crate::defs::{KSU_MOUNT_SOURCE, NO_MOUNT_PATH, NO_TMPFS_PATH, TEMP_DIR};
+use crate::defs::{KSU_MOUNT_SOURCE, NO_MOUNT_PATH, TEMP_DIR};
 use crate::module::{handle_updated_modules, prune_modules};
 use log::{info, warn};
 use rustix::fs::{MountFlags, mount};
@@ -78,15 +78,6 @@ pub fn on_post_data_fs() -> Result<()> {
 
     if let Err(e) = crate::profile::apply_sepolies() {
         warn!("apply root profile sepolicy failed: {e}");
-    }
-
-    // mount temp dir
-    if !Path::new(NO_TMPFS_PATH).exists() {
-        if let Err(e) = mount(KSU_MOUNT_SOURCE, TEMP_DIR, "tmpfs", MountFlags::empty(), "") {
-            warn!("do temp dir mount failed: {}", e);
-        }
-    } else {
-        info!("no tmpfs requested");
     }
 
     // exec modules post-fs-data scripts
