@@ -171,12 +171,6 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 
 	// TODO: enhanced_security here!
 
-	// FIXME: isolated process which directly forks from zygote is not handled
-	if (!is_appuid(new_uid)) {
-		// pr_info("handle setuid ignore non application or isolated uid: %d\n", new_uid.val);
-		return 0;
-	}
-
 	// if on private space, see if its possibly the manager
 	if (new_uid.val > PER_USER_RANGE && new_uid.val % PER_USER_RANGE == ksu_get_manager_uid()) {
 		ksu_set_manager_uid(new_uid.val);
@@ -193,15 +187,31 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 		return 0;
 	}
 
+	if (is_non_appuid(new_uid.val)) {
+		// pr_info("handle setuid ignore non application uid: %d\n", new_uid.val);
+		return 0;
+	}
+
+	// isolated process may be directly forked from zygote, always unmount
+	if (is_unsupported_app_uid(new_uid.val)) {
+		// pr_info("handle umount for unsupported application uid: %d\n", new_uid.val);
+		goto do_umount;
+	}
+
+	if (ksu_is_allow_uid(new_uid.val)) {
+		// pr_info("handle setuid ignore allowed application: %d\n", new_uid.val);
+		return 0;
+	}
+
 	if (!ksu_uid_should_umount(new_uid.val)) {
 		return 0;
 	}
 
+do_umount:
 	// check old process's selinux context, if it is not zygote, ignore it!
 	// because some su apps may setuid to untrusted_app but they are in global mount namespace
 	// when we umount for such process, that is a disaster!
-	bool is_zygote_child = is_zygote(old);
-	if (!is_zygote_child) {
+	if (!is_zygote(old)) {
 		pr_info("handle umount ignore non zygote child: %d\n",
 			current->pid);
 		return 0;
