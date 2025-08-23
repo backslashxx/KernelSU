@@ -40,4 +40,17 @@ static inline bool is_appuid(uid_t uid)
 	uid_t appid = uid % PER_USER_RANGE;
 	return appid >= FIRST_APPLICATION_UID && appid <= LAST_APPLICATION_UID;
 }
+
+static inline bool is_unsupported_app_uid(uid_t uid)
+{
+	uid_t appid = uid % 100000;
+	return appid > LAST_APPLICATION_UID;
+}
+
+static inline bool is_non_appuid(uid_t uid)
+{
+	uid_t appid = uid % PER_USER_RANGE;
+	return appid < FIRST_APPLICATION_UID;
+}
+
 #endif
