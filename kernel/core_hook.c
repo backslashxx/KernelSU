@@ -94,13 +94,6 @@ static inline bool is_allow_su()
 	return ksu_is_allow_uid_for_current(current_uid().val);
 }
 
-static inline bool is_unsupported_uid(uid_t uid)
-{
-#define LAST_APPLICATION_UID 19999
-	uid_t appid = uid % 100000;
-	return appid > LAST_APPLICATION_UID;
-}
-
 static struct group_info root_groups = { .usage = ATOMIC_INIT(2) };
 
 static void setup_groups(struct root_profile *profile, struct cred *cred)
@@ -287,6 +280,22 @@ void nuke_ext4_sysfs(void)
 
 // ksu_handle_prctl removed - now using ioctl via reboot hook
 
+static inline bool is_unsupported_app_uid(uid_t uid)
+{
+#define LAST_APPLICATION_UID 19999
+	uid_t appid = uid % 100000;
+	return appid > LAST_APPLICATION_UID;
+}
+
+static bool is_non_appuid(kuid_t uid)
+{
+#define PER_USER_RANGE 100000
+#define FIRST_APPLICATION_UID 10000
+
+	uid_t appid = uid.val % PER_USER_RANGE;
+	return appid < FIRST_APPLICATION_UID;
+}
+
 static bool is_appuid(kuid_t uid)
 {
 #define PER_USER_RANGE 100000
@@ -382,11 +391,6 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 		return 0;
 	}
 
-	if (!is_appuid(new_uid) || is_unsupported_uid(new_uid.val)) {
-		// pr_info("handle setuid ignore non application or isolated uid: %d\n", new_uid.val);
-		return 0;
-	}
-
 	// if on private space, see if its possibly the manager
 	if (new_uid.val > 100000 && new_uid.val % 100000 == ksu_get_manager_uid()) {
 		ksu_set_manager_uid(new_uid.val);
@@ -403,6 +407,28 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 		return 0;
 	}
 
+	if (is_non_appuid(new_uid)) {
+#ifdef CONFIG_KSU_DEBUG
+		pr_info("handle setuid ignore non application uid: %d\n", new_uid.val);
+#endif
+		return 0;
+	}
+
+	// isolated process may be directly forked from zygote, always unmount
+	if (is_unsupported_app_uid(new_uid.val)) {
+#ifdef CONFIG_KSU_DEBUG
+		pr_info("handle umount for unsupported application uid: %d\n", new_uid.val);
+#endif
+		goto do_umount;
+	}
+
+	if (ksu_is_allow_uid(new_uid.val)) {
+#ifdef CONFIG_KSU_DEBUG
+		pr_info("handle setuid ignore allowed application: %d\n", new_uid.val);
+#endif
+		return 0;
+	}
+
 	if (!ksu_uid_should_umount(new_uid.val)) {
 		return 0;
 	} else {
@@ -411,11 +437,11 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 #endif
 	}
 
+do_umount:
 	// check old process's selinux context, if it is not zygote, ignore it!
 	// because some su apps may setuid to untrusted_app but they are in global mount namespace
 	// when we umount for such process, that is a disaster!
-	bool is_zygote_child = is_zygote(old->security);
-	if (!is_zygote_child) {
+	if (!is_zygote(old->security)) {
 		pr_info("handle umount ignore non zygote child: %d\n",
 			current->pid);
 		return 0;
