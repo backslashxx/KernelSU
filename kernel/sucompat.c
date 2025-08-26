@@ -25,6 +25,8 @@
 
 extern void escape_to_root();
 
+static bool ksu_sucompat_non_kp __read_mostly = true;
+
 static void __user *userspace_stack_buffer(const void *d, size_t len)
 {
 	/* To avoid having to mmap a page in userspace, just write below the stack
@@ -67,6 +69,8 @@ __attribute__((hot, no_stack_protector))
 static __always_inline bool is_su_allowed(const void *ptr_to_check)
 {
 	barrier();
+	if (!ksu_sucompat_non_kp)
+		return false;
 
 	if (likely(!ksu_is_allow_uid(current_uid().val)))
 		return false;
@@ -166,6 +170,8 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 int ksu_handle_devpts(struct inode *inode)
 {
 	barrier();
+	if (!ksu_sucompat_non_kp)
+		return 0;
 
 	if (!current->mm) {
 		return 0;
@@ -198,8 +204,12 @@ int ksu_handle_devpts(struct inode *inode)
 // sucompat: permited process can execute 'su' to gain root access.
 void ksu_sucompat_init()
 {
+	ksu_sucompat_non_kp = true;
+	pr_info("ksu_sucompat_init: hooks enabled: execve/execveat_su, faccessat, stat, devpts\n");
 }
 
 void ksu_sucompat_exit()
 {
+	ksu_sucompat_non_kp = false;
+	pr_info("ksu_sucompat_exit: hooks disabled: execve/execveat_su, faccessat, stat, devpts\n");
 }
