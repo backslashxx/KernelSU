@@ -415,6 +415,20 @@ bool ksu_is_safe_mode()
 	return false;
 }
 
+__maybe_unused int ksu_handle_execve_ksud(const char __user *filename_user,
+			const char __user *const __user *__argv)
+{
+	return 0;
+}
+
+#if defined(CONFIG_COMPAT)
+__maybe_unused int ksu_handle_compat_execve_ksud(const char __user *filename_user,
+			const compat_uptr_t __user *__argv)
+{
+	return 0;
+}
+#endif
+
 static void stop_vfs_read_hook()
 {
 	ksu_vfs_read_hook = false;

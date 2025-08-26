@@ -152,6 +152,12 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	return 0;
 }
 
+// dummified
+int ksu_handle_devpts(struct inode *inode)
+{
+	return 0;
+}
+
 int __ksu_handle_devpts(struct inode *inode)
 {
 	barrier();

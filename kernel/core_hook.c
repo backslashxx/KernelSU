@@ -680,6 +680,12 @@ do_umount:
 	return 0;
 }
 
+int ksu_sb_mount(const char *dev_name, const struct path *path,
+                        const char *type, unsigned long flags, void *data)
+{
+	return 0;
+}
+
 #ifndef DEVPTS_SUPER_MAGIC
 #define DEVPTS_SUPER_MAGIC	0x1cd1
 #endif
