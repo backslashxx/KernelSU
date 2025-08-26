@@ -84,6 +84,8 @@ int __init kernelsu_init(void)
 
 	ksu_supercalls_init();
 
+	ksu_sucompat_init(); // so the feature is registered
+
 	ksu_core_init();
 
 	ksu_allowlist_init();
