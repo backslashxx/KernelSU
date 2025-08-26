@@ -112,7 +112,151 @@ void on_boot_completed(void)
 	track_throne(true);
 }
 
-// TODO: add _ksud handling
+// since _ksud handler only uses argv and envp for comparisons
+// this can probably work
+// adapted from ksu_handle_execveat_ksud
+static int ksu_handle_bprm_ksud(const char *filename, const char *argv1, const char *envp, size_t envp_len)
+{
+	static const char app_process[] = "/system/bin/app_process";
+	static bool first_app_process = true;
+
+	/* This applies to versions Android 10+ */
+	static const char system_bin_init[] = "/system/bin/init";
+	/* This applies to versions between Android 6 ~ 9  */
+	static const char old_system_init[] = "/init";
+	static bool init_second_stage_executed = false;
+
+	// return early when disabled
+	if (!ksu_execveat_hook)
+		return 0;
+
+	if (!filename)
+		return 0;
+
+	// debug! remove me!
+	pr_info("%s: filename: %s argv1: %s envp_len: %zu\n", __func__, filename, argv1, envp_len);
+
+#ifdef CONFIG_KSU_DEBUG
+	const char *envp_n = envp;
+	unsigned int envc = 1;
+	do {
+		pr_info("%s: envp[%d]: %s\n", __func__, envc, envp_n);
+		envp_n += strlen(envp_n) + 1;
+		envc++;
+	} while (envp_n < envp + 256);
+#endif
+
+	if (init_second_stage_executed)
+		goto first_app_process;
+
+	// /system/bin/init with argv1
+	if (!strcmp(filename, system_bin_init) && argv1 && !strcmp(argv1, "second_stage")) {
+		pr_info("%s: /system/bin/init second_stage executed\n", __func__);
+		apply_kernelsu_rules();
+		cache_sid();
+		setup_ksu_cred();
+		init_second_stage_executed = true;
+	}
+
+	// /init with argv1
+	if (!strcmp(filename, old_system_init) && argv1 && !strcmp(argv1, "--second-stage")) {
+		pr_info("%s: /init --second-stage executed\n", __func__);
+		apply_kernelsu_rules();
+		cache_sid();
+		setup_ksu_cred();
+		init_second_stage_executed = true;
+	}
+
+	if (!envp || !envp_len)
+		goto first_app_process;
+
+	// /init without argv1/useless-argv1 but usable envp
+	// untested! TODO: test and debug me!
+	if (!init_second_stage_executed && !strcmp(filename, old_system_init)) {
+
+		// we hunt for "INIT_SECOND_STAGE"
+		const char *envp_n = envp;
+		unsigned int envc = 1;
+		do {
+			if (strstarts(envp_n, "INIT_SECOND_STAGE"))
+				break;
+			envp_n += strlen(envp_n) + 1;
+			envc++;
+		} while (envp_n < envp + envp_len);
+		pr_info("%s: envp[%d]: %s\n", __func__, envc, envp_n);
+		
+		if (!strcmp(envp_n, "INIT_SECOND_STAGE=1")
+			|| !strcmp(envp_n, "INIT_SECOND_STAGE=true") ) {
+			pr_info("%s: /init +envp: INIT_SECOND_STAGE executed\n", __func__);
+			apply_kernelsu_rules();
+			cache_sid();
+			setup_ksu_cred();
+			init_second_stage_executed = true;
+		}
+	}
+
+first_app_process:
+	if (first_app_process && strstarts(filename, app_process)) {
+		first_app_process = false;
+		pr_info("%s: exec app_process, /data prepared, second_stage: %d\n", __func__, init_second_stage_executed);
+		on_post_fs_data();
+		stop_execve_hook();
+	}
+
+	return 0;
+}
+
+int ksu_handle_pre_ksud(const char *filename)
+{
+	if (likely(!ksu_execveat_hook))
+		return 0;
+
+	// not /system/bin/init, not /init, not /system/bin/app_process (64/32 thingy)
+	// return 0;
+	if (likely(strcmp(filename, "/system/bin/init") && strcmp(filename, "/init")
+		&& !strstarts(filename, "/system/bin/app_process") ))
+		return 0;
+
+	if (!current || !current->mm)
+		return 0;
+
+	// https://elixir.bootlin.com/linux/v4.14.1/source/include/linux/mm_types.h#L429
+	// unsigned long arg_start, arg_end, env_start, env_end;
+	unsigned long arg_start = current->mm->arg_start;
+	unsigned long arg_end = current->mm->arg_end;
+	unsigned long env_start = current->mm->env_start;
+	unsigned long env_end = current->mm->env_end;
+
+	size_t arg_len = arg_end - arg_start;
+	size_t envp_len = env_end - env_start;
+
+	if (arg_len <= 0 || envp_len <= 0) // this wont make sense, filter it
+		return 0;
+
+#define ARGV_MAX 32 
+#define ENVP_MAX 256
+	char args[ARGV_MAX];
+	char envp[ENVP_MAX];
+	size_t argv_copy_len = (arg_len > ARGV_MAX) ? ARGV_MAX : arg_len;
+	size_t envp_copy_len = (envp_len > ENVP_MAX) ? ENVP_MAX : envp_len;
+
+	// we cant use strncpy on here, else it will truncate once it sees \0
+	if (ksu_copy_from_user_retry(args, (void __user *)arg_start, argv_copy_len))
+		return 0;
+
+	if (ksu_copy_from_user_retry(envp, (void __user *)env_start, envp_copy_len))
+		return 0;
+
+	args[ARGV_MAX - 1] = '\0';
+	envp[ENVP_MAX - 1] = '\0';
+
+	// we only need argv1 !
+	char *argv1 = args + strlen(args) + 1;
+	if (argv1 >= args + argv_copy_len) // out of bounds!
+		argv1 = "";
+
+	return ksu_handle_bprm_ksud(filename, argv1, envp, envp_copy_len);
+}
 
 static ssize_t (*orig_read)(struct file *, char __user *, size_t, loff_t *);
 static ssize_t (*orig_read_iter)(struct kiocb *, struct iov_iter *);
