@@ -91,7 +91,7 @@ struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
 	// switch mnt_ns even if current is not wq_worker, to ensure what we open is the correct file in android mnt_ns, rather than user created mnt_ns
 	struct ksu_ns_fs_saved saved;
 	if (android_context_saved_enabled) {
-		pr_info("start switch current nsproxy and fs to android context\n");
+		//pr_info("start switch current nsproxy and fs to android context\n");
 		task_lock(current);
 		ksu_save_ns_fs(&saved);
 		ksu_load_ns_fs(&android_context_saved);
@@ -102,7 +102,7 @@ struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
 		task_lock(current);
 		ksu_load_ns_fs(&saved);
 		task_unlock(current);
-		pr_info("switch current nsproxy and fs back to saved successfully\n");
+		//pr_info("switch current nsproxy and fs back to saved successfully\n");
 	}
 	return fp;
 }
@@ -176,3 +176,36 @@ long ksu_strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr,
 	return ret;
 }
 #endif
+
+static int ksu_access_ok(const void *addr, unsigned long size)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+	return access_ok(addr, size);
+#else
+	return access_ok(VERIFY_READ, addr, size);
+#endif
+}
+
+long ksu_copy_from_user_nofault(void *dst, const void __user *src, size_t size)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
+	return copy_from_user_nofault(dst, src, size);
+#else
+	// https://elixir.bootlin.com/linux/v5.8/source/mm/maccess.c#L205
+	long ret = -EFAULT;
+	mm_segment_t old_fs = get_fs();
+
+	set_fs(USER_DS);
+	// tweaked to use ksu_access_ok
+	if (ksu_access_ok(src, size)) {
+		pagefault_disable();
+		ret = __copy_from_user_inatomic(dst, src, size);
+		pagefault_enable();
+	}
+	set_fs(old_fs);
+
+	if (ret)
+		return -EFAULT;
+	return 0;
+#endif
+}
