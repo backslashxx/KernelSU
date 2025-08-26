@@ -26,6 +26,7 @@
 #define SH_PATH "/system/bin/sh"
 
 bool ksu_su_compat_enabled __read_mostly = true;
+static bool ksu_sucompat_enabled __read_mostly = true;
 
 static int su_compat_feature_get(u64 *value)
 {
@@ -89,6 +90,8 @@ __attribute__((hot, no_stack_protector))
 static __always_inline bool is_su_allowed(const void *ptr_to_check)
 {
 	barrier();
+	if (!ksu_sucompat_enabled)
+		return false;
 
 	if (likely(!ksu_is_allow_uid_for_current(current_uid().val)))
 		return false;
@@ -184,10 +187,16 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	return 0;
 }
 
-void ksu_sucompat_enable(){
+void ksu_sucompat_enable()
+{
+	ksu_sucompat_enabled = true;
+	pr_info("%s: hooks enabled: exec, faccessat, stat\n", __func__);
 }
 
-void ksu_sucompat_disable(){
+void ksu_sucompat_disable()
+{
+	ksu_sucompat_enabled = false;
+	pr_info("%s: hooks disabled: exec, faccessat, stat\n", __func__);
 }
 
 // sucompat: permited process can execute 'su' to gain root access.
