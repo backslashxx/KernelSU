@@ -58,6 +58,8 @@ int __init kernelsu_init(void)
 
 	ksu_throne_tracker_init();
 
+	ksu_sucompat_init(); // so the feature is registered
+
 	return 0;
 }
 
