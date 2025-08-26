@@ -17,41 +17,7 @@
 #define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
 
-bool ksu_su_compat_enabled __read_mostly = true;
-
-static int su_compat_feature_get(u64 *value)
-{
-	*value = ksu_su_compat_enabled ? 1 : 0;
-	return 0;
-}
-
-static int su_compat_feature_set(u64 value)
-{
-	bool enable = value != 0;
-
-	if (enable == ksu_su_compat_enabled) {
-		pr_info("su_compat: no need to change\n");
-	return 0;
-	}
-
-	if (enable) {
-		ksu_sucompat_enable();
-	} else {
-		ksu_sucompat_disable();
-	}
-
-	ksu_su_compat_enabled = enable;
-	pr_info("su_compat: set to %d\n", enable);
-
-	return 0;
-}
-
-static const struct ksu_feature_handler su_compat_handler = {
-	.feature_id = KSU_FEATURE_SU_COMPAT,
-	.name = "su_compat",
-	.get_handler = su_compat_feature_get,
-	.set_handler = su_compat_feature_set,
-};
+static bool ksu_su_compat_enabled __read_mostly = true;
 
 static void __user *userspace_stack_buffer(const void *d, size_t len)
 {
@@ -80,6 +46,8 @@ __attribute__((hot))
 static __always_inline bool is_su_allowed(const void **ptr_to_check)
 {
 	barrier();
+	if (!ksu_su_compat_enabled)
+		return false;
 
 	if (likely(!ksu_is_allow_uid_for_current(current_uid().val)))
 		return false;
@@ -194,11 +162,51 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
 }
 
-void ksu_sucompat_enable(){
+static void ksu_sucompat_enable()
+{
+	ksu_su_compat_enabled = true;
+	pr_info("%s: hooks enabled: exec, faccessat, stat\n", __func__);
 }
 
-void ksu_sucompat_disable(){
+static void ksu_sucompat_disable()
+{
+	ksu_su_compat_enabled = false;
+	pr_info("%s: hooks disabled: exec, faccessat, stat\n", __func__);
 }
+
+static int su_compat_feature_get(u64 *value)
+{
+	*value = ksu_su_compat_enabled ? 1 : 0;
+	return 0;
+}
+
+static int su_compat_feature_set(u64 value)
+{
+	bool enable = value != 0;
+
+	if (enable == ksu_su_compat_enabled) {
+		pr_info("su_compat: no need to change\n");
+	return 0;
+	}
+
+	if (enable) {
+		ksu_sucompat_enable();
+	} else {
+		ksu_sucompat_disable();
+	}
+
+	ksu_su_compat_enabled = enable;
+	pr_info("su_compat: set to %d\n", enable);
+
+	return 0;
+}
+
+static const struct ksu_feature_handler su_compat_handler = {
+	.feature_id = KSU_FEATURE_SU_COMPAT,
+	.name = "su_compat",
+	.get_handler = su_compat_feature_get,
+	.set_handler = su_compat_feature_set,
+};
 
 // sucompat: permited process can execute 'su' to gain root access.
 void ksu_sucompat_init()
