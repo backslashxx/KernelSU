@@ -138,6 +138,9 @@ static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_n
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+// for do_execveat_common / do_execve_common on >= 3.14
+// take note: struct filename **filename
 int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 				 void *__never_use_argv, void *__never_use_envp,
 				 int *__never_use_flags)
@@ -161,6 +164,19 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 
 	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
 }
+#else
+// for do_execve_common on < 3.14
+// take note: char **filename
+int ksu_legacy_execve_sucompat(const char **filename_ptr,
+				 void *__never_use_argv,
+				 void *__never_use_envp)
+{
+	if (!is_su_allowed((const void **)filename_ptr))
+		return 0;
+
+	return ksu_sucompat_kernel_common((void *)*filename_ptr, "do_execve_common", true);
+}
+#endif
 
 static void ksu_sucompat_enable()
 {
