@@ -628,7 +628,7 @@ private fun InfoCard() {
         ) {
             InfoText(
                 title = stringResource(R.string.home_kernel),
-                content = uname.release
+                content = "${uname.release} (${uname.machine})"
             )
             InfoText(
                 title = stringResource(R.string.home_manager_version),
@@ -637,6 +637,10 @@ private fun InfoCard() {
             InfoText(
                 title = stringResource(R.string.home_fingerprint),
                 content = Build.FINGERPRINT
+            )
+            InfoText(
+                title = stringResource(R.string.home_abi),
+                content = Build.SUPPORTED_ABIS.joinToString(", ")
             )
             InfoText(
                 title = stringResource(R.string.home_selinux_status),
