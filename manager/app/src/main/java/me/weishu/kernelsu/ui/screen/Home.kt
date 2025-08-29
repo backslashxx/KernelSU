@@ -187,6 +187,7 @@ fun HomePager(
                     if (checkUpdate) {
                         UpdateCard()
                     }
+                    Unofficial()
                     InfoCard()
                     DonateCard()
                     LearnMoreCard()
@@ -194,6 +195,33 @@ fun HomePager(
                 Spacer(Modifier.height(bottomInnerPadding))
             }
         }
+    }
+}
+
+@Composable
+fun Unofficial() {
+    val uriHandler = LocalUriHandler.current
+    val url = stringResource(R.string.home_unofficial_kernelsu_announce)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(),
+    ) {
+        BasicComponent(
+            title = stringResource(R.string.home_unofficial_kernelsu),
+            summary = stringResource(R.string.home_unofficial_kernelsu_body),
+            rightActions = {
+                Icon(
+                    modifier = Modifier.size(28.dp),
+                    imageVector = Icons.Rounded.Link,
+                    tint = colorScheme.onSurface,
+                    contentDescription = null
+                )
+            },
+            onClick = {
+                uriHandler.openUri(url)
+            }
+        )
     }
 }
 
