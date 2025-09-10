@@ -10,6 +10,9 @@ use log::LevelFilter;
 use crate::defs::KSUD_VERBOSE_LOG_FILE;
 use crate::{apk_sign, assets, debug, defs, init_event, ksucalls, module, utils};
 
+use libc::{syscall, SYS_reboot};
+use std::ffi::CString;
+
 /// KernelSU userspace cli
 #[derive(Parser, Debug)]
 #[command(author, version = defs::VERSION_NAME, about, long_about = None)]
@@ -27,6 +30,19 @@ enum Commands {
     Module {
         #[command(subcommand)]
         command: Module,
+    },
+
+    /// Wipe the umount list
+    WipeUmountList,
+
+    /// Add custom try umount path
+    AddTryUmount {  
+        path: PathBuf,  
+    },
+
+    /// Nuke custom ext4 sysfs path
+    NukeExt4Sysfs {
+        path: PathBuf,
     },
 
     /// Trigger `post-fs-data` event
@@ -347,6 +363,40 @@ pub fn run() -> Result<()> {
                 Module::List => module::list_modules(),
             }
         }
+	Commands::WipeUmountList => {  
+	    let mut dummy: u32 = 0;  
+	    unsafe {  
+		syscall(libc::SYS_reboot, 0xDEADBEEFu32 as i32, 10000, 0, &mut dummy as *mut u32 as *const libc::c_void);
+	     }
+             Ok(())  
+	}
+
+	Commands::AddTryUmount { path } => {  
+	    match CString::new(path.to_string_lossy().as_ref()) {  
+		std::result::Result::Ok(c_path) => {  
+		    unsafe {  
+			syscall(libc::SYS_reboot, 0xDEADBEEFu32 as i32, 10001, 0, c_path.as_ptr() as *const libc::c_void);
+		    }  
+		}  
+		std::result::Result::Err(e) => {  
+		    eprintln!("Failed to create CString: {}", e);  
+		}  
+	    }  
+	    Ok(())  
+	}
+	Commands::NukeExt4Sysfs { path } => {  
+	    match CString::new(path.to_string_lossy().as_ref()) {  
+		std::result::Result::Ok(c_path) => {  
+		    unsafe {  
+		    	syscall(libc::SYS_reboot, 0xDEADBEEFu32 as i32, 10002, 0, c_path.as_ptr() as *const libc::c_void);
+		    }  
+		}  
+		std::result::Result::Err(e) => {  
+		    eprintln!("Failed to create CString: {}", e);  
+		}  
+	    }  
+	    Ok(())  
+	}
         Commands::Install { magiskboot } => utils::install(magiskboot),
         Commands::Uninstall { magiskboot } => utils::uninstall(magiskboot),
         Commands::Sepolicy { command } => match command {
