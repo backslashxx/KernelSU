@@ -114,7 +114,7 @@ struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
 ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count,
 			       loff_t *pos)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) || defined(KSU_NEW_KERNEL_READ)
 	return kernel_read(p, buf, count, pos);
 #else
 	loff_t offset = pos ? *pos : 0;
@@ -129,7 +129,7 @@ ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count,
 ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t count,
 				loff_t *pos)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) || defined(KSU_NEW_KERNEL_WRITE)
 	return kernel_write(p, buf, count, pos);
 #else
 	loff_t offset = pos ? *pos : 0;
@@ -152,9 +152,9 @@ static int ksu_access_ok(const void *addr, unsigned long size)
 
 long ksu_copy_from_user_nofault(void *dst, const void __user *src, size_t size)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0) || defined(KSU_COPY_FROM_USER_NOFAULT)
 	return copy_from_user_nofault(dst, src, size);
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0) || defined(KSU_PROBE_USER_READ)
 	return probe_user_read(dst, src, size);
 #else // https://elixir.bootlin.com/linux/v5.8/source/mm/maccess.c#L205
 	long ret = -EFAULT;
