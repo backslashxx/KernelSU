@@ -32,6 +32,7 @@
 #include "kernel_compat.h"
 
 static bool ksu_module_mounted = false;
+static unsigned int ksu_unmountable_count = 0;
 
 extern int handle_sepolicy(unsigned long arg3, void __user *arg4);
 
@@ -308,6 +309,7 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 		// debug
 		// pr_info("cmd_add_try_umount: %s added!\n", buf);
 		list_add(&new_entry->list, &mount_list);
+		ksu_unmountable_count++;
 
 		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
 			pr_err("prctl reply error, cmd: %lu\n", arg2);
@@ -607,6 +609,10 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 	if (!ksu_module_mounted) {
 		return 0;
 	}
+
+	// we dont need to unmount if theres no unmountable
+	if (!ksu_unmountable_count)
+		return 0;
 
 	if (!new || !old) {
 		return 0;
