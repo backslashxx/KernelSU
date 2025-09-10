@@ -10,6 +10,8 @@ use log::LevelFilter;
 use crate::defs::KSUD_VERBOSE_LOG_FILE;
 use crate::{apk_sign, assets, debug, defs, init_event, ksucalls, module, utils};
 
+use std::ffi::CString;
+
 /// KernelSU userspace cli
 #[derive(Parser, Debug)]
 #[command(author, version = defs::VERSION_NAME, about, long_about = None)]
@@ -27,6 +29,10 @@ enum Commands {
     Module {
         #[command(subcommand)]
         command: Module,
+    },
+
+    AddTryUmount {  
+        path: PathBuf,  
     },
 
     /// Trigger `post-fs-data` event
@@ -316,6 +322,22 @@ pub fn run() -> Result<()> {
                 Module::List => module::list_modules(),
             }
         }
+	Commands::AddTryUmount { path } => {  
+	    match CString::new(path.to_string_lossy().as_ref()) {  
+		std::result::Result::Ok(c_path) => {  
+		    let mut dummy: u32 = 0;  
+		    unsafe {  
+		        libc::prctl(0xDEADBEEFu32 as i32, 10001, c_path.as_ptr() as libc::c_ulong,   
+		                   &mut dummy as *mut u32 as libc::c_ulong,   
+		                   &mut dummy as *mut u32 as libc::c_ulong);  
+		    }  
+		}  
+		std::result::Result::Err(e) => {  
+		    eprintln!("Failed to create CString: {}", e);  
+		}  
+	    }  
+	    Ok(())  
+	}
         Commands::Install { magiskboot } => utils::install(magiskboot),
         Commands::Uninstall { magiskboot } => utils::uninstall(magiskboot),
         Commands::Sepolicy { command } => match command {
