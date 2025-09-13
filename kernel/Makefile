@@ -86,6 +86,11 @@ $(info -- KernelSU/compat: selinux_inode() found)
 ccflags-y += -DKSU_HAS_SELINUX_INODE
 endif
 
+ifeq ($(shell grep -A1 "^int vfs_getattr" $(srctree)/fs/stat.c | grep -q "query_flags" ; echo $$?),0)
+$(info -- KernelSU/compat: new vfs_getattr() found)
+ccflags-y += -DKSU_HAS_NEW_VFS_GETATTR
+endif
+
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
 

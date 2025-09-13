@@ -268,7 +268,7 @@ FILLDIR_RETURN_TYPE user_data_actor(struct dir_context *ctx, const char *name,
 	}
 
 	struct kstat stat;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0) || defined(KSU_HAS_NEW_VFS_GETATTR)
 	err = vfs_getattr(&path, &stat, STATX_UID, AT_STATX_SYNC_AS_STAT);
 #else
 	err = vfs_getattr(&path, &stat);
