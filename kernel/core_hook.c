@@ -143,12 +143,6 @@ void escape_to_root(void)
 		return;
 	}
 
-	if (cred->euid.val == 0) {
-		pr_warn("Already root, don't escape!\n");
-		abort_creds(cred);
-		return;
-	}
-
 	struct root_profile *profile = ksu_get_root_profile(cred->uid.val);
 
 	cred->uid.val = profile->uid;

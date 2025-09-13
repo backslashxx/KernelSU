@@ -657,6 +657,9 @@ out:
 static int throne_tracker_thread(void *data)
 {
 	pr_info("%s: pid: %d started\n", __func__, current->pid);
+	// for the kthread, we need to escape to root
+	// since it does not inherit the caller's context.
+	escape_to_root();
 	track_throne_function();
 	throne_thread = NULL;
 	smp_mb();
