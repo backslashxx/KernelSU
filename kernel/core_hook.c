@@ -137,14 +137,15 @@ void escape_to_root(void)
 {
 	struct cred *cred;
 
-	if (current_euid().val == 0) {
-		pr_warn("Already root, don't escape!\n");
-		return;
-	}
-
 	cred = prepare_creds();
 	if (!cred) {
 		pr_warn("prepare_creds failed!\n");
+		return;
+	}
+
+	if (cred->euid.val == 0) {
+		pr_warn("Already root, don't escape!\n");
+		abort_creds(cred);
 		return;
 	}
 
