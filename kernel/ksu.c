@@ -89,6 +89,10 @@
 #endif
 #endif
 
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+#include "hook/kp_ksud.c"
+#endif
+
 // __weak fn's
 #include "kernel_compat.c"
 
@@ -133,6 +137,10 @@ int __init kernelsu_init(void)
 
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	ksu_syscall_table_hook_init();
+#endif
+
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	kp_ksud_init();
 #endif
 
 	return 0;
