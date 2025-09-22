@@ -12,6 +12,10 @@ kernelsu-objs += embed_ksud.o
 kernelsu-objs += kernel_compat.o
 kernelsu-objs += file_wrapper.o
 
+ifeq ($(CONFIG_KSU_KPROBES_KSUD),y)
+kernelsu-objs += kp_ksud.o
+endif
+
 kernelsu-objs += selinux/selinux.o
 kernelsu-objs += selinux/sepolicy.o
 kernelsu-objs += selinux/rules.o
