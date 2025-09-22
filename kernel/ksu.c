@@ -63,6 +63,10 @@
 #include "syscall_table_hook.c"
 #endif
 
+#ifdef CONFIG_KSU_KPROBES_KSUD
+#include "kp_ksud.c"
+#endif
+
 struct cred* ksu_cred;
 
 extern void ksu_supercalls_init();
@@ -102,6 +106,10 @@ int __init kernelsu_init(void)
 
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	ksu_syscall_table_hook_init();
+#endif
+
+#ifdef CONFIG_KSU_KPROBES_KSUD
+	kp_ksud_init();
 #endif
 
 	return 0;
