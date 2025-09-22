@@ -18,6 +18,18 @@
 #define __PT_SP_REG sp
 #define __PT_IP_REG pc
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
+#define SYS_EXECVE_SYMBOL "__arm64_sys_execve"
+#define SYS_REBOOT_SYMBOL "__arm64_sys_reboot"
+#define SYS_NEWFSTAT_SYMBOL "__arm64_sys_newfstat"
+#define SYS_COMPAT_NEWFSTAT_SYMBOL "__arm64_compat_sys_newfstat"
+#else
+#define SYS_EXECVE_SYMBOL "sys_execve"
+#define SYS_REBOOT_SYMBOL "sys_reboot"
+#define SYS_NEWFSTAT_SYMBOL "sys_newfstat"
+#define SYS_COMPAT_NEWFSTAT_SYMBOL "compat_sys_newfstat"
+#endif
+
 #elif defined(__arm__)
 
 // https://elixir.bootlin.com/linux/v6.17-rc6/source/tools/lib/bpf/bpf_tracing.h
@@ -45,6 +57,10 @@
 #define __PT_SP_REG uregs[13]
 #define __PT_IP_REG uregs[12]
 
+#define SYS_EXECVE_SYMBOL "sys_execve"
+#define SYS_REBOOT_SYMBOL "sys_reboot"
+#define SYS_NEWFSTAT_SYMBOL "sys_newfstat"
+
 #elif defined(__x86_64__)
 
 #define __PT_PARM1_REG di
@@ -60,6 +76,18 @@
 #define __PT_RC_REG ax
 #define __PT_SP_REG sp
 #define __PT_IP_REG ip
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
+#define SYS_EXECVE_SYMBOL "__x64_sys_execve"
+#define SYS_REBOOT_SYMBOL "__x64_sys_reboot"
+#define SYS_NEWFSTAT_SYMBOL "__x64_sys_newfstat"
+#define SYS_COMPAT_NEWFSTAT_SYMBOL "__ia32_compat_sys_newfstat"
+#else
+#define SYS_EXECVE_SYMBOL "sys_execve"
+#define SYS_REBOOT_SYMBOL "sys_reboot"
+#define SYS_NEWFSTAT_SYMBOL "sys_newfstat"
+#define SYS_COMPAT_NEWFSTAT_SYMBOL "compat_sys_newfstat"
+#endif
 
 #else
 #error "Unsupported arch"
