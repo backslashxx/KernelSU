@@ -89,6 +89,10 @@
 #endif
 #endif
 
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+#include "hook/kp_ksud.c"
+#endif
+
 // __weak fn's
 #include "kernel_compat.c"
 
