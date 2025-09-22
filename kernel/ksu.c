@@ -129,6 +129,10 @@
 #endif
 #endif /* CONFIG_KSU_TAMPER_SYSCALL_TABLE */
 
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
+#include "hook/kp_ksud.c"
+#endif
+
 static int __init kernelsu_init(void)
 {
 
@@ -159,6 +163,10 @@ static int __init kernelsu_init(void)
 	ksu_selinux_hide_init();
 	ksu_shell_su_adb_only_init();
 	ksu_supercalls_init();
+
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
+	kp_ksud_init();
+#endif
 
 	ksu_allowlist_init();
 	ksu_throne_tracker_init();
