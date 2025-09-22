@@ -610,6 +610,7 @@ LSM_HANDLER_TYPE ksu_bprm_check(struct linux_binprm *bprm)
 	return 0;
 }
 
+#ifndef CONFIG_KSU_KPROBES_KSUD
 // kernel 4.9 and older
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 LSM_HANDLER_TYPE ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
@@ -627,6 +628,7 @@ LSM_HANDLER_TYPE ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
 	return 0;
 }
 #endif
+#endif // CONFIG_KSU_KPROBES_KSUD
 
 #ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
 static int ksu_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
@@ -645,9 +647,11 @@ static struct security_hook_list ksu_hooks[] = {
 	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
 	LSM_HOOK_INIT(bprm_check_security, ksu_bprm_check),
+#ifndef CONFIG_KSU_KPROBES_KSUD
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 	LSM_HOOK_INIT(key_permission, ksu_key_permission)
 #endif
+#endif // CONFIG_KSU_KPROBES_KSUD
 };
 
 void __init ksu_lsm_hook_init(void)
