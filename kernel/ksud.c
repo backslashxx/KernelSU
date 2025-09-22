@@ -28,6 +28,10 @@
 bool ksu_module_mounted __read_mostly = false;
 bool ksu_boot_completed __read_mostly = false;
 
+#ifdef CONFIG_KSU_KPROBES_KSUD
+extern void unregister_kprobe_thread();
+#endif
+
 static const char KERNEL_SU_RC[] =
 	"\n"
 
@@ -539,6 +543,9 @@ static void stop_execve_hook()
 {
 	ksu_execveat_hook = false;
 	pr_info("stop execve_hook\n");
+#ifdef CONFIG_KSU_KPROBES_KSUD
+	unregister_kprobe_thread();
+#endif
 }
 
 static void stop_input_hook()
