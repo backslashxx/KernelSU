@@ -7,6 +7,15 @@ config KSU
 	help
 	  Enable kernel-level root privileges on Android System.
 
+config KSU_KPROBES_KSUD
+	bool "Enable dynamic kprobes for early boot hooks"
+	depends on KPROBES
+	default y
+	help
+	  Use dynamic hooks via kprobes for functions needed only
+	  on early boot. Hooks are unregistered at boot complete
+	  to reduce overhead.
+
 config KSU_DEBUG
 	bool "KernelSU debug mode"
 	depends on KSU
