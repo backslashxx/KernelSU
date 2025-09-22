@@ -89,6 +89,10 @@
 #endif
 #endif /* CONFIG_KSU_TAMPER_SYSCALL_TABLE */
 
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+#include "hook/kp_ksud.c"
+#endif
+
 // __weak fn's
 #include "kernel_compat.c"
 
@@ -122,6 +126,10 @@ int __init kernelsu_init(void)
 	ksu_kernel_umount_init(); // so the feature is registered
 
 	ksu_core_init();
+
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	kp_ksud_init();
+#endif
 
 	ksu_allowlist_init();
 
