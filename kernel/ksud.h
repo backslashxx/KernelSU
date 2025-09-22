@@ -16,4 +16,10 @@ extern int ksu_handle_pre_ksud(const char *filename);
 extern int ksu_handle_bprm_ksud(const char *filename, const char *argv1,
 				const char *envp, size_t envp_len);
 
+#ifdef CONFIG_KPROBES
+extern void unregister_kprobe_thread();
+#else
+void unregister_kprobe_thread() {}
+#endif
+
 #endif

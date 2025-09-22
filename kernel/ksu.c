@@ -13,6 +13,10 @@
 #include "ksu.h"
 #include "throne_tracker.h"
 
+#ifdef CONFIG_KPROBES
+extern void kp_ksud_init();
+#endif
+
 static struct workqueue_struct *ksu_workqueue;
 
 bool ksu_queue_work(struct work_struct *work)
@@ -98,6 +102,9 @@ int __init kernelsu_init(void)
 
 	ksu_throne_tracker_init();
 
+#ifdef CONFIG_KPROBES
+	kp_ksud_init();
+#endif
 	return 0;
 }
 
