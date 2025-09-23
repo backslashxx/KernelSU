@@ -138,6 +138,9 @@ static int ksu_handle_bprm_ksud(const char *filename, const char *argv1, const c
 		}
 	}
 
+	if (!envp || !envp_len)
+		goto first_app_process;
+
 	// /init without argv1/useless-argv1 but usable envp
 	// untested! TODO: test and debug me!
 	if (!init_second_stage_executed && (!memcmp(filename, old_system_init, sizeof(old_system_init) - 1))) {
@@ -439,22 +442,47 @@ bool ksu_is_safe_mode()
 static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 {
 	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	const char __user **filename_user =
-		(const char **)&PT_REGS_PARM1(real_regs);
+	const char __user *filename_user = (const char __user *)PT_REGS_PARM1(real_regs);
+	const char __user *const __user *__argv = (const char __user *const __user *)PT_REGS_PARM2(real_regs);
 
+	const char __user *arg1_user = NULL;
 	char path[32];
+	char argv1[32] = {0};
 
 	if (!filename_user)
 		return 0;
 
-	// remember up ahead is ** so deref it with *
-	long len = ksu_strncpy_from_user_nofault(path, *filename_user, 32);
-	if (len <= 0)
+	if (ksu_copy_from_user_retry(path, filename_user, sizeof(path)))
 		return 0;
 
 	path[sizeof(path) - 1] = '\0';
 
-	return ksu_handle_pre_ksud(path);
+	// not /system/bin/init, not /init, not /system/bin/app_process (64/32 thingy)
+	// return 0;
+	if (likely(strcmp(path, "/system/bin/init") && strcmp(path, "/init")
+		&& !strstarts(path, "/system/bin/app_process") ))
+		return 0;
+
+	if (__argv) {
+		// grab argv[1] pointer
+		// this looks like
+		/* 
+		 * 0x1000 ./program << this is __argv
+		 * 0x1001 -o 
+		 * 0x1002 arg
+		*/
+		if (ksu_copy_from_user_retry(&arg1_user, __argv + 1, sizeof(arg1_user)))
+			goto submit; // copy argv[1] pointer fail, probably no argv1 !!
+
+		if (arg1_user)
+			ksu_copy_from_user_retry(argv1, arg1_user, sizeof(argv1));
+	}
+
+submit:
+	argv1[sizeof(argv1) - 1] = '\0';
+	// pr_info("%s: filename: %s argv[1]:%s\n", __func__, path, argv1);
+
+	return ksu_handle_bprm_ksud(path, argv1, NULL, NULL);
 }
 
 static struct kprobe execve_kp = {
