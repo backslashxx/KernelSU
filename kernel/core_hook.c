@@ -758,7 +758,7 @@ __maybe_unused int ksu_kprobe_exit(void)
 	return 0;
 }
 
-int ksu_bprm_check(struct linux_binprm *bprm)
+static int ksu_bprm_check(struct linux_binprm *bprm)
 {
 	char *filename = (char *)bprm->filename;
 	
@@ -792,9 +792,7 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
 
 #ifndef MODULE
 static struct security_hook_list ksu_hooks[] = {
-#ifndef CONFIG_KPROBES
 	LSM_HOOK_INIT(bprm_check_security, ksu_bprm_check),
-#endif
 	LSM_HOOK_INIT(task_prctl, ksu_task_prctl),
 	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
