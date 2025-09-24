@@ -236,15 +236,26 @@ int __ksu_handle_devpts(struct inode *inode)
 	return 0;
 }
 
+#ifdef CONFIG_KRETPROBES
+extern void rp_sucompat_exit();
+extern void rp_sucompat_init();
+#endif
+
 // sucompat: permited process can execute 'su' to gain root access.
 void ksu_sucompat_init()
 {
 	ksu_sucompat_non_kp = true;
 	pr_info("ksu_sucompat_init: hooks enabled: exec, faccessat, stat, devpts\n");
+#ifdef CONFIG_KRETPROBES
+	rp_sucompat_init();
+#endif
 }
 
 void ksu_sucompat_exit()
 {
 	ksu_sucompat_non_kp = false;
 	pr_info("ksu_sucompat_exit: hooks disabled: exec, faccessat, stat, devpts\n");
+#ifdef CONFIG_KRETPROBES
+	rp_sucompat_exit();
+#endif
 }

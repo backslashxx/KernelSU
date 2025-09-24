@@ -19,8 +19,12 @@
 #define __PT_IP_REG pc
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
+#define SYS_NEWFSTATAT_SYMBOL "__arm64_sys_newfstatat"
+#define SYS_FACCESSAT_SYMBOL "__arm64_sys_faccessat"
 #define SYS_EXECVE_SYMBOL "__arm64_sys_execve"
 #else
+#define SYS_NEWFSTATAT_SYMBOL "sys_newfstatat"
+#define SYS_FACCESSAT_SYMBOL "sys_faccessat"
 #define SYS_EXECVE_SYMBOL "sys_execve"
 #endif
 
@@ -51,6 +55,8 @@
 #define __PT_SP_REG uregs[13]
 #define __PT_IP_REG uregs[12]
 
+#define SYS_NEWFSTATAT_SYMBOL "sys_newfstatat"
+#define SYS_FACCESSAT_SYMBOL "sys_faccessat"
 #define SYS_EXECVE_SYMBOL "sys_execve"
 
 #elif defined(__x86_64__)
@@ -70,8 +76,12 @@
 #define __PT_IP_REG ip
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
+#define SYS_NEWFSTATAT_SYMBOL "__x64_sys_newfstatat"
+#define SYS_FACCESSAT_SYMBOL "__x64_sys_faccessat"
 #define SYS_EXECVE_SYMBOL "__x64_sys_execve"
 #else
+#define SYS_NEWFSTATAT_SYMBOL "sys_newfstatat"
+#define SYS_FACCESSAT_SYMBOL "sys_faccessat"
 #define SYS_EXECVE_SYMBOL "sys_execve"
 #endif
 
