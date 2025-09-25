@@ -259,8 +259,16 @@ int ksu_handle_devpts(struct inode *inode)
 	return 0;
 }
 
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+extern void rp_sucompat_exit();
+extern void rp_sucompat_init();
+#endif
+
 void ksu_sucompat_enable()
 {
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+	rp_sucompat_init();
+#endif
 	ksu_sucompat_non_kp = true;
 	pr_info("%s: hooks enabled: exec, faccessat, stat\n", __func__);
 
@@ -268,6 +276,9 @@ void ksu_sucompat_enable()
 
 void ksu_sucompat_disable()
 {
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+	rp_sucompat_exit();
+#endif
 	ksu_sucompat_non_kp = false;
 	pr_info("%s: hooks disabled: exec, faccessat, stat\n", __func__);
 }
