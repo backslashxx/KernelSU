@@ -15,6 +15,10 @@
 extern void kp_ksud_init();
 #endif
 
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+extern void rp_sucompat_init();
+#endif 
+
 static struct workqueue_struct *ksu_workqueue;
 
 bool ksu_queue_work(struct work_struct *work)
@@ -42,6 +46,9 @@ int __init kernelsu_init(void)
 
 	ksu_throne_tracker_init();
 
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT	
+	rp_sucompat_init();
+#endif
 #ifdef CONFIG_KSU_KPROBES_KSUD
 	kp_ksud_init();
 #endif

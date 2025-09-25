@@ -12,6 +12,10 @@ ifeq ($(CONFIG_KSU_KPROBES_KSUD),y)
 kernelsu-objs += kp_ksud.o
 endif
 
+ifeq ($(CONFIG_KSU_KRETPROBES_SUCOMPAT),y)
+kernelsu-objs += rp_sucompat.o
+endif
+
 kernelsu-objs += selinux/selinux.o
 kernelsu-objs += selinux/sepolicy.o
 kernelsu-objs += selinux/rules.o
