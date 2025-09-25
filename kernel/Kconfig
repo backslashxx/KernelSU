@@ -16,6 +16,15 @@ config KSU_KPROBES_KSUD
 	  on early boot. Hooks are unregistered at boot complete
 	  to reduce overhead.
 
+config KSU_KRETPROBES_SUCOMPAT
+	bool "EXPERIMENTAL: kretprobes for sucompat"
+	depends on KRETPROBES
+	default n
+	help
+	  EXPERIMENTAL: Use kretprobes for hooking getname_flags, mainly for
+	  sucompat. This method will hijack all fs-related syscalls, but
+	  thwarts timing based detections.
+
 config KSU_DEBUG
 	bool "KernelSU debug mode"
 	depends on KSU
