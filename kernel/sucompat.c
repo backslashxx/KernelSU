@@ -254,14 +254,25 @@ int ksu_getname_flags_kernel(char **kname, int flags)
 	return ksu_sucompat_kernel_common((void *)*kname, "getname_flags", !!!flags);
 }
 
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+extern void rp_sucompat_exit();
+extern void rp_sucompat_init();
+#endif
+
 void ksu_sucompat_enable()
 {
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+	rp_sucompat_init();
+#endif
 	ksu_sucompat_enabled = true;
 	pr_info("%s: hooks enabled: exec, faccessat, stat\n", __func__);
 }
 
 void ksu_sucompat_disable()
 {
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+	rp_sucompat_exit();
+#endif
 	ksu_sucompat_enabled = false;
 	pr_info("%s: hooks disabled: exec, faccessat, stat\n", __func__);
 }
