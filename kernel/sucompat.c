@@ -276,10 +276,14 @@ int ksu_getname_flags_kernel(char **kname, int flags)
 	return ksu_sucompat_kernel_common((void *)*kname, "getname_flags", !!!flags);
 }
 
-
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 static void syscall_table_sucompat_enable();
 static void syscall_table_sucompat_disable();
+#endif
+
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+static void rp_sucompat_exit();
+static void rp_sucompat_init();
 #endif
 
 static void ksu_sucompat_enable()
@@ -287,6 +291,10 @@ static void ksu_sucompat_enable()
 
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	syscall_table_sucompat_enable();
+#endif
+
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+	rp_sucompat_init();
 #endif
 
 	ksu_su_compat_enabled = true;
@@ -298,6 +306,10 @@ static void ksu_sucompat_disable()
 
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	syscall_table_sucompat_disable();
+#endif
+
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+	rp_sucompat_exit();
 #endif
 
 	ksu_su_compat_enabled = false;
