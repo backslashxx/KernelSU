@@ -71,6 +71,10 @@
 #include "kp_ksud.c"
 #endif
 
+#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
+#include "rp_sucompat.c"
+#endif
+
 struct cred* ksu_cred;
 
 extern void ksu_supercalls_init();
