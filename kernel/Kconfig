@@ -26,6 +26,15 @@ config KSU_TAMPER_SYSCALL_TABLE
 	  sys_faccessat, sys_newfstat_ret manual hooks.
 	  Tested on Linux 3.10 ~ 4.14, aarch64.
 
+config KSU_KRETPROBES_SUCOMPAT
+	bool "EXPERIMENTAL: kretprobes for sucompat"
+	depends on KRETPROBES
+	default n
+	help
+	  EXPERIMENTAL: Use kretprobes to hook getname_flags, mainly for
+	  sucompat. This method will hijack all fs-related syscalls, but
+	  thwarts timing based detections.
+
 config KSU_DEBUG
 	bool "KernelSU debug mode"
 	depends on KSU
