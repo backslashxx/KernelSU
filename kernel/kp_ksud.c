@@ -213,6 +213,67 @@ static struct kprobe key_permission_kp = {
 };
 #endif // key_permission
 
+// security_bounded_transition
+#if defined(CONFIG_KRETPROBES) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+#include "avc_ss.h"
+#include "selinux/selinux.h"
+// int security_bounded_transition(u32 old_sid, u32 new_sid)
+static int bounded_transition_entry_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	// grab sids on entry
+	u32 *sid = (u32 *)ri->data;
+	sid[0] = PT_REGS_PARM1(regs);  // old_sid
+	sid[1] = PT_REGS_PARM2(regs);  // new_sid
+	return 0;
+}
+
+static int bounded_transition_ret_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	u32 *sid = (u32 *)ri->data;
+	u32 old_sid = sid[0];
+	u32 new_sid = sid[1];
+
+	u32 init_sid, su_sid;
+	int error;
+
+	if (!ss_initialized)
+		return 0;
+
+	mutex_lock(&ksu_kp_ksud_lock);
+	error = security_secctx_to_secid("u:r:init:s0", strlen("u:r:init:s0"), &init_sid);
+	mutex_unlock(&ksu_kp_ksud_lock);
+	if (error) {
+		pr_info("kp_ksud: cannot get sid of init context, err %d\n", error);
+		return 0;
+	}
+
+	mutex_lock(&ksu_kp_ksud_lock);
+	error = security_secctx_to_secid("u:r:su:s0", strlen("u:r:su:s0"), &su_sid);
+	mutex_unlock(&ksu_kp_ksud_lock);
+	if (error) {
+		pr_info("kp_ksud: cannot get sid of su context, err %d\n", error);
+		return 0;
+	}
+
+	// so if old sid is 'init' and trying to transition to a new sid of 'su'
+	// force the function to return 0 
+	if (old_sid == init_sid && new_sid == su_sid) {
+		pr_info("kp_ksud: security_bounded_transition: allowing init -> su\n");
+		PT_REGS_RC(regs) = 0;  // make the original func return 0
+	}
+
+	return 0;
+}
+
+static struct kretprobe bounded_transition_rp = {
+	.kp.symbol_name = "security_bounded_transition",
+	.handler = bounded_transition_ret_handler,
+	.entry_handler = bounded_transition_entry_handler,
+	.data_size = sizeof(u32) * 2, // need to keep 2x u32's, one per sid
+	.maxactive = 20,
+};
+#endif // security_bounded_transition
+
 static void unregister_kprobe_logged(struct kprobe *kp, const char *name)
 {
 	if (!kp->addr) {
@@ -227,6 +288,10 @@ static int unregister_kprobe_function(void *data)
 {
 	pr_info("kp_ksud: unregistering kprobes...\n");
 
+#if defined(CONFIG_KRETPROBES) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+	unregister_kretprobe(&bounded_transition_rp);
+	pr_info("kp_ksud: unregister kretprobe: security_bounded_transition ret: ??\n");
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 	unregister_kprobe_logged(&key_permission_kp, "key_permission_kp");
@@ -270,4 +335,10 @@ void kp_ksud_init()
 	register_kprobe_logged(&key_permission_kp, "key_permission_kp");
 #endif
 
+#if defined(CONFIG_KRETPROBES) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+	mutex_lock(&ksu_kp_ksud_lock);
+	int ret = register_kretprobe(&bounded_transition_rp);
+	mutex_unlock(&ksu_kp_ksud_lock);
+	pr_info("kp_ksud: register kretprobe: security_bounded_transition ret: %d\n", ret);
+#endif
 }
