@@ -31,6 +31,15 @@ bool ksu_boot_completed __read_mostly = false;
 extern void unregister_kprobe_thread();
 #endif
 
+#if defined(CONFIG_KRETPROBES) && defined(CONFIG_KSU_KPROBES_KSUD) && \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+extern void kp_ksud_transition_routine_start();
+extern void kp_ksud_transition_routine_end();
+#else
+void kp_ksud_transition_routine_start() {}
+void kp_ksud_transition_routine_end() {}
+#endif
+
 static const char KERNEL_SU_RC[] =
 	"\n"
 
@@ -115,6 +124,7 @@ void on_boot_completed(void)
 	ksu_boot_completed = true;
 	pr_info("on_boot_completed!\n");
 	track_throne(true);
+	kp_ksud_transition_routine_end(); // security_bounded_transition rp
 }
 
 // since _ksud handler only uses argv and envp for comparisons
@@ -201,6 +211,9 @@ static int ksu_handle_bprm_ksud(const char *filename, const char *argv1, const c
 	}
 
 first_app_process:
+	if (init_second_stage_executed)
+		kp_ksud_transition_routine_start();
+
 	if (first_app_process && strstarts(filename, app_process)) {
 		first_app_process = false;
 		pr_info("%s: exec app_process, /data prepared, second_stage: %d\n", __func__, init_second_stage_executed);
