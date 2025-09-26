@@ -1,4 +1,68 @@
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
+#if defined(CONFIG_KRETPROBES)
+#include <linux/kprobes.h>
+static u32 cached_su_sid __read_mostly;
+static u32 cached_init_sid __read_mostly;
+
+// int security_bounded_transition(u32 old_sid, u32 new_sid)
+static int bounded_transition_entry_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	// grab sids on entry
+	u32 *sid = (u32 *)ri->data;
+	sid[0] = PT_REGS_PARM1(regs);  // old_sid
+	sid[1] = PT_REGS_PARM2(regs);  // new_sid
+
+	return 0;
+}
+
+static int bounded_transition_ret_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	u32 *sid = (u32 *)ri->data;
+	u32 old_sid = sid[0];
+	u32 new_sid = sid[1];
+
+	if (!cached_su_sid)
+		return 0;
+
+	// so if old sid is 'init' and trying to transition to a new sid of 'ksu'
+	// force the function to return 0 
+	if (old_sid == cached_init_sid && new_sid == cached_su_sid) {
+		pr_info("security_bounded_transition: allowing init (%d) -> ksu (%d) \n", old_sid, new_sid);
+		PT_REGS_RC(regs) = 0;  // make the original func return 0
+	}
+
+	return 0;
+}
+
+static struct kretprobe bounded_transition_rp = {
+	.kp.symbol_name = "security_bounded_transition",
+	.handler = bounded_transition_ret_handler,
+	.entry_handler = bounded_transition_entry_handler,
+	.data_size = sizeof(u32) * 2, // need to keep 2x u32's, one per sid
+	.maxactive = 20,
+};
+
+static int kp_ksud_transition_unregister(void *data)
+{
+	msleep(1000);
+
+	unregister_kretprobe(&bounded_transition_rp);
+	pr_info("kp_ksud: unregister rp: security_bounded_transition\n");
+	return 0;
+}
+
+static void kp_ksud_transition_routine_start()
+{
+	static bool already_ran = false;
+	if (already_ran)
+		return;
+
+	int ret = register_kretprobe(&bounded_transition_rp);
+	pr_info("kp_ksud: register rp: security_bounded_transition ret: %d\n", ret);
+
+	already_ran = true;
+}
+#else
 static noinline void sys_execve_escape_ksud_internal(void *filename)
 {
 #ifdef KSU_CAN_USE_JUMP_LABEL
@@ -59,7 +123,8 @@ static noinline void kernel_execve_escape_ksud_internal(void *filename)
 	escape_to_root_forced(); // give this context all permissions
 	return;
 }
-#endif
+#endif // KRETPROBES
+#endif // < 4.14 && >= 4.2
 
 // UL bprm_set_creds handling
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
@@ -146,7 +211,12 @@ static int bprm_set_creds_restore(void *data)
 }
 #endif
 
-static void ksud_escape_init() { }
+static void ksud_escape_init()
+{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0) && defined(CONFIG_KRETPROBES)
+	kp_ksud_transition_routine_start();
+#endif
+}
 
 static void ksud_escape_exit()
 {
@@ -159,5 +229,10 @@ static void ksud_escape_exit()
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
 	kthread_run(bprm_set_creds_restore, NULL, "unhook");
 #endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0) && defined(CONFIG_KRETPROBES)
+	kthread_run(kp_ksud_transition_unregister, NULL, "rp_unhook");
+#endif
+
 }
 
