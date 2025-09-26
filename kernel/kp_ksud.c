@@ -198,6 +198,92 @@ static struct kprobe key_permission_kp = {
 };
 #endif // key_permission
 
+// security_bounded_transition
+#if defined(CONFIG_KRETPROBES) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+#include "avc_ss.h"
+#include "selinux/selinux.h"
+
+static u32 init_sid = 0;
+static u32 su_sid = 0;
+
+// get sids outside of kprobe context
+static int grab_sids()
+{
+	int error = security_secctx_to_secid("u:r:init:s0", strlen("u:r:init:s0"), &init_sid);
+	if (error)
+		return 1;
+
+	pr_info("kp_ksud/grab_sids: got init sid: %d\n", init_sid);
+
+	error = security_secctx_to_secid("u:r:su:s0", strlen("u:r:su:s0"), &su_sid);
+	if (error)
+		return 1;
+
+	pr_info("kp_ksud/grab_sids: got su sid: %d\n", su_sid);
+	
+	return 0;
+}
+
+// int security_bounded_transition(u32 old_sid, u32 new_sid)
+static int bounded_transition_entry_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	// grab sids on entry
+	u32 *sid = (u32 *)ri->data;
+	sid[0] = PT_REGS_PARM1(regs);  // old_sid
+	sid[1] = PT_REGS_PARM2(regs);  // new_sid
+	return 0;
+}
+
+static int bounded_transition_ret_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	u32 *sid = (u32 *)ri->data;
+	u32 old_sid = sid[0];
+	u32 new_sid = sid[1];
+
+	if (!ss_initialized)
+		return 0;
+
+	// so if old sid is 'init' and trying to transition to a new sid of 'su'
+	// force the function to return 0 
+	if (old_sid == init_sid && new_sid == su_sid) {
+		pr_info("kp_ksud: security_bounded_transition: allowing init (%d) -> su (%d)\n", init_sid, su_sid);
+		PT_REGS_RC(regs) = 0;  // make the original func return 0
+	}
+
+	return 0;
+}
+
+static struct kretprobe bounded_transition_rp = {
+	.kp.symbol_name = "security_bounded_transition",
+	.handler = bounded_transition_ret_handler,
+	.entry_handler = bounded_transition_entry_handler,
+	.data_size = sizeof(u32) * 2, // need to keep 2x u32's, one per sid
+	.maxactive = 20,
+};
+
+// unused for now 
+void kp_ksud_transition_routine_end()
+{
+	unregister_kretprobe(&bounded_transition_rp);
+	pr_info("kp_ksud: unregister kretprobe: security_bounded_transition ret: ??\n");
+}
+
+void kp_ksud_transition_routine_start()
+{
+	// we only need to run this once.
+	// once we got sids, we are ready
+	if (su_sid != 0)
+		return;
+
+	int ret = grab_sids();
+	if (ret)
+		return;
+	
+	ret = register_kretprobe(&bounded_transition_rp);
+	pr_info("kp_ksud: register kretprobe: security_bounded_transition ret: %d\n", ret);
+}
+#endif // security_bounded_transition
+
 static void unregister_kprobe_logged(struct kprobe *kp)
 {
 	const char *symbol_name = kp->symbol_name;
