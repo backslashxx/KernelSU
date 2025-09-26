@@ -84,6 +84,11 @@ void on_post_fs_data(void)
 	pr_info("ksu_file sid: %d\n", ksu_file_sid);
 }
 
+#if defined(CONFIG_KRETPROBES) && defined(CONFIG_KSU_KPROBES_KSUD) && \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+extern void kp_ksud_transition_routine_start();
+#endif
+
 // since _ksud handler only uses argv and envp for comparisons
 // this can probably work
 // adapted from ksu_handle_execveat_ksud
@@ -171,6 +176,12 @@ int ksu_handle_bprm_ksud(const char *filename, const char *argv1, const char *en
 	}
 
 first_app_process:
+#if defined(CONFIG_KRETPROBES) && defined(CONFIG_KSU_KPROBES_KSUD) && \
+	LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+	if (init_second_stage_executed == true)
+		kp_ksud_transition_routine_start();
+#endif
+
 	if (first_app_process && !memcmp(filename, app_process, sizeof(app_process) - 1)) {
 		first_app_process = false;
 		pr_info("%s: exec app_process, /data prepared, second_stage: %d\n", __func__, init_second_stage_executed);
