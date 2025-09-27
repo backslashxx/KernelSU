@@ -162,12 +162,6 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 
 	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
 }
-
-int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
-			void *envp, int *flags)
-{
-	return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp, flags);
-}
 #else
 // for do_execve_common on < 3.14
 // take note: char **filename
