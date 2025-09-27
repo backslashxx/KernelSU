@@ -97,7 +97,6 @@ void rp_sucompat_exit()
 {
 	pr_info("rp_sucompat: unregister getname_flags!\n");
 	destroy_kretprobe(&getname_rp);
-	return 0;
 }
 
 void rp_sucompat_init()
