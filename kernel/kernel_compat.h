@@ -223,4 +223,14 @@ struct dir_context { const filldir_t actor; loff_t pos; };
 #define iterate_dir(file, ctx) vfs_readdir(file, (ctx)->actor, ctx)
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0)
+__weak char *bin2hex(char *dst, const void *src, size_t count)
+{
+	const unsigned char *_src = src;
+	while (count--)
+		dst = pack_hex_byte(dst, *_src++);
+	return dst;
+}
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
