@@ -19,6 +19,7 @@
 
 static bool ksu_su_compat_enabled __read_mostly = true;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 static void __user *userspace_stack_buffer(const void *d, size_t len)
 {
 	/* To avoid having to mmap a page in userspace, just write below the stack
@@ -27,6 +28,28 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
 
 	return copy_to_user(p, d, len) ? NULL : p;
 }
+#else
+static void __user *userspace_stack_buffer(const void *d, size_t len)
+{
+	if (!current->mm)
+		return NULL;
+
+	volatile unsigned long start_stack = current->mm->start_stack;
+	unsigned int step = 32;
+	char __user *p = NULL;
+	
+	do {
+		p = (void __user *)(start_stack - step - len);
+		if (!copy_to_user(p, d, len)) {
+			/* pr_info("%s: start_stack: %lx p: %lx len: %zu\n",
+				__func__, start_stack, (unsigned long)p, len ); */
+			return p;
+		}
+		step = step + step;
+	} while (step <= 2048);
+	return NULL;
+}
+#endif
 
 static char __user *sh_user_path(void)
 {
