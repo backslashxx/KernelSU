@@ -49,7 +49,7 @@ static char __user *ksud_user_path(void)
 __attribute__((hot, no_stack_protector))
 static __always_inline bool is_su_allowed(const void *ptr_to_check)
 {
-	barrier();
+	DONT_GET_SMART();
 
 	if (likely(!ksu_is_allow_uid(current_uid().val)))
 		return false;
