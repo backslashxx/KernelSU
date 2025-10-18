@@ -659,19 +659,19 @@ impl<'a> TryFrom<&'a PolicyStatement<'a>> for Vec<AtomicStatement> {
 struct FfiPolicy {
     cmd: u32,
     subcmd: u32,
-    sepol1: *const ffi::c_char,
-    sepol2: *const ffi::c_char,
-    sepol3: *const ffi::c_char,
-    sepol4: *const ffi::c_char,
-    sepol5: *const ffi::c_char,
-    sepol6: *const ffi::c_char,
-    sepol7: *const ffi::c_char,
+    sepol1: u64,
+    sepol2: u64,
+    sepol3: u64,
+    sepol4: u64,
+    sepol5: u64,
+    sepol6: u64,
+    sepol7: u64,
 }
 
-fn to_c_ptr(pol: &PolicyObject) -> *const ffi::c_char {
+fn to_c_ptr(pol: &PolicyObject) -> u64 {
     match pol {
-        PolicyObject::None | PolicyObject::All => std::ptr::null(),
-        PolicyObject::One(s) => s.as_ptr().cast::<ffi::c_char>(),
+        PolicyObject::None | PolicyObject::All => unsafe { std::ptr::null::<u8>() as u64 },
+        PolicyObject::One(s) => unsafe { s.as_ptr() as u64 },
     }
 }
 
