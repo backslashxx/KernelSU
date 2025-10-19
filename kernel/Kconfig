@@ -7,6 +7,14 @@ config KSU
 	help
 	  Enable kernel-level root privileges on Android System.
 
+config KSU_EXTRAS
+	bool "Enable custom stuff"
+	depends on KSU
+	default n
+	help
+	  Custom extensions. Experimental.
+	  Currently, only avc log spoofing is implemented.
+
 config KSU_KPROBES_KSUD
 	bool "Enable dynamic kprobes for early boot hooks"
 	depends on KPROBES && KRETPROBES
