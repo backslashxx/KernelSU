@@ -9,6 +9,13 @@ config KSU
 	  To compile as a module, choose M here: the
 	  module will be called kernelsu.
 
+config KSU_EXTRAS
+	bool "Enable custom stuff"
+	default y
+	help
+	  Custom extensions. Experimental.
+	  Currently, only avc log spoofing is implemented.
+
 config KSU_DEBUG
 	bool "KernelSU debug mode"
 	depends on KSU
