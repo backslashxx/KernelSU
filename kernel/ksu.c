@@ -75,6 +75,10 @@
 #include "rp_sucompat.c"
 #endif
 
+#ifdef CONFIG_KSU_EXTRAS
+#include "extras.c"
+#endif
+
 struct cred* ksu_cred;
 
 extern void ksu_supercalls_init();
@@ -118,6 +122,10 @@ int __init kernelsu_init(void)
 
 #ifdef CONFIG_KSU_KPROBES_KSUD
 	kp_ksud_init();
+#endif
+
+#ifdef CONFIG_KSU_EXTRAS
+	ksu_avc_spoof_init(); // so the feature is registered
 #endif
 
 	return 0;
