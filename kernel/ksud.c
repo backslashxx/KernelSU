@@ -32,6 +32,12 @@
 bool ksu_module_mounted __read_mostly = false;
 bool ksu_boot_completed __read_mostly = false;
 
+#ifdef CONFIG_KSU_EXTRAS
+extern void ksu_avc_spoof_late_init();
+#else
+void ksu_avc_spoof_late_init() {}
+#endif
+
 #ifdef CONFIG_KSU_KPROBES_KSUD
 extern void unregister_kprobe_thread();
 #endif
@@ -116,6 +122,7 @@ void on_boot_completed(void)
 	ksu_boot_completed = true;
 	pr_info("on_boot_completed!\n");
 	track_throne(true);
+	ksu_avc_spoof_late_init(); // slow_avc_init kp
 }
 
 // since _ksud handler only uses argv and envp for comparisons
