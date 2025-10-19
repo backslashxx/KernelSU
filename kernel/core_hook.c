@@ -467,7 +467,6 @@ skip_check:
 			if (!boot_complete_lock) {
 				boot_complete_lock = true;
 				pr_info("boot_complete triggered\n");
-				unregister_kprobe_thread();
 				avc_spoof_init(); 
 			}
 			break;
