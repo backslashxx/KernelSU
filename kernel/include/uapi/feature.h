@@ -7,6 +7,10 @@ enum ksu_feature_id {
 	KSU_FEATURE_SULOG = 2,
 	KSU_FEATURE_ADB_ROOT = 3,
 
+#ifdef CONFIG_KSU_EXTRAS // custom extensions
+	KSU_FEATURE_AVC_SPOOF = 10003,
+#endif
+
 	KSU_FEATURE_MAX
 };
 
