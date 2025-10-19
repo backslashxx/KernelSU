@@ -14,7 +14,6 @@ config KSU_EXTRAS
 	default y
 	help
 	  Custom extensions. Experimental.
-	  Currently, only avc log spoofing is implemented.
 
 config KSU_DEBUG
 	bool "KernelSU debug mode"
