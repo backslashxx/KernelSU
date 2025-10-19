@@ -93,6 +93,10 @@
 #include "hook/kp_ksud.c"
 #endif
 
+#ifdef CONFIG_KSU_EXTRAS
+#include "extras.c"
+#endif
+
 // __weak fn's
 #include "kernel_compat.c"
 
@@ -149,6 +153,10 @@ int __init kernelsu_init(void)
 
 #if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
 	kp_ksud_init();
+#endif
+
+#ifdef CONFIG_KSU_EXTRAS
+	ksu_avc_spoof_init(); // so the feature is registered
 #endif
 
 	return 0;
