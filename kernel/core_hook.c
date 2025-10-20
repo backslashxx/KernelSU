@@ -341,6 +341,22 @@ skip_check:
 		return 0;
 	}
 
+	if (arg2 == CMD_WIPE_UMOUNT_LIST) {
+		struct mount_entry *entry, *tmp;
+		list_for_each_entry_safe(entry, tmp, &mount_list, list) {
+			pr_info("wipe_umount_list: removing entry: %s\n", entry->umountable);
+			list_del(&entry->list);
+			kfree(entry->umountable);
+			kfree(entry);
+        	}
+        	ksu_unmountable_count = 0;
+
+		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
+			pr_err("prctl reply error, cmd: %lu\n", arg2);
+		}
+		return 0;
+	}
+
 	if (arg2 == CMD_ADD_TRY_UMOUNT) {
 		struct mount_entry *new_entry, *entry;
 		char buf[384];
