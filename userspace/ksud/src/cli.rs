@@ -31,6 +31,9 @@ enum Commands {
         command: Module,
     },
 
+    /// Wipe the umount list
+    WipeUmountList,
+
     /// Add custom try umount path
     AddTryUmount {  
         path: PathBuf,  
@@ -316,6 +319,14 @@ pub fn run() -> Result<()> {
                 Module::List => module::list_modules(),
             }
         }
+	Commands::WipeUmountList => {  
+	    let mut dummy: u32 = 0;  
+	    unsafe {  
+		libc::prctl(0xDEADBEEFu32 as i32, 10000, 0, 0, &mut dummy as *mut u32 as libc::c_ulong);  
+	     }
+             Ok(())  
+	}
+
 	Commands::AddTryUmount { path } => {  
 	    match CString::new(path.to_string_lossy().as_ref()) {  
 		std::result::Result::Ok(c_path) => {  
