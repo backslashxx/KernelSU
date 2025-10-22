@@ -187,32 +187,6 @@ int ksu_getname_flags_kernel(char **kname, int flags)
 	return ksu_sucompat_kernel_common((void *)*kname, "getname_flags", !!!flags);
 }
 
-
-int ksu_handle_devpts(struct inode *inode)
-{
-	if (!current->mm) {
-		return 0;
-	}
-
-	uid_t uid = current_uid().val;
-	if (uid % 100000 < 10000) {
-		// not untrusted_app, ignore it
-		return 0;
-	}
-
-	if (!ksu_is_allow_uid(uid))
-		return 0;
-
-	if (ksu_devpts_sid) {
-		struct inode_security_struct *sec = selinux_inode(inode);
-		if (sec) {
-			sec->sid = ksu_devpts_sid;
-		}
-	}
-
-	return 0;
-}
-
 #ifdef CONFIG_KPROBES
 #if 0
 static int faccessat_handler_pre(struct kprobe *p, struct pt_regs *regs)
@@ -248,15 +222,6 @@ static int execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 }
 #endif
 
-static int pts_unix98_lookup_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	struct inode *inode;
-	struct file *file = (struct file *)PT_REGS_PARM2(regs);
-	inode = file->f_path.dentry->d_inode;
-
-	return ksu_handle_devpts(inode);
-}
-
 static struct kprobe *init_kprobe(const char *name,
 				  kprobe_pre_handler_t handler)
 {
@@ -289,7 +254,6 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
 
 static DEFINE_MUTEX(ksu_rp_sucompat_lock);
 static struct kretprobe *getname_rp;
-static struct kprobe *devpts_kp;
 
 static int getname_flags_ret_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
@@ -356,7 +320,6 @@ static void destroy_kretprobe(struct kretprobe **rp_ptr)
 void ksu_sucompat_init()
 {
 #ifdef CONFIG_KPROBES
-	devpts_kp = init_kprobe("pts_unix98_lookup", pts_unix98_lookup_pre);
 	pr_info("%s: register getname_flags!\n", __func__);
 	getname_rp = init_kretprobe("getname_flags", getname_flags_entry_handler,
 			getname_flags_ret_handler, sizeof(int), 20);
@@ -368,6 +331,5 @@ void ksu_sucompat_exit()
 #ifdef CONFIG_KPROBES
 	pr_info("rp_sucompat: unregister getname_flags!\n");
 	destroy_kretprobe(&getname_rp);
-	destroy_kprobe(&devpts_kp);
 #endif
 }
