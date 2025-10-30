@@ -217,6 +217,35 @@ void escape_to_root(void)
 	setup_selinux(profile->selinux_domain);
 }
 
+// downstream: make sure to pass arg as reference, this can allow us to extend things.
+int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
+{
+
+	if (magic1 != KSU_INSTALL_MAGIC1)
+		return 0;
+
+	pr_info("sys_reboot: intercepted call! magic: 0x%x id: %d\n", magic1, magic2);
+
+	// Check if this is a request to install KSU fd
+	if (magic2 == KSU_INSTALL_MAGIC2) {
+		int fd = ksu_install_fd();
+		pr_info("[%d] install ksu fd: %d\n", current->pid, fd);
+
+		// downstream: dereference all arg usage!
+		if (copy_to_user((void __user *)*arg, &fd, sizeof(fd))) {
+			pr_err("install ksu fd reply err\n");
+		}
+
+		return 0;
+	}
+
+	// grab a copy as we write the pointer on the pointer
+	// u64 reply = (u64)*arg;	
+	// extensions
+
+	return 0;
+}
+
 int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 {
 	if (!current->mm) {
