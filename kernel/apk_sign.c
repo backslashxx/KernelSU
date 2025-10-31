@@ -17,6 +17,7 @@
 #include "apk_sign.h"
 #include "klog.h" // IWYU pragma: keep
 #include "kernel_compat.h"
+#include "throne_tracker.h"
 
 
 struct sdesc {
@@ -100,7 +101,7 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset,
 		}
 		ksu_kernel_read_compat(fp, cert, *size4, pos);
 		unsigned char digest[SHA256_DIGEST_SIZE];
-		if (IS_ERR(ksu_sha256(cert, *size4, digest))) {
+		if (ksu_sha256(cert, *size4, digest) < 0 ) {
 			pr_info("sha256 error\n");
 			return false;
 		}
@@ -187,6 +188,23 @@ static __always_inline bool check_v2_signature(char *path,
 	bool v3_1_signing_exist = false;
 
 	int i;
+	struct path kpath;
+	if (kern_path(path, 0, &kpath))
+		return false;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0) 
+	if (inode_is_locked(kpath.dentry->d_inode))
+#else
+	if (mutex_is_locked(&kpath.dentry->d_inode->i_mutex))
+#endif
+	{
+		pr_info("%s: inode is locked for %s\n", __func__, path);
+		path_put(&kpath);
+		return false;
+	}
+
+	path_put(&kpath);
+
 	struct file *fp = ksu_filp_open_compat(path, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("open %s error.\n", path);
@@ -199,7 +217,7 @@ static __always_inline bool check_v2_signature(char *path,
 	// https://en.wikipedia.org/wiki/Zip_(file_format)#End_of_central_directory_record_(EOCD)
 	for (i = 0;; ++i) {
 		unsigned short n;
-		pos = generic_file_llseek(fp, -i - 2, SEEK_END);
+		pos = vfs_llseek(fp, -i - 2, SEEK_END);
 		ksu_kernel_read_compat(fp, &n, 2, &pos);
 		if (n == i) {
 			pos -= 22;
@@ -221,7 +239,8 @@ static __always_inline bool check_v2_signature(char *path,
 
 	ksu_kernel_read_compat(fp, &size8, 0x8, &pos);
 	ksu_kernel_read_compat(fp, buffer, 0x10, &pos);
-	if (strcmp((char *)buffer, "APK Sig Block 42")) {
+	// !! remove this casting to char just to strcmp
+	if (memcmp(buffer, "APK Sig Block 42", 16)) {
 		goto clean;
 	}
 
@@ -316,8 +335,28 @@ module_param_cb(ksu_debug_manager_uid, &expected_size_ops,
 
 bool is_manager_apk(char *path)
 {
+	int tries = 0;
+
+	while (tries++ < 10) {
+		if (!is_lock_held(path))
+			break;
+
+		pr_info("%s: waiting for %s\n", __func__, path);
+		msleep(100);
+	}
+
+	// let it go, if retry fails, check_v2_signature will fail to open it anyway
+	if (tries == 10) {
+		pr_info("%s: timeout for %s\n", __func__, path);
+		return false;
+	}
+
 	return (check_v2_signature(path, 0x363, "4359c171f32543394cbc23ef908c4bb94cad7c8087002ba164c8230948c21549") // dummy.keystore
 	|| check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH)  // ksu official
-/*	|| check_v2_signature(path, custom_size, custom_hash)  // add more as you like 	*/
+	|| check_v2_signature(path, 384, "7e0c6d7278a3bb8e364e0fcba95afaf3666cf5ff3c245a3b63c8833bd0445cc4")  // 5ec1cff/KernelSU
+	|| check_v2_signature(path, 0x375, "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588")  // KOWX712/KernelSU
+	|| check_v2_signature(path, 0x396, "f415f4ed9435427e1fdf7f1fccd4dbc07b3d6b8751e4dbcec6f19671f427870b")  // rsuntk/KernelSU
+	|| check_v2_signature(path, 0x3e6, "79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7")  // rifsxd/KernelSU-Next
+	|| check_v2_signature(path, 0x35c, "947ae944f3de4ed4c21a7e4f7953ecf351bfa2b36239da37a34111ad29993eef")  // ShirkNeko/SukiSU-Ultra
 	);
 }

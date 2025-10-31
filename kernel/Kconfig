@@ -1,13 +1,35 @@
 menu "KernelSU"
 
 config KSU
-	tristate "KernelSU function support"
-	depends on OVERLAY_FS
+	bool "KernelSU function support"
 	default y
 	help
 	  Enable kernel-level root privileges on Android System.
-	  To compile as a module, choose M here: the
-	  module will be called kernelsu.
+
+config KSU_EXTRAS
+	bool "Enable custom stuff"
+	default n
+	help
+	  Custom extensions. Experimental.
+	  Currently, only avc log spoofing is implemented.
+
+config KSU_KPROBES_KSUD
+	bool "Enable dynamic kprobes for early boot hooks"
+	depends on KPROBES
+	default y
+	help
+	  Use dynamic hooks via kprobes for functions needed only
+	  on early boot. Hooks are unregistered at boot complete
+	  to reduce overhead.
+
+config KSU_KRETPROBES_SUCOMPAT
+	bool "EXPERIMENTAL: kretprobes for sucompat"
+	depends on KRETPROBES
+	default n
+	help
+	  EXPERIMENTAL: Use kretprobes for hooking getname_flags, mainly for
+	  sucompat. This method will hijack all fs-related syscalls, but
+	  thwarts timing based detections.
 
 config KSU_DEBUG
 	bool "KernelSU debug mode"
@@ -15,5 +37,30 @@ config KSU_DEBUG
 	default n
 	help
 	  Enable KernelSU debug mode.
+
+config KSU_THRONE_TRACKER_ALWAYS_THREADED
+	bool "Always run throne tracker in a kthread"
+	default n
+	help
+	  Enable this option to run throne tracker in a kthread for the first
+	  run, which happens at boot time / decryption stage. This can decrease
+	  boot time, but can cause crowning failure on some FDE/FBEv1 setups.
+	  If unsure, say n.
+
+config KSU_ALLOWLIST_WORKAROUND
+        bool "KernelSU Session Keyring Init workaround"
+        depends on KSU
+        default n
+        help
+          Enable session keyring init workaround for problematic devices.
+          Useful for situations where the SU allowlist is not kept after a reboot.
+
+config KSU_LSM_SECURITY_HOOKS
+	bool "Use LSM security hooks"
+        depends on KSU
+        default y
+	help
+	  Disabling this is mostly useful for kernels < 4.2 and > 6.8.
+	  Make sure to implement manual hooks on security/security.c.
 
 endmenu
