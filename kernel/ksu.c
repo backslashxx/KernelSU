@@ -76,6 +76,8 @@
 #include "sulog/event.c"
 #include "sulog/fd.c"
 
+#include "hook/setuid_hook.c"
+
 #ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
 	#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
 	#include "hook/lsm_hooks_static.c"
@@ -87,7 +89,6 @@
 #else
 	#include "hook/lsm_hooks_manual.c"
 #endif
-
 
 #include "selinux/selinux.c"
 #include "selinux/sepolicy.c"
