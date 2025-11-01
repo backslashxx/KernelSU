@@ -122,7 +122,22 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 	uid_t new_uid = new->uid.val;
 	uid_t old_uid = old->uid.val;
 
-	// TODO: disable seccomp here!
+	// old process is not root, ignore it.
+	if (0 != old_uid)
+		return 0;
+
+	// we dont have those new fancy things upstream has
+	// lets just do original thing where we disable seccomp
+	if (likely(ksu_is_manager_appid_valid()) && unlikely(ksu_get_manager_appid() == new_uid % PER_USER_RANGE)) {
+		disable_seccomp();
+		pr_info("install fd for: %d\n", new_uid);
+		ksu_install_fd(); // install fd for ksu manager
+	}
+
+	if (unlikely(ksu_is_allow_uid_for_current(new_uid))) {
+		disable_seccomp();
+		return 0;
+	}
 
 	// if there isn't any module mounted, just ignore it!
 	if (!ksu_module_mounted) {
