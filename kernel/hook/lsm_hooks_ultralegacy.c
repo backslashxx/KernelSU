@@ -33,6 +33,10 @@ static int hook_bprm_check_security(struct linux_binprm *bprm)
 static int (*orig_task_fix_setuid) (struct cred *new, const struct cred *old, int flags) __read_mostly = NULL;
 static int hook_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
 {
+	// see sys_setresuid
+	if (flags == LSM_SETID_RES)
+		ksu_handle_setresuid_cred(new, old);
+
 	return orig_task_fix_setuid(new, old, flags);
 }
 
