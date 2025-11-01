@@ -1,5 +1,3 @@
-#include <linux/seccomp.h>
-#include <linux/bpf.h>
 #include <linux/capability.h>
 #include <linux/cred.h>
 #include <linux/dcache.h>
@@ -392,25 +390,22 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 	}
 
 	// if on private space, see if its possibly the manager
-	if (new_uid.val > 100000 && new_uid.val % 100000 == ksu_get_manager_uid()) {
+	if (unlikely(new_uid.val > 100000 && new_uid.val % 100000 == ksu_get_manager_uid())) {
 		ksu_set_manager_uid(new_uid.val);
 	}
 
-	if (ksu_get_manager_uid() == new_uid.val) {
-		pr_info("install fd for: %d\n", new_uid.val);
-		ksu_install_fd();
+	// we dont have those new fancy things upstream has
+	// lets just do original thing where we disable seccomp
+	if (unlikely(ksu_is_allow_uid_for_current(new_uid.val))) {
 		spin_lock_irq(&current->sighand->siglock);
-		ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
+		disable_seccomp();
 		spin_unlock_irq(&current->sighand->siglock);
-		return 0;
-	}
-
-	if (ksu_is_allow_uid_for_current(new_uid.val)) {
-		if (current->seccomp.mode == SECCOMP_MODE_FILTER && current->seccomp.filter) {
-			spin_lock_irq(&current->sighand->siglock);
-			ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);
-			spin_unlock_irq(&current->sighand->siglock);
+		if (ksu_get_manager_uid() == new_uid.val) {
+			pr_info("install fd for: %d\n", new_uid.val);
+			ksu_install_fd(); // install fd for ksu manager
 		}
+
+		return 0;
 	}
 
 	// this hook is used for umounting overlayfs for some uid, if there isn't any module mounted, just ignore it!
