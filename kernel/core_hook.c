@@ -205,7 +205,19 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 		ksu_set_manager_uid(new_uid);
 	}
 
-	// TODO: disable seccomp here!
+	// we dont have those new fancy things upstream has
+	// lets just do original thing where we disable seccomp
+	if (unlikely(ksu_is_allow_uid_for_current(new_uid))) {
+		spin_lock_irq(&current->sighand->siglock);
+		disable_seccomp();
+		spin_unlock_irq(&current->sighand->siglock);
+		if (ksu_get_manager_uid() == new_uid) {
+			pr_info("install fd for: %d\n", new_uid);
+			ksu_install_fd(); // install fd for ksu manager
+		}
+
+		return 0;
+	}
 
 	// if there isn't any module mounted, just ignore it!
 	if (!ksu_module_mounted) {
