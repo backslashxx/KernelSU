@@ -65,6 +65,10 @@ static __nocfi int ksu_inode_rename(struct inode *old_dir, struct dentry *old_de
 extern int security_task_fix_setuid(struct cred *new, const struct cred *old, int flags);
 static __nocfi int ksu_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
 {
+	// see sys_setresuid
+	if (flags == LSM_SETID_RES)
+		ksu_handle_setresuid_cred(new, old);
+
 	return security_task_fix_setuid(new, old, flags);
 }
 
