@@ -64,7 +64,7 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 	put_group_info(group_info);
 }
 
-static void disable_seccomp()
+void disable_seccomp()
 {
 
 // for < 5.9 lets have free_task do it for us (put_seccomp_filter)
