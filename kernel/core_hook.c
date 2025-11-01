@@ -220,6 +220,12 @@ void escape_to_root(void)
 	setup_selinux(profile->selinux_domain);
 }
 
+struct mount_entry {
+    char *umountable;
+    struct list_head list;
+};
+LIST_HEAD(mount_list);
+
 // downstream: make sure to pass arg as reference, this can allow us to extend things.
 int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
 {
@@ -243,8 +249,66 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	}
 
 	// grab a copy as we write the pointer on the pointer
-	// u64 reply = (u64)*arg;	
+	// https://wiki.c2.com/?ThreeStarProgrammer 
+	// keks, greetings to #c on libera
+	u64 reply = (u64)*arg;
+
 	// extensions
+	if (magic2 == CMD_WIPE_UMOUNT_LIST) {
+		struct mount_entry *entry, *tmp;
+		list_for_each_entry_safe(entry, tmp, &mount_list, list) {
+			pr_info("wipe_umount_list: removing entry: %s\n", entry->umountable);
+			list_del(&entry->list);
+			kfree(entry->umountable);
+			kfree(entry);
+        	}
+
+		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply))) {
+			pr_err("sys_reboot reply error, cmd: %d\n", magic2);
+		}
+		return 0;
+	}
+
+	if (magic2 == CMD_ADD_TRY_UMOUNT) {
+		struct mount_entry *new_entry, *entry;
+		char buf[384] = {0};
+
+		if (copy_from_user(buf, (const char __user *)*arg, sizeof(buf) - 1)) {
+			pr_err("cmd_add_try_umount: failed to copy user string\n");
+			return 0;
+		}
+		buf[384 - 1] = '\0';
+
+		new_entry = kmalloc(sizeof(*new_entry), GFP_KERNEL);
+		if (!new_entry)
+			return 0;
+
+		new_entry->umountable = kstrdup(buf, GFP_KERNEL);
+		if (!new_entry->umountable) {
+			kfree(new_entry);
+			return 0;
+		}
+
+		// disallow dupes
+		// if this gets too many, we can consider moving this whole task to a kthread
+		list_for_each_entry(entry, &mount_list, list) {
+			if (!strcmp(entry->umountable, buf)) {
+				pr_info("cmd_add_try_umount: %s is already here!\n", buf);
+				kfree(new_entry->umountable);
+				kfree(new_entry);
+				return 0;
+			}	
+		}	
+
+		// debug
+		// pr_info("cmd_add_try_umount: %s added!\n", buf);
+		list_add(&new_entry->list, &mount_list);
+
+		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply))) {
+			pr_err("sys_reboot reply error, cmd: %d\n", magic2);
+		}
+		return 0;
+	}
 
 	return 0;
 }
@@ -338,25 +402,6 @@ static bool is_appuid(kuid_t uid)
 	return appid >= FIRST_APPLICATION_UID && appid <= LAST_APPLICATION_UID;
 }
 
-static bool should_umount(struct path *path)
-{
-	if (!path) {
-		return false;
-	}
-
-	if (current->nsproxy->mnt_ns == init_nsproxy.mnt_ns) {
-		pr_info("ignore global mnt namespace process: %d\n",
-			current_uid().val);
-		return false;
-	}
-
-	if (path->mnt && path->mnt->mnt_sb && path->mnt->mnt_sb->s_type) {
-		const char *fstype = path->mnt->mnt_sb->s_type->name;
-		return strcmp(fstype, "overlay") == 0;
-	}
-	return false;
-}
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) || defined(KSU_HAS_PATH_UMOUNT)
 extern int path_umount(struct path *path, int flags);
 static void ksu_path_umount(const char *mnt, struct path *path, int flags)
@@ -381,7 +426,7 @@ static void ksu_sys_umount(const char *mnt, int flags)
 }
 #endif // KSU_HAS_PATH_UMOUNT
 
-static void try_umount(const char *mnt, bool check_mnt, int flags)
+static void try_umount(const char *mnt, int flags)
 {
 	struct path path;
 	int err = kern_path(mnt, 0, &path);
@@ -391,12 +436,6 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 
 	if (path.dentry != path.mnt->mnt_root) {
 		// it is not root mountpoint, maybe umounted by others already.
-		path_put(&path);
-		return;
-	}
-
-	// we are only interest in some specific mounts
-	if (check_mnt && !should_umount(&path)) {
 		path_put(&path);
 		return;
 	}
@@ -526,14 +565,9 @@ do_umount:
 		current->pid);
 #endif
 
-	// fixme: use `collect_mounts` and `iterate_mount` to iterate all mountpoint and
-	// filter the mountpoint whose target is `/data/adb`
-	try_umount("/odm", true, 0);
-	try_umount("/system", true, 0);
-	try_umount("/vendor", true, 0);
-	try_umount("/product", true, 0);
-	try_umount("/system_ext", true, 0);
-	try_umount("/data/adb/modules", false, MNT_DETACH);
+	struct mount_entry *entry;
+	list_for_each_entry(entry, &mount_list, list)
+		try_umount(entry->umountable, MNT_DETACH);
 
 	return 0;
 }
