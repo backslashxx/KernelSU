@@ -284,6 +284,25 @@ void kp_ksud_transition_routine_start()
 }
 #endif // security_bounded_transition
 
+// sys_reboot
+extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);
+
+static int sys_reboot_handler_pre(struct kprobe *p, struct pt_regs *regs)
+{
+	struct pt_regs *real_regs = PT_REAL_REGS(regs);
+	int magic1 = (int)PT_REGS_PARM1(real_regs);
+	int magic2 = (int)PT_REGS_PARM2(real_regs);
+	int cmd = (int)PT_REGS_PARM3(real_regs);
+	void __user **arg = (void __user **)&PT_REGS_SYSCALL_PARM4(real_regs);
+
+	return ksu_handle_sys_reboot(magic1, magic2, cmd, arg);
+}
+
+static struct kprobe sys_reboot_kp = {
+	.symbol_name = SYS_REBOOT_SYMBOL,
+	.pre_handler = sys_reboot_handler_pre,
+};
+
 static void unregister_kprobe_logged(struct kprobe *kp)
 {
 	const char *symbol_name = kp->symbol_name;
@@ -329,6 +348,9 @@ static void register_kprobe_logged(struct kprobe *kp)
 
 void kp_ksud_init()
 {
+	// dont unreg this one
+	register_kprobe_logged(&sys_reboot_kp);
+
 	register_kprobe_logged(&vfs_read_kp);
 	register_kprobe_logged(&input_event_kp);
 	// register_kprobe_logged(&sys_execve_kp);
