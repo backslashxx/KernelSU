@@ -28,6 +28,7 @@
 // custom extensions
 #define CMD_WIPE_UMOUNT_LIST 10000
 #define CMD_ADD_TRY_UMOUNT 10001
+#define CMD_NUKE_EXT4_SYSFS 10002
 
 #define EVENT_POST_FS_DATA 1
 #define EVENT_BOOT_COMPLETED 2

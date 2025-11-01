@@ -113,7 +113,7 @@ static int do_report_event(void __user *arg)
 	case EVENT_MODULE_MOUNTED: {
 		ksu_module_mounted = true;
 		pr_info("module mounted!\n");
-		nuke_ext4_sysfs();
+		nuke_ext4_sysfs("/data/adb/modules");
 		break;
 	}
 	default:
