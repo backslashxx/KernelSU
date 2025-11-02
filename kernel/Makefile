@@ -76,7 +76,7 @@ ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
 
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
-ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
+ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
 
 all:
 	make -C $(KDIR) M=$(MDIR) modules
