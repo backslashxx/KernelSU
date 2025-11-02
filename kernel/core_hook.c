@@ -235,24 +235,6 @@ static bool is_non_appuid(kuid_t uid)
     return appid < FIRST_APPLICATION_UID;
 }
 
-static bool should_umount(struct path *path)
-{
-    if (!path) {
-        return false;
-    }
-
-    if (current->nsproxy->mnt_ns == init_nsproxy.mnt_ns) {
-        pr_info("ignore global mnt namespace process: %d\n", current_uid().val);
-        return false;
-    }
-
-    if (path->mnt && path->mnt->mnt_sb && path->mnt->mnt_sb->s_type) {
-        const char *fstype = path->mnt->mnt_sb->s_type->name;
-        return strcmp(fstype, "overlay") == 0;
-    }
-    return false;
-}
-
 static void ksu_umount_mnt(struct path *path, int flags)
 {
     int err = path_umount(path, flags);
@@ -261,7 +243,7 @@ static void ksu_umount_mnt(struct path *path, int flags)
     }
 }
 
-static void try_umount(const char *mnt, bool check_mnt, int flags)
+static void try_umount(const char *mnt, int flags)
 {
     struct path path;
     int err = kern_path(mnt, 0, &path);
@@ -275,14 +257,14 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
         return;
     }
 
-    // we are only interest in some specific mounts
-    if (check_mnt && !should_umount(&path)) {
-        path_put(&path);
-        return;
-    }
-
     ksu_umount_mnt(&path, flags);
 }
+
+struct mount_entry {
+    char *umountable;
+    struct list_head list;
+};
+LIST_HEAD(mount_list);
 
 static void do_umount_work(struct work_struct *work)
 {
@@ -291,12 +273,9 @@ static void do_umount_work(struct work_struct *work)
 
     current->nsproxy->mnt_ns = umount_work->mnt_ns;
 
-    try_umount("/odm", true, 0);
-    try_umount("/system", true, 0);
-    try_umount("/vendor", true, 0);
-    try_umount("/product", true, 0);
-    try_umount("/system_ext", true, 0);
-    try_umount("/data/adb/modules", false, MNT_DETACH);
+    struct mount_entry *entry;
+    list_for_each_entry(entry, &mount_list, list)
+        try_umount(entry->umountable, MNT_DETACH);
 
     // fixme: dec refcount
     current->nsproxy->mnt_ns = old_mnt_ns;
@@ -429,8 +408,67 @@ static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void 
     }
 
     // grab a copy as we write the pointer on the pointer
-    // u64 reply = (u64)*arg;    
+    // https://wiki.c2.com/?ThreeStarProgrammer 
+    // keks, greetings to #c on libera
+    u64 reply = (u64)*arg;
+
     // extensions
+
+    if (magic2 == CMD_WIPE_UMOUNT_LIST) {
+        struct mount_entry *entry, *tmp;
+        list_for_each_entry_safe(entry, tmp, &mount_list, list) {
+            pr_info("wipe_umount_list: removing entry: %s\n", entry->umountable);
+            list_del(&entry->list);
+            kfree(entry->umountable);
+            kfree(entry);
+            }
+
+        if (copy_to_user((void __user *)*arg, &reply, sizeof(reply))) {
+            pr_err("prctl reply error, cmd: %d\n", magic2);
+        }
+        return 0;
+    }
+
+    if (magic2 == CMD_ADD_TRY_UMOUNT) {
+        struct mount_entry *new_entry, *entry;
+        char buf[384] = {0};
+
+        if (copy_from_user(buf, (const char __user *)*arg, sizeof(buf) - 1)) {
+            pr_err("cmd_add_try_umount: failed to copy user string\n");
+            return 0;
+        }
+        buf[384 - 1] = '\0';
+
+        new_entry = kmalloc(sizeof(*new_entry), GFP_KERNEL);
+        if (!new_entry)
+            return 0;
+
+        new_entry->umountable = kstrdup(buf, GFP_KERNEL);
+        if (!new_entry->umountable) {
+            kfree(new_entry);
+            return 0;
+        }
+
+        // disallow dupes
+        // if this gets too many, we can consider moving this whole task to a kthread
+        list_for_each_entry(entry, &mount_list, list) {
+            if (!strcmp(entry->umountable, buf)) {
+                pr_info("cmd_add_try_umount: %s is already here!\n", buf);
+                kfree(new_entry->umountable);
+                kfree(new_entry);
+                return 0;
+            }    
+        }    
+
+        // debug
+        // pr_info("cmd_add_try_umount: %s added!\n", buf);
+        list_add(&new_entry->list, &mount_list);
+
+        if (copy_to_user((void __user *)*arg, &reply, sizeof(reply))) {
+            pr_err("prctl reply error, cmd: %d\n", magic2);
+        }
+        return 0;
+    }
 
     return 0;
 }
