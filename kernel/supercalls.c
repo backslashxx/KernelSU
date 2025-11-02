@@ -36,8 +36,6 @@ void avc_spoof_init() { pr_info("%s: feature not implemented!\n", __func__); }
 void avc_spoof_exit() { pr_info("%s: feature not implemented!\n", __func__); }
 #endif
 
-static bool ksu_su_compat_enabled = true;
-
 // Permission check functions
 bool only_manager(void)
 {
