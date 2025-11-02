@@ -26,6 +26,18 @@ extern int handle_sepolicy(unsigned long arg3, void __user *arg4);
 extern void ksu_sucompat_init(void);
 extern void ksu_sucompat_exit(void);
 
+// extras.c
+static bool ksu_avc_spoof_enabled = true;
+#ifdef CONFIG_KSU_EXTRAS
+extern void avc_spoof_init();
+extern void avc_spoof_exit();
+#else
+void avc_spoof_init() { pr_info("%s: feature not implemented!\n", __func__); }
+void avc_spoof_exit() { pr_info("%s: feature not implemented!\n", __func__); }
+#endif
+
+static bool ksu_su_compat_enabled = true;
+
 // Permission check functions
 bool only_manager(void)
 {
@@ -106,6 +118,7 @@ static int do_report_event(void __user *arg)
         if (!boot_complete_lock) {
             boot_complete_lock = true;
             pr_info("boot_complete triggered\n");
+            avc_spoof_init();
         }
         break;
     }
