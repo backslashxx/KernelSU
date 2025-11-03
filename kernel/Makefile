@@ -11,9 +11,7 @@ kernelsu-objs += ksud.o
 kernelsu-objs += embed_ksud.o
 kernelsu-objs += kernel_compat.o
 
-ifeq ($(CONFIG_KSU_EXTRAS),y)
 kernelsu-objs += extras.o
-endif
 
 kernelsu-objs += selinux/selinux.o
 kernelsu-objs += selinux/sepolicy.o

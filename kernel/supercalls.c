@@ -28,13 +28,8 @@ extern void ksu_sucompat_exit(void);
 
 // extras.c
 static bool ksu_avc_spoof_enabled = true;
-#ifdef CONFIG_KSU_EXTRAS
 extern void avc_spoof_init();
 extern void avc_spoof_exit();
-#else
-void avc_spoof_init() { pr_info("%s: feature not implemented!\n", __func__); }
-void avc_spoof_exit() { pr_info("%s: feature not implemented!\n", __func__); }
-#endif
 
 // Permission check functions
 bool only_manager(void)
