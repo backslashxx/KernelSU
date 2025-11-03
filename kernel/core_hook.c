@@ -365,6 +365,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 #ifdef CONFIG_KSU_DEBUG
         pr_info("handle setuid ignore allowed application: %d\n", new_uid.val);
 #endif
+    }
 
     if (!ksu_uid_should_umount(new_uid.val)) {
         return 0;
