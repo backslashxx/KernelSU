@@ -264,7 +264,6 @@ struct mount_entry {
 };
 LIST_HEAD(mount_list);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
 static void do_umount_work(struct work_struct *work)
 {
     struct ksu_umount_work *umount_work = container_of(work, struct ksu_umount_work, work);
@@ -281,7 +280,6 @@ static void do_umount_work(struct work_struct *work)
 
     kfree(umount_work);
 }
-#endif
 
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
 {
@@ -367,7 +365,6 @@ do_umount:
     pr_info("handle umount for uid: %d, pid: %d\n", new_uid.val, current->pid);
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
     // fixme: use `collect_mounts` and `iterate_mount` to iterate all mountpoint and
     // filter the mountpoint whose target is `/data/adb`
     struct ksu_umount_work *umount_work = kmalloc(sizeof(struct ksu_umount_work), GFP_ATOMIC);
@@ -376,20 +373,12 @@ do_umount:
         return 0;
     }
 
-
     // fixme: inc refcount
     umount_work->mnt_ns = current->nsproxy->mnt_ns;
 
     INIT_WORK(&umount_work->work, do_umount_work);
 
     queue_work(ksu_workqueue, &umount_work->work);
-#else
-
-    struct mount_entry *entry;
-    list_for_each_entry(entry, &mount_list, list)
-        try_umount(entry->umountable, MNT_DETACH);
-
-#endif
 
     return 0;
 }
@@ -500,157 +489,6 @@ static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void 
     return 0;
 }
 
-#ifdef MODULE
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
-void __init ksu_lsm_hook_init(void){ }
-#else
-
-#include <linux/lsm_hooks.h>
-
-static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
-			       int flags)
-{
-	return ksu_handle_setuid(new, old);
-}
-
-static int override_security_head(void *head, const void *new_head, size_t len)
-{
-	unsigned long base = (unsigned long)head & PAGE_MASK;
-	unsigned long offset = offset_in_page(head);
-
-	// this is impossible for our case because the page alignment
-	// but be careful for other cases!
-	BUG_ON(offset + len > PAGE_SIZE);
-	struct page *page = phys_to_page(__pa(base));
-	if (!page) {
-		return -EFAULT;
-	}
-
-	void *addr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
-	if (!addr) {
-		return -ENOMEM;
-	}
-	local_irq_disable();
-	memcpy(addr + offset, new_head, len);
-	local_irq_enable();
-	vunmap(addr);
-	return 0;
-}
-
-static void free_security_hook_list(struct hlist_head *head)
-{
-	struct hlist_node *temp;
-	struct security_hook_list *entry;
-
-	if (!head)
-		return;
-
-	hlist_for_each_entry_safe (entry, temp, head, list) {
-		hlist_del(&entry->list);
-		kfree(entry);
-	}
-
-	kfree(head);
-}
-
-struct hlist_head *copy_security_hlist(struct hlist_head *orig)
-{
-	struct hlist_head *new_head = kmalloc(sizeof(*new_head), GFP_KERNEL);
-	if (!new_head)
-		return NULL;
-
-	INIT_HLIST_HEAD(new_head);
-
-	struct security_hook_list *entry;
-	struct security_hook_list *new_entry;
-
-	hlist_for_each_entry (entry, orig, list) {
-		new_entry = kmalloc(sizeof(*new_entry), GFP_KERNEL);
-		if (!new_entry) {
-			free_security_hook_list(new_head);
-			return NULL;
-		}
-
-		*new_entry = *entry;
-
-		hlist_add_tail_rcu(&new_entry->list, new_head);
-	}
-
-	return new_head;
-}
-
-#define LSM_SEARCH_MAX 180 // This should be enough to iterate
-static void *find_head_addr(void *security_ptr, int *index)
-{
-	if (!security_ptr) {
-		return NULL;
-	}
-	struct hlist_head *head_start =
-		(struct hlist_head *)&security_hook_heads;
-
-	for (int i = 0; i < LSM_SEARCH_MAX; i++) {
-		struct hlist_head *head = head_start + i;
-		struct security_hook_list *pos;
-		hlist_for_each_entry (pos, head, list) {
-			if (pos->hook.capget == security_ptr) {
-				if (index) {
-					*index = i;
-				}
-				return head;
-			}
-		}
-	}
-
-	return NULL;
-}
-
-#define GET_SYMBOL_ADDR(sym)                                                   \
-	({                                                                     \
-		void *addr = kallsyms_lookup_name(#sym ".cfi_jt");             \
-		if (!addr) {                                                   \
-			addr = kallsyms_lookup_name(#sym);                     \
-		}                                                              \
-		addr;                                                          \
-	})
-
-#define KSU_LSM_HOOK_HACK_INIT(head_ptr, name, func)                           \
-	do {                                                                   \
-		static struct security_hook_list hook = {                      \
-			.hook = { .name = func }                               \
-		};                                                             \
-		hook.head = head_ptr;                                          \
-		hook.lsm = "ksu";                                              \
-		struct hlist_head *new_head = copy_security_hlist(hook.head);  \
-		if (!new_head) {                                               \
-			pr_err("Failed to copy security list: %s\n", #name);   \
-			break;                                                 \
-		}                                                              \
-		hlist_add_tail_rcu(&hook.list, new_head);                      \
-		if (override_security_head(hook.head, new_head,                \
-					   sizeof(*new_head))) {               \
-			free_security_hook_list(new_head);                     \
-			pr_err("Failed to hack lsm for: %s\n", #name);         \
-		}                                                              \
-	} while (0)
-
-void __init ksu_lsm_hook_init(void)
-{
-	void *cap_setuid = GET_SYMBOL_ADDR(cap_task_fix_setuid);
-	void *setuid_head = find_head_addr(cap_setuid, NULL);
-	if (setuid_head) {
-		if (setuid_head != &security_hook_heads.task_fix_setuid) {
-			pr_warn("setuid's address has shifted!\n");
-		}
-		KSU_LSM_HOOK_HACK_INIT(setuid_head, task_fix_setuid,
-				       ksu_task_fix_setuid);
-	} else {
-		pr_warn("Failed to find task_fix_setuid!\n");
-	}
-	smp_mb();
-}
-#endif
-#endif // MODULE
-
 // Init functons - kprobe hooks
 
 // 1. Reboot hook for installing fd
@@ -670,7 +508,6 @@ static struct kprobe reboot_kp = {
     .pre_handler = reboot_handler_pre,
 };
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
 // 2. cap_task_fix_setuid hook for handling setuid
 static int cap_task_fix_setuid_handler_pre(struct kprobe *p, struct pt_regs *regs)
 {
@@ -686,7 +523,6 @@ static struct kprobe cap_task_fix_setuid_kp = {
     .symbol_name = "cap_task_fix_setuid",
     .pre_handler = cap_task_fix_setuid_handler_pre,
 };
-#endif
 
 __maybe_unused int ksu_kprobe_init(void)
 {
@@ -700,7 +536,6 @@ __maybe_unused int ksu_kprobe_init(void)
     }
     pr_info("reboot kprobe registered successfully\n");
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
     // Register cap_task_fix_setuid kprobe
     rc = register_kprobe(&cap_task_fix_setuid_kp);
     if (rc) {
@@ -709,16 +544,13 @@ __maybe_unused int ksu_kprobe_init(void)
         return rc;
     }
     pr_info("cap_task_fix_setuid kprobe registered successfully\n");
-#endif
 
     return 0;
 }
 
 __maybe_unused int ksu_kprobe_exit(void)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
     unregister_kprobe(&cap_task_fix_setuid_kp);
-#endif
     unregister_kprobe(&reboot_kp);
     return 0;
 }
@@ -729,22 +561,16 @@ void __init ksu_core_init(void)
         pr_err("Failed to register kernel_umount feature handler\n");
     }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
     ksu_workqueue = alloc_workqueue("ksu_umount", WQ_UNBOUND, 0);
     if (!ksu_workqueue) {
         pr_err("Failed to create ksu workqueue\n");
     }
-#endif
-
 #ifdef CONFIG_KPROBES
     int rc = ksu_kprobe_init();
     if (rc) {
         pr_err("ksu_kprobe_init failed: %d\n", rc);
     }
 #endif
-
-    ksu_lsm_hook_init();
-
 }
 
 void ksu_core_exit(void)
@@ -753,10 +579,8 @@ void ksu_core_exit(void)
 #ifdef CONFIG_KPROBES
     ksu_kprobe_exit();
 #endif
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
     if (ksu_workqueue) {
         flush_workqueue(ksu_workqueue);
         destroy_workqueue(ksu_workqueue);
     }
-#endif
 }
