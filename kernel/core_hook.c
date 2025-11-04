@@ -235,12 +235,10 @@ static bool is_non_appuid(kuid_t uid)
     return appid < FIRST_APPLICATION_UID;
 }
 
-static void ksu_umount_mnt(struct path *path, int flags)
+static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 {
     int err = path_umount(path, flags);
-    if (err) {
-        pr_info("umount %s failed: %d\n", path->dentry->d_iname, err);
-    }
+    pr_info("%s: path: %s code: %d\n", __func__, mnt, err);
 }
 
 static void try_umount(const char *mnt, int flags)
@@ -257,7 +255,7 @@ static void try_umount(const char *mnt, int flags)
         return;
     }
 
-    ksu_umount_mnt(&path, flags);
+    ksu_umount_mnt(mnt, &path, flags);
 }
 
 struct mount_entry {
