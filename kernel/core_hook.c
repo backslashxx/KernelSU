@@ -326,23 +326,32 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
     }
 
     if (is_non_appuid(new_uid)) {
-        //pr_info("handle setuid ignore non application uid: %d\n", new_uid.val);
+#ifdef CONFIG_KSU_DEBUG
+        pr_info("handle setuid ignore non application uid: %d\n", new_uid.val);
+#endif
         return 0;
     }
 
     // isolated process may be directly forked from zygote, always unmount
     if (is_unsupported_app_uid(new_uid.val)) {
-        //pr_info("handle umount for unsupported application uid: %d\n", new_uid.val);
+#ifdef CONFIG_KSU_DEBUG
+        pr_info("handle umount for unsupported application uid: %d\n", new_uid.val);
+#endif
         goto do_umount;
     }
 
     if (ksu_is_allow_uid(new_uid.val)) {
-        //pr_info("handle setuid ignore allowed application: %d\n", new_uid.val);
-        return 0;
+#ifdef CONFIG_KSU_DEBUG
+        pr_info("handle setuid ignore allowed application: %d\n", new_uid.val);
+#endif
     }
 
     if (!ksu_uid_should_umount(new_uid.val)) {
         return 0;
+    } else {
+#ifdef CONFIG_KSU_DEBUG
+        pr_info("uid: %d should not umount!\n", current_uid().val);
+#endif
     }
 
 do_umount:
@@ -353,7 +362,6 @@ do_umount:
         pr_info("handle umount ignore non zygote child: %d\n", current->pid);
         return 0;
     }
-
 #ifdef CONFIG_KSU_DEBUG
     // umount the target mnt
     pr_info("handle umount for uid: %d, pid: %d\n", new_uid.val, current->pid);
