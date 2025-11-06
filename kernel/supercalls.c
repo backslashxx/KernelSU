@@ -10,6 +10,12 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+#include <linux/sched/task.h> // put_task_struct
+#else
+#include <linux/sched.h>
+#endif
+
 #include "allowlist.h"
 #include "feature.h"
 #include "klog.h" // IWYU pragma: keep

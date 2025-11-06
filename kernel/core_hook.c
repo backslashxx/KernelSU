@@ -27,14 +27,15 @@
 #include <linux/namei.h>
 
 #include "allowlist.h"
-
 #include "core_hook.h"
 #include "feature.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
+#include "ksud.h"
 #include "manager.h"
 #include "selinux/selinux.h"
-#include "seccomp_cache.h"
+#include "throne_tracker.h"
+#include "kernel_compat.h"
 #include "supercalls.h"
 
 bool ksu_module_mounted __read_mostly = false;
@@ -134,7 +135,11 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 			put_group_info(group_info);
 			return;
 		}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
 		group_info->gid[i] = kgid;
+#else
+		GROUP_AT(group_info, i) = kgid;
+#endif
 	}
 
 	groups_sort(group_info);
@@ -156,8 +161,9 @@ static void disable_seccomp()
 #ifdef CONFIG_SECCOMP
 	current->seccomp.mode = 0;
 	current->seccomp.filter = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 	atomic_set(&current->seccomp.filter_count, 0);
-#else
+#endif
 #endif
 }
 
@@ -216,6 +222,45 @@ void escape_to_root(void)
 	spin_unlock_irq(&current->sighand->siglock);
 
 	setup_selinux(profile->selinux_domain);
+}
+
+int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
+{
+	if (!current->mm) {
+		// skip kernel threads
+		return 0;
+	}
+
+	if (current_uid().val != 1000) {
+		// skip non system uid
+		return 0;
+	}
+
+	if (!old_dentry || !new_dentry) {
+		return 0;
+	}
+
+	// /data/system/packages.list.tmp -> /data/system/packages.list
+	if (strcmp(new_dentry->d_iname, "packages.list")) {
+		return 0;
+	}
+
+	char path[128];
+	char *buf = dentry_path_raw(new_dentry, path, sizeof(path));
+	if (IS_ERR(buf)) {
+		pr_err("dentry_path_raw failed.\n");
+		return 0;
+	}
+
+	if (!strstr(buf, "/system/packages.list")) {
+		return 0;
+	}
+	pr_info("renameat: %s -> %s, new path: %s\n", old_dentry->d_iname,
+		new_dentry->d_iname, buf);
+
+	track_throne();
+
+	return 0;
 }
 
 extern void ext4_unregister_sysfs(struct super_block *sb);
@@ -393,8 +438,56 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 	return 0;
 }
 
+// kernel 4.4 and 4.9
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+static int ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
+			      unsigned perm)
+{
+	if (init_session_keyring != NULL) {
+		return 0;
+	}
+	if (strcmp(current->comm, "init")) {
+		// we are only interested in `init` process
+		return 0;
+	}
+	init_session_keyring = cred->session_keyring;
+	pr_info("kernel_compat: got init_session_keyring\n");
+	return 0;
+}
+#endif
+static int ksu_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
+			    struct inode *new_inode, struct dentry *new_dentry)
+{
+	return ksu_handle_rename(old_dentry, new_dentry);
+}
+
+static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
+			       int flags)
+{
+	return ksu_handle_setuid(new, old);
+}
+
+static struct security_hook_list ksu_hooks[] = {
+	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
+	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+	LSM_HOOK_INIT(key_permission, ksu_key_permission)
+#endif
+};
+
+void __init ksu_lsm_hook_init(void)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+	security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
+#else
+	// https://elixir.bootlin.com/linux/v4.10.17/source/include/linux/lsm_hooks.h#L1892
+	security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks));
+#endif
+}
+
 void __init ksu_core_init(void)
 {
+	ksu_lsm_hook_init();
 	if (ksu_register_feature_handler(&kernel_umount_handler)) {
 		pr_err("Failed to register kernel_umount feature handler\n");
 	}
