@@ -3,7 +3,6 @@ kernelsu-objs += allowlist.o
 kernelsu-objs += apk_sign.o
 kernelsu-objs += sucompat.o
 kernelsu-objs += throne_tracker.o
-kernelsu-objs += pkg_observer.o
 kernelsu-objs += core_hook.o
 kernelsu-objs += supercalls.o
 kernelsu-objs += feature.o
@@ -50,6 +49,14 @@ else
 # If there is no .git directory, use default version
 $(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repository!")
 ccflags-y += -DKSU_VERSION=16
+endif
+
+ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
+ccflags-y += -DKSU_COMPAT_HAS_CURRENT_SID
+endif
+
+ifeq ($(shell grep -q "struct selinux_state " $(srctree)/security/selinux/include/security.h; echo $$?),0)
+ccflags-y += -DKSU_COMPAT_HAS_SELINUX_STATE
 endif
 
 ifndef KSU_EXPECTED_SIZE

@@ -15,7 +15,7 @@
 
 uid_t ksu_manager_uid = KSU_INVALID_UID;
 
-#define SYSTEM_PACKAGES_LIST_PATH "/data/system/packages.list"
+#define SYSTEM_PACKAGES_LIST_PATH "/data/system/packages.list.tmp"
 
 struct uid_data {
 	struct list_head list;
@@ -176,7 +176,11 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 	} else {
 		if ((namelen == 8) && (strncmp(name, "base.apk", namelen) == 0)) {
 			struct apk_path_hash *pos, *n;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 8, 0)
+			unsigned int hash = full_name_hash(dirpath, strlen(dirpath));
+#else
 			unsigned int hash = full_name_hash(NULL, dirpath, strlen(dirpath));
+#endif
 			list_for_each_entry(pos, &apk_path_hash_list, list) {
 				if (hash == pos->hash) {
 					pos->exists = true;
