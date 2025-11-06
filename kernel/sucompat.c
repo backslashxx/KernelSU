@@ -93,7 +93,13 @@ static __always_inline bool is_su_allowed(const void *ptr_to_check)
 	if (!ksu_sucompat_enabled)
 		return false;
 
-	if (likely(!ksu_is_allow_uid_for_current(current_uid().val)))
+#ifdef CONFIG_SECCOMP
+	if (likely(!!current->seccomp.mode))
+		return false;
+#endif
+
+	// with seccomp check above, we can make this neutral
+	if (!ksu_is_allow_uid_for_current(current_uid().val))
 		return false;
 
 	if (unlikely(!ptr_to_check))
