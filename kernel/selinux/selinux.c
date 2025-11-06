@@ -1,6 +1,4 @@
 #include "selinux.h"
-#include "linux/cred.h"
-#include "linux/sched.h"
 #include "objsec.h"
 #include "linux/version.h"
 #include "../klog.h" // IWYU pragma: keep
@@ -9,41 +7,41 @@
 
 static int transive_to_domain(const char *domain)
 {
-    struct cred *cred;
-    struct task_security_struct *tsec;
-    u32 sid;
-    int error;
+	struct cred *cred;
+	struct task_security_struct *tsec;
+	u32 sid;
+	int error;
 
-    cred = (struct cred *)__task_cred(current);
+	cred = (struct cred *)__task_cred(current);
 
-    tsec = cred->security;
-    if (!tsec) {
-        pr_err("tsec == NULL!\n");
-        return -1;
-    }
+	tsec = cred->security;
+	if (!tsec) {
+		pr_err("tsec == NULL!\n");
+		return -1;
+	}
 
-    error = security_secctx_to_secid(domain, strlen(domain), &sid);
-    if (error) {
-        pr_info("security_secctx_to_secid %s -> sid: %d, error: %d\n",
-            domain, sid, error);
-    }
-    if (!error) {
-        tsec->sid = sid;
-        tsec->create_sid = 0;
-        tsec->keycreate_sid = 0;
-        tsec->sockcreate_sid = 0;
-    }
-    return error;
+	error = security_secctx_to_secid(domain, strlen(domain), &sid);
+	if (error) {
+		pr_info("security_secctx_to_secid %s -> sid: %d, error: %d\n",
+			domain, sid, error);
+	}
+	if (!error) {
+		tsec->sid = sid;
+		tsec->create_sid = 0;
+		tsec->keycreate_sid = 0;
+		tsec->sockcreate_sid = 0;
+	}
+	return error;
 }
 
 void setup_selinux(const char *domain)
 {
-    if (transive_to_domain(domain)) {
-        pr_err("transive domain failed.\n");
-        return;
-    }
+	if (transive_to_domain(domain)) {
+		pr_err("transive domain failed.\n");
+		return;
+	}
 
-    /* we didn't need this now, we have change selinux rules when boot!
+	/* we didn't need this now, we have change selinux rules when boot!
 if (!is_domain_permissive) {
   if (set_domain_permissive() == 0) {
       is_domain_permissive = true;
@@ -54,39 +52,39 @@ if (!is_domain_permissive) {
 void setenforce(bool enforce)
 {
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-    selinux_state.enforcing = enforce;
+	selinux_state.enforcing = enforce;
 #endif
 }
 
 bool getenforce()
 {
 #ifdef CONFIG_SECURITY_SELINUX_DISABLE
-    if (selinux_state.disabled) {
-        return false;
-    }
+	if (selinux_state.disabled) {
+		return false;
+	}
 #endif
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-    return selinux_state.enforcing;
+	return selinux_state.enforcing;
 #else
-    return true;
+	return true;
 #endif
 }
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)) &&                         \
-    !defined(KSU_COMPAT_HAS_CURRENT_SID)
+	!defined(KSU_COMPAT_HAS_CURRENT_SID)
 /*
  * get the subjective security ID of the current task
  */
 static inline u32 current_sid(void)
 {
-    const struct task_security_struct *tsec = current_security();
+	const struct task_security_struct *tsec = current_security();
 
-    return tsec->sid;
+	return tsec->sid;
 }
 #endif
 
-bool is_task_ksu_domain(const struct cred* cred)
+bool is_ksu_domain()
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
 	struct lsm_context ctx;
@@ -94,22 +92,15 @@ bool is_task_ksu_domain(const struct cred* cred)
 	char *domain;
 	u32 seclen;
 #endif
-    bool result;
-    if (!cred) {
-        return false;
-    }
-    const struct task_security_struct *tsec = selinux_cred(cred);
-    if (!tsec) {
-        return false;
-    }
+	bool result;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
-	int err = security_secid_to_secctx(tsec->sid, &ctx);
+	int err = security_secid_to_secctx(current_sid(), &ctx);
 #else
-	int err = security_secid_to_secctx(tsec->sid, &domain, &seclen);
+	int err = security_secid_to_secctx(current_sid(), &domain, &seclen);
 #endif
-    if (err) {
-        return false;
-    }
+	if (err) {
+		return false;
+	}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
 	result = strncmp(KERNEL_SU_DOMAIN, ctx.context, ctx.len) == 0;
 	security_release_secctx(&ctx);
@@ -117,39 +108,30 @@ bool is_task_ksu_domain(const struct cred* cred)
 	result = strncmp(KERNEL_SU_DOMAIN, domain, seclen) == 0;
 	security_release_secctx(domain, seclen);
 #endif
-    return result;
+	return result;
 }
 
-bool is_ksu_domain()
+bool is_zygote(void *sec)
 {
-    current_sid();
-    return is_task_ksu_domain(current_cred());
-}
-
-bool is_zygote(const struct cred* cred)
-{
-    if (!cred) {
-        return false;
-    }
-    const struct task_security_struct * tsec = selinux_cred(cred);
-    if (!tsec) {
-        return false;
-    }
+	struct task_security_struct *tsec = (struct task_security_struct *)sec;
+	if (!tsec) {
+		return false;
+	}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
 	struct lsm_context ctx;
 #else
 	char *domain;
 	u32 seclen;
 #endif
-    bool result;
+	bool result;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
 	int err = security_secid_to_secctx(tsec->sid, &ctx);
 #else
 	int err = security_secid_to_secctx(tsec->sid, &domain, &seclen);
 #endif
-    if (err) {
-        return false;
-    }
+	if (err) {
+		return false;
+	}
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
 	result = strncmp("u:r:zygote:s0", ctx.context, ctx.len) == 0;
 	security_release_secctx(&ctx);
@@ -157,18 +139,18 @@ bool is_zygote(const struct cred* cred)
 	result = strncmp("u:r:zygote:s0", domain, seclen) == 0;
 	security_release_secctx(domain, seclen);
 #endif
-    return result;
+	return result;
 }
 
 #define DEVPTS_DOMAIN "u:object_r:ksu_file:s0"
 
 u32 ksu_get_devpts_sid()
 {
-    u32 devpts_sid = 0;
-    int err = security_secctx_to_secid(DEVPTS_DOMAIN, strlen(DEVPTS_DOMAIN),
-                       &devpts_sid);
-    if (err) {
-        pr_info("get devpts sid err %d\n", err);
-    }
-    return devpts_sid;
+	u32 devpts_sid = 0;
+	int err = security_secctx_to_secid(DEVPTS_DOMAIN, strlen(DEVPTS_DOMAIN),
+					   &devpts_sid);
+	if (err) {
+		pr_info("get devpts sid err %d\n", err);
+	}
+	return devpts_sid;
 }
