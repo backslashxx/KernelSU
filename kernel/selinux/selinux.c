@@ -157,3 +157,14 @@ bool is_zygote(void *sec)
 	return result;
 }
 
+#define KSU_FILE_DOMAIN "u:object_r:ksu_file:s0"
+
+u32 ksu_get_ksu_file_sid()
+{
+	u32 ksu_file_sid = 0;
+	int err = security_secctx_to_secid(KSU_FILE_DOMAIN, strlen(KSU_FILE_DOMAIN), &ksu_file_sid);
+	if (err) {
+		pr_info("get ksufile sid err %d\n", err);
+	}
+	return ksu_file_sid;
+}

@@ -17,4 +17,6 @@ extern int ksu_handle_pre_ksud(const char *filename);
 extern int ksu_handle_bprm_ksud(const char *filename, const char *argv1,
 				const char *envp, size_t envp_len);
 
+extern u32 ksu_file_sid;
+
 #endif

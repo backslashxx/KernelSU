@@ -24,6 +24,7 @@
 #define CMD_IS_SU_ENABLED 14
 #define CMD_ENABLE_SU 15
 #define CMD_GET_MANAGER_UID 16
+#define CMD_GET_WRAPPER_FD 10000
 
 // custom extensions
 #define CMD_WIPE_UMOUNT_LIST 10000
