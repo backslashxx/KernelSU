@@ -357,6 +357,12 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 	ksu_umount_mnt(&path, flags);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0) 
+#define KSU_FORCE_KILL force_sig(SIGKILL) 
+#else
+#define KSU_FORCE_KILL force_sig(SIGKILL, current)
+#endif
+
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
 {
 	if (!new || !old) {
@@ -374,7 +380,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 				if (!is_ksu_domain()) {
 					pr_warn("find suspicious EoP: %d %s, from %d to %d\n", 
 						current->pid, current->comm, old_uid.val, new_uid.val);
-					force_sig(SIGKILL);
+					KSU_FORCE_KILL;
 					return 0;
 				}
 			}
@@ -383,7 +389,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 				if (new_uid.val < old_uid.val && !ksu_is_allow_uid_for_current(old_uid.val)) {
 					pr_warn("find suspicious EoP: %d %s, from %d to %d\n",
 						current->pid, current->comm, old_uid.val, new_uid.val);
-					force_sig(SIGKILL);
+					KSU_FORCE_KILL;
 					return 0;
 				}
 			}
