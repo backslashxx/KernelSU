@@ -56,6 +56,21 @@ $(info -- KernelSU/compat: f_op->read_iter found!)
 ccflags-y += -DKSU_HAS_FOP_READ_ITER
 endif
 
+ifeq ($(shell grep -q "selinux_inode" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
+$(info -- KernelSU/compat: selinux_inode() found)
+ccflags-y += -DKSU_HAS_SELINUX_INODE
+endif
+
+ifeq ($(shell grep -q "selinux_cred" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
+$(info -- KernelSU/compat: selinux_cred() found)
+ccflags-y += -DKSU_HAS_SELINUX_CRED
+endif
+
+ifeq ($(shell grep -q "static inline struct inode \*file_inode" $(srctree)/include/linux/fs.h; echo $$?),0)
+$(info -- KernelSU/compat: file_inode() found)
+ccflags-y += -DKSU_UL_HAS_FILE_INODE
+endif
+
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-missing-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-format -Wno-incompatible-pointer-types
 ccflags-y += -Wno-unused-variable -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast
