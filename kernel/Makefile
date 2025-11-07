@@ -56,6 +56,26 @@ ifeq ($(shell grep -q "^extern void ext4_unregister_sysfs" $(srctree)/fs/ext4/ex
 ccflags-y += -DKSU_HAS_MODERN_EXT4
 endif
 
+ifeq ($(shell grep -q "int path_umount" $(srctree)/fs/namespace.c; echo $$?),0)
+$(info -- KernelSU/compat: path_umount found)
+ccflags-y += -DKSU_HAS_PATH_UMOUNT
+endif
+
+ifeq ($(shell grep -q "selinux_inode" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
+$(info -- KernelSU/compat: selinux_inode() found)
+ccflags-y += -DKSU_HAS_SELINUX_INODE
+endif
+
+ifeq ($(shell grep -q "selinux_cred" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
+$(info -- KernelSU/compat: selinux_cred() found)
+ccflags-y += -DKSU_HAS_SELINUX_CRED
+endif
+
+ifeq ($(shell grep -q "static inline struct inode \*file_inode" $(srctree)/include/linux/fs.h; echo $$?),0)
+$(info -- KernelSU/compat: file_inode() found)
+ccflags-y += -DKSU_UL_HAS_FILE_INODE
+endif
+
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
 
