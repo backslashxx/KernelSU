@@ -87,4 +87,11 @@ __weak ssize_t strscpy(char *dest, const char *src, size_t count)
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+static inline struct inode *file_inode(struct file *f)
+{
+	return f->f_path.dentry->d_inode;
+}
+#endif
+
 #endif
