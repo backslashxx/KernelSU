@@ -76,7 +76,123 @@ static char __user *ksud_user_path(void)
 	return userspace_stack_buffer(ksud_path, sizeof(ksud_path));
 }
 
-// TODO: add sucompat here!
+__attribute__((hot))
+static __always_inline bool is_su_allowed(const void **ptr_to_check)
+{
+	barrier();
+
+	if (likely(!ksu_is_allow_uid_for_current(current_uid().val)))
+		return false;
+
+	// first check the pointer-to-pointer
+	if (unlikely(!(volatile void *)ptr_to_check))
+		return false;
+
+	// now dereference pointer-to-pointer to check actual pointer
+	if (unlikely(!(volatile void *)*ptr_to_check))
+		return false;
+
+	return true;
+}
+
+static int ksu_sucompat_user_common(const char __user **filename_user,
+				const char *syscall_name,
+				const bool escalate)
+{
+	const char su[] = SU_PATH;
+
+	char path[sizeof(su)]; // sizeof includes nullterm already!
+	if (ksu_copy_from_user_retry(path, *filename_user, sizeof(path)))
+		return 0;
+
+	// what we shouldve copied should've been preterminated!
+	// path[sizeof(path) - 1] = '\0';
+
+	if (memcmp(path, su, sizeof(su)))
+		return 0;
+
+	if (escalate) {
+		pr_info("%s su found\n", syscall_name);
+		*filename_user = ksud_user_path();
+		escape_with_root_profile(); // escalate !!
+	} else {
+		pr_info("%s su->sh!\n", syscall_name);
+		*filename_user = sh_user_path();
+	}
+
+	return 0;
+}
+
+// sys_faccessat
+int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
+			 int *__unused_flags)
+{
+	if (!is_su_allowed((const void **)filename_user))
+		return 0;
+
+	return ksu_sucompat_user_common(filename_user, "faccessat", false);
+}
+
+// sys_newfstatat, sys_fstat64
+int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
+{
+	if (!is_su_allowed((const void **)filename_user))
+		return 0;
+
+	return ksu_sucompat_user_common(filename_user, "newfstatat", false);
+}
+
+// sys_execve, compat_sys_execve
+int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
+			       void *__never_use_argv, void *__never_use_envp,
+			       int *__never_use_flags)
+{
+	if (!is_su_allowed((const void **)filename_user))
+		return 0;
+
+	return ksu_sucompat_user_common(filename_user, "sys_execve", true);
+}
+
+static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_name, bool escalate)
+{
+
+	if (likely(memcmp(filename_ptr, SU_PATH, sizeof(SU_PATH))))
+		return 0;
+
+	if (escalate) {
+		pr_info("%s su found\n", function_name);
+		memcpy(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH));
+		escape_with_root_profile();
+	} else {
+		pr_info("%s su->sh\n", function_name);
+		memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
+	}
+	return 0;
+}
+
+int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+				 void *__never_use_argv, void *__never_use_envp,
+				 int *__never_use_flags)
+{
+	if (!is_su_allowed((const void **)filename_ptr))
+		return 0;
+
+	// struct filename *filename = *filename_ptr;
+	// return ksu_do_execveat_common((void *)filename->name, "do_execveat_common");
+	// nvm this, just inline
+
+	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
+}
+
+// for compatibility to old hooks
+int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+			void *envp, int *flags)
+{
+	if (!is_su_allowed((const void **)filename_ptr))
+		return 0;
+
+	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
+}
 
 void ksu_sucompat_enable(){
 }
