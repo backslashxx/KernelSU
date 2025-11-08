@@ -148,25 +148,6 @@ LSM_HANDLER_TYPE ksu_handle_rename(struct dentry *old_dentry, struct dentry *new
 
 // ksu_handle_prctl removed - now using ioctl via reboot hook
 
-static bool should_umount(struct path *path)
-{
-	if (!path) {
-		return false;
-	}
-
-	if (current->nsproxy->mnt_ns == init_nsproxy.mnt_ns) {
-		pr_info("ignore global mnt namespace process: %d\n",
-			current_uid().val);
-		return false;
-	}
-
-	if (path->mnt && path->mnt->mnt_sb && path->mnt->mnt_sb->s_type) {
-		const char *fstype = path->mnt->mnt_sb->s_type->name;
-		return strcmp(fstype, "overlay") == 0;
-	}
-	return false;
-}
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) || defined(KSU_HAS_PATH_UMOUNT)
 extern int path_umount(struct path *path, int flags);
 static void ksu_path_umount(const char *mnt, struct path *path, int flags)
@@ -194,7 +175,7 @@ static void ksu_sys_umount(const char *mnt, int flags)
 }
 #endif // KSU_HAS_PATH_UMOUNT
 
-static void try_umount(const char *mnt, bool check_mnt, int flags)
+static void try_umount(const char *mnt, int flags)
 {
 	struct path path;
 	int err = kern_path(mnt, 0, &path);
@@ -204,12 +185,6 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 
 	if (path.dentry != path.mnt->mnt_root) {
 		// it is not root mountpoint, maybe umounted by others already.
-		path_put(&path);
-		return;
-	}
-
-	// we are only interest in some specific mounts
-	if (check_mnt && !should_umount(&path)) {
 		path_put(&path);
 		return;
 	}
@@ -324,14 +299,9 @@ do_umount:
 		current->pid);
 #endif
 
-	// fixme: use `collect_mounts` and `iterate_mount` to iterate all mountpoint and
-	// filter the mountpoint whose target is `/data/adb`
-	try_umount("/odm", true, 0);
-	try_umount("/system", true, 0);
-	try_umount("/vendor", true, 0);
-	try_umount("/product", true, 0);
-	try_umount("/system_ext", true, 0);
-	try_umount("/data/adb/modules", false, MNT_DETACH);
+	struct mount_entry *entry;
+	list_for_each_entry(entry, &mount_list, list)
+		try_umount(entry->umountable, MNT_DETACH);
 
 	return 0;
 }
