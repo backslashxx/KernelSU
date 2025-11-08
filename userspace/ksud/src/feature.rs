@@ -17,6 +17,7 @@ const FEATURE_VERSION: u32 = 1;
 pub enum FeatureId {
     SuCompat = 0,
     KernelUmount = 1,
+    AvcSpoof = 10003,
 }
 
 impl FeatureId {
@@ -24,6 +25,7 @@ impl FeatureId {
         match id {
             0 => Some(Self::SuCompat),
             1 => Some(Self::KernelUmount),
+            3 => Some(Self::AvcSpoof),
             _ => None,
         }
     }
@@ -32,6 +34,7 @@ impl FeatureId {
         match self {
             Self::SuCompat => "su_compat",
             Self::KernelUmount => "kernel_umount",
+            Self::AvcSpoof => "avc_spoof",
         }
     }
 
@@ -43,6 +46,9 @@ impl FeatureId {
             Self::KernelUmount => {
                 "Kernel Umount - controls whether kernel automatically unmounts modules when not needed"
             }
+            FeatureId::AvcSpoof => {
+                "AVC Spoof - fix selinux context leak due to avc denial"
+            }
         }
     }
 }
@@ -51,6 +57,7 @@ fn parse_feature_id(name: &str) -> Result<FeatureId> {
     match name {
         "su_compat" | "0" => Ok(FeatureId::SuCompat),
         "kernel_umount" | "1" => Ok(FeatureId::KernelUmount),
+        "avc_spoof" | "10003" => Ok(FeatureId::AvcSpoof),
         _ => bail!("Unknown feature: {name}"),
     }
 }
@@ -271,7 +278,7 @@ pub fn list_features() {
         }
     }
 
-    let all_features = [FeatureId::SuCompat, FeatureId::KernelUmount];
+    let all_features = [FeatureId::SuCompat, FeatureId::KernelUmount, FeatureId::AvcSpoof];
 
     for feature_id in &all_features {
         let id = *feature_id as u32;
@@ -328,7 +335,7 @@ pub fn load_config_and_apply() -> Result<()> {
 pub fn save_config() -> Result<()> {
     let mut features = HashMap::new();
 
-    let all_features = [FeatureId::SuCompat, FeatureId::KernelUmount];
+    let all_features = [FeatureId::SuCompat, FeatureId::KernelUmount, FeatureId::AvcSpoof];
 
     for feature_id in &all_features {
         let id = *feature_id as u32;
