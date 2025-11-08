@@ -137,4 +137,13 @@ __weak char *bin2hex(char *dst, const void *src, size_t count)
 }
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
+#define ksu_file_inode file_inode
+#else
+static inline struct inode *ksu_file_inode(struct file *f)
+{
+	return f->f_path.dentry->d_inode;
+}
+#endif
+
 #endif
