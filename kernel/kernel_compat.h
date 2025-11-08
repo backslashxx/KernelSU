@@ -94,4 +94,13 @@ static inline struct inode *file_inode(struct file *f)
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0)
+__weak int anon_inode_getfd_secure(const char *name, const struct file_operations *fops,
+			    void *priv, int flags,
+			    const struct inode *context_inode)
+{
+	return anon_inode_getfd(name, fops, priv, flags);
+}
+#endif
+
 #endif
