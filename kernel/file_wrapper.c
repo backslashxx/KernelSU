@@ -550,9 +550,9 @@ int ksu_install_file_wrapper(int fd)
 	// Now do magic on inode and dentry.
 	// It should be safe to modify them since the file hasn't been published.
 
-	struct inode *wrapper_inode = file_inode(wrapper_file);
+	struct inode *wrapper_inode = ksu_file_inode(wrapper_file);
 	// libc's stdio relies on the fstat() result of the fd to determine its buffer type.
-	wrapper_inode->i_mode = file_inode(orig_file)->i_mode;
+	wrapper_inode->i_mode = ksu_file_inode(orig_file)->i_mode;
 	struct inode_security_struct *wrapper_sec = selinux_inode(wrapper_inode);
 	// Use ksu_file_sid to bypass SELinux check.
 	// When we call `su` from terminal app, this is useful.
