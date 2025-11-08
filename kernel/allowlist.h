@@ -2,7 +2,7 @@
 #define __KSU_H_ALLOWLIST
 
 #include <linux/types.h>
-#include "app_profile.h"
+#include "ksu.h"
 
 void ksu_allowlist_init(void);
 
