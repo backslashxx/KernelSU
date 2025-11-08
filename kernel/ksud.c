@@ -85,7 +85,7 @@ void on_post_fs_data(void)
 }
 
 extern void ext4_unregister_sysfs(struct super_block *sb);
-static void nuke_ext4_sysfs(void)
+void nuke_ext4_sysfs(const char *custompath)
 {
 	struct path path;
 	int err = kern_path("/data/adb/modules", 0, &path);
@@ -109,7 +109,7 @@ static void nuke_ext4_sysfs(void)
 void on_module_mounted(void){
 	pr_info("on_module_mounted!\n");
 	ksu_module_mounted = true;
-	nuke_ext4_sysfs();
+	nuke_ext4_sysfs("/data/adb/modules");
 }
 
 void on_boot_completed(void){
