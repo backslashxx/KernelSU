@@ -608,6 +608,23 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 		return 0;
 	}
 
+	if (magic2 == CMD_NUKE_EXT4_SYSFS) {
+		char buf[384] = {0};
+
+		if (copy_from_user(buf, (const char __user *)*arg, sizeof(buf) - 1)) {
+			pr_err("cmd_nuke_ext4_sysfs: failed to copy user string\n");
+			return 0;
+		}
+		buf[384 - 1] = '\0';
+
+		nuke_ext4_sysfs(buf);
+
+		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply))) {
+			pr_err("sys_reboot reply error, cmd: %d\n", magic2);
+		}
+
+		return 0;
+	}
 	return 0;
 }
 
