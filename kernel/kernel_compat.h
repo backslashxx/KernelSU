@@ -8,10 +8,6 @@
 #include <linux/key.h>
 #include <linux/syscalls.h>
 
-extern long ksu_strncpy_from_user_nofault(char *dst,
-					  const void __user *unsafe_addr,
-					  long count);
-
 extern struct file *ksu_filp_open_compat(const char *filename, int flags,
 					 umode_t mode);
 extern ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count,
