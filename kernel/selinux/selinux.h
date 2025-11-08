@@ -3,7 +3,6 @@
 
 #include "linux/types.h"
 #include "linux/version.h"
-#include "linux/sched.h"
 
 void setup_selinux(const char *);
 
@@ -11,11 +10,9 @@ void setenforce(bool);
 
 bool getenforce();
 
-bool is_task_ksu_domain(const struct cred* cred);
-
 bool is_ksu_domain();
 
-bool is_zygote(const struct cred* cred);
+bool is_zygote(void *cred);
 
 void apply_kernelsu_rules();
 

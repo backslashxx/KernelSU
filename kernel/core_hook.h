@@ -4,7 +4,6 @@
 #include <linux/init.h>
 
 void __init ksu_core_init(void);
-void ksu_core_exit(void);
 
 void escape_to_root(void);
 
