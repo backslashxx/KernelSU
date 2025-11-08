@@ -1,5 +1,3 @@
-#include "supercalls.h"
-
 #include <linux/anon_inodes.h>
 #include <linux/capability.h>
 #include <linux/cred.h>
@@ -18,6 +16,7 @@
 #include <linux/sched.h>
 #endif
 
+#include "supercalls.h"
 #include "allowlist.h"
 #include "feature.h"
 #include "klog.h" // IWYU pragma: keep
@@ -525,6 +524,8 @@ static int ksu_handle_fd_request(void __user *arg4)
 }
 #endif
 
+struct list_head mount_list = LIST_HEAD_INIT(mount_list);
+
 // downstream: make sure to pass arg as reference, this can allow us to extend things.
 int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
 {
@@ -544,8 +545,66 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	}
 
 	// grab a copy as we write the pointer on the pointer
-	// u64 reply = (u64)*arg;	
+	// https://wiki.c2.com/?ThreeStarProgrammer 
+	// keks, greetings to #c on libera
+	u64 reply = (u64)*arg;
+
 	// extensions
+	if (magic2 == CMD_WIPE_UMOUNT_LIST) {
+		struct mount_entry *entry, *tmp;
+		list_for_each_entry_safe(entry, tmp, &mount_list, list) {
+			pr_info("wipe_umount_list: removing entry: %s\n", entry->umountable);
+			list_del(&entry->list);
+			kfree(entry->umountable);
+			kfree(entry);
+        	}
+
+		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply))) {
+			pr_err("sys_reboot reply error, cmd: %d\n", magic2);
+		}
+		return 0;
+	}
+
+	if (magic2 == CMD_ADD_TRY_UMOUNT) {
+		struct mount_entry *new_entry, *entry;
+		char buf[384] = {0};
+
+		if (copy_from_user(buf, (const char __user *)*arg, sizeof(buf) - 1)) {
+			pr_err("cmd_add_try_umount: failed to copy user string\n");
+			return 0;
+		}
+		buf[384 - 1] = '\0';
+
+		new_entry = kmalloc(sizeof(*new_entry), GFP_KERNEL);
+		if (!new_entry)
+			return 0;
+
+		new_entry->umountable = kstrdup(buf, GFP_KERNEL);
+		if (!new_entry->umountable) {
+			kfree(new_entry);
+			return 0;
+		}
+
+		// disallow dupes
+		// if this gets too many, we can consider moving this whole task to a kthread
+		list_for_each_entry(entry, &mount_list, list) {
+			if (!strcmp(entry->umountable, buf)) {
+				pr_info("cmd_add_try_umount: %s is already here!\n", buf);
+				kfree(new_entry->umountable);
+				kfree(new_entry);
+				return 0;
+			}	
+		}	
+
+		// debug
+		// pr_info("cmd_add_try_umount: %s added!\n", buf);
+		list_add(&new_entry->list, &mount_list);
+
+		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply))) {
+			pr_err("sys_reboot reply error, cmd: %d\n", magic2);
+		}
+		return 0;
+	}
 
 	return 0;
 }
