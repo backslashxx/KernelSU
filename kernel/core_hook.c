@@ -157,6 +157,12 @@ static void try_umount(const char *mnt, int flags)
 	ksu_umount_mnt(&path, flags);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0) 
+#define KSU_FORCE_KILL force_sig(SIGKILL) 
+#else
+#define KSU_FORCE_KILL force_sig(SIGKILL, current)
+#endif
+
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
 {
 	if (!new || !old) {
@@ -165,8 +171,31 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 
 	kuid_t new_uid = new->uid;
 	kuid_t old_uid = old->uid;
+	kuid_t new_euid = new->euid;
+	kuid_t old_euid = old->euid;
 
-	// TODO: enhanced_security here!
+	if (0 != old_uid.val && ksu_enhanced_security_enabled) {
+		// disallow any non-ksu domain escalation from non-root to root!
+		if (unlikely(new_euid.val) == 0 && !is_ksu_domain()) {
+			pr_warn("find suspicious EoP: %d %s, from %d to %d\n", current->pid, current->comm, old_uid.val, new_uid.val);
+			KSU_FORCE_KILL;
+			return 0;
+		}
+		// disallow appuid decrease to any other uid if it is not allowed to su
+		if (is_appuid(old_uid.val)) {
+			if (new_euid.val < old_euid.val && !ksu_is_allow_uid_for_current(old_uid.val)) {
+				pr_warn("find suspicious EoP: %d %s, from %d to %d\n", current->pid, current->comm, old_euid.val, new_euid.val);
+				KSU_FORCE_KILL;
+				return 0;
+			}
+		}
+		
+		return 0;
+	}
+	
+	// old process is not root, ignore it.
+	if (0 != old_uid.val)
+		return 0;
 
 	// if on private space, see if its possibly the manager
 	if (new_uid.val > PER_USER_RANGE && new_uid.val % PER_USER_RANGE == ksu_get_manager_uid()) {
