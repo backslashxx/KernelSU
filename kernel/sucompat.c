@@ -7,13 +7,18 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
-#include <linux/sched/task_stack.h>
 #include <linux/ptrace.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/task_stack.h>
+#else
+#include <linux/sched.h>
+#endif
 
 #include "allowlist.h"
 #include "feature.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
+#include "kernel_compat.h"
 #include "sucompat.h"
 #include "app_profile.h"
 
