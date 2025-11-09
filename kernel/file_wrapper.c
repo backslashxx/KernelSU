@@ -447,8 +447,7 @@ static struct file *ksu_anon_inode_create_getfile_compat(
 		goto err;
 	}
 
-	file = alloc_file_pseudo(inode, anon_inode_mnt, name,
-							 flags & (O_ACCMODE | O_NONBLOCK), fops);
+	file = alloc_file_pseudo(inode, anon_inode_mnt, name, flags & (O_ACCMODE | O_NONBLOCK), fops);
 	if (IS_ERR(file))
 		goto err_iput;
 

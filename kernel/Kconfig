@@ -1,6 +1,10 @@
 menu "KernelSU"
 
 config KSU
+	select SECURITY_SELINUX
+	select SECCOMP
+	select EXT4_FS
+	select KEYS
 	bool "KernelSU function support"
 	default y
 	help
