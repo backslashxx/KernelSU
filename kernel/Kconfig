@@ -1,6 +1,7 @@
 menu "KernelSU"
 
 config KSU
+	select SECCOMP
 	bool "KernelSU function support"
 	default y
 	help
