@@ -1,4 +1,3 @@
-#include "manager.h"
 #include <asm/current.h>
 #include <linux/compat.h>
 #include <linux/cred.h>
@@ -7,12 +6,23 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 #include <linux/input-event-codes.h>
+#else
+#include <uapi/linux/input.h>
+#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0)
+#include <linux/aio.h>
+#endif
 #include <linux/printk.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/namei.h>
-#include <linux/sched/signal.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/signal.h> /* fatal_signal_pending */
+#else
+#include <linux/sched.h> /* fatal_signal_pending */
+#endif
 
 #include "allowlist.h"
 #include "klog.h" // IWYU pragma: keep
@@ -51,6 +61,10 @@ static void stop_vfs_read_hook();
 static void stop_execve_hook();
 static void stop_input_hook();
 
+bool ksu_vfs_read_hook __read_mostly = true;
+bool ksu_execveat_hook __read_mostly = true;
+bool ksu_input_hook __read_mostly = true;
+
 u32 ksu_file_sid;
 
 void on_post_fs_data(void)
@@ -63,7 +77,6 @@ void on_post_fs_data(void)
 	done = true;
 	pr_info("on_post_fs_data!\n");
 	ksu_load_allow_list();
-	ksu_observer_init();
 	// sanity check, this may influence the performance
 	stop_input_hook();
 
@@ -143,6 +156,10 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 			size_t *count_ptr, loff_t **pos)
 {
 
+	if (!ksu_vfs_read_hook) {
+		return 0;
+	}
+
 	struct file *file;
 	char __user *buf;
 	size_t count;
@@ -180,7 +197,7 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 	// we only process the first read
 	static bool rc_inserted = false;
 	if (rc_inserted) {
-		// we don't need this kprobe, unregister it!
+		// we don't need this hook, unregister it!
 		stop_vfs_read_hook();
 		return 0;
 	}
@@ -251,6 +268,10 @@ static bool is_volumedown_enough(unsigned int count)
 int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 				  int *value)
 {
+	if (!ksu_input_hook) {
+		return 0;
+	}
+
 	if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
 		int val = *value;
 		pr_info("KEY_VOLUMEDOWN val: %d\n", val);
@@ -290,13 +311,20 @@ bool ksu_is_safe_mode()
 
 static void stop_vfs_read_hook()
 {
+	ksu_vfs_read_hook = false;
+	pr_info("stop vfs_read_hook\n");
 }
 
 static void stop_execve_hook()
 {
+	ksu_execveat_hook = false;
+	pr_info("stop execve_hook\n");
 }
 
 static void stop_input_hook()
 {
+	if (!ksu_input_hook) { return; }
+	ksu_input_hook = false;
+	pr_info("stop input_hook\n");
 }
 
