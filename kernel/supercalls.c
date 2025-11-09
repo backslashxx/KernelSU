@@ -10,9 +10,16 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+#include <linux/sched/task.h> // put_task_struct
+#else
+#include <linux/sched.h>
+#endif
+
 #include "supercalls.h"
 #include "arch.h"
 #include "allowlist.h"
+#include "core_hook.h"
 #include "feature.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
@@ -144,6 +151,61 @@ static int do_check_safemode(void __user *arg)
 	}
 
 	return 0;
+}
+
+static int do_new_get_allow_list_common(void __user *arg, bool allow)
+{
+	struct ksu_new_get_allow_list_cmd cmd;
+	int *arr = NULL;
+	int err = 0;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd))) {
+		return -EFAULT;
+	}
+
+	if (cmd.count) {
+		arr = kmalloc(sizeof(int) * cmd.count, GFP_KERNEL);
+		if (!arr) {
+			return -ENOMEM;
+		}
+	}
+
+	bool success =
+		ksu_get_allow_list(arr, cmd.count, &cmd.count, &cmd.total_count, allow);
+
+	if (!success) {
+		err = -EFAULT;
+		goto out;
+	}
+
+	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+		pr_err("new_get_allow_list: copy_to_user count failed\n");
+		err = -EFAULT;
+		goto out;
+	}
+
+	if (cmd.count &&
+		copy_to_user(&((struct ksu_new_get_allow_list_cmd *)arg)->uids, arr,
+					 sizeof(int) * cmd.count)) {
+		pr_err("new_get_allow_list: copy_to_user uids failed\n");
+		err = -EFAULT;
+	}
+
+out:
+	if (arr) {
+		kfree(arr);
+	}
+	return err;
+}
+
+static int do_new_get_deny_list(void __user *arg)
+{
+	return do_new_get_allow_list_common(arg, false);
+}
+
+static int do_new_get_allow_list(void __user *arg)
+{
+	return do_new_get_allow_list_common(arg, true);
 }
 
 static int do_get_allow_list_common(void __user *arg, bool allow)
@@ -497,7 +559,7 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
 	{ .cmd = KSU_IOCTL_GET_ALLOW_LIST, .name = "GET_ALLOW_LIST", .handler = do_get_allow_list, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_GET_DENY_LIST, .name = "GET_DENY_LIST", .handler = do_get_deny_list, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_NEW_GET_ALLOW_LIST, .name = "NEW_GET_ALLOW_LIST", .handler = do_new_get_allow_list, .perm_check = manager_or_root },
-	{ .cmd = KSU_IOCTL_NEW_GET_DENY_LIST, .name = "NEW_GET_DENY_LIST", .handler = do_new_get_deny_list,
+	{ .cmd = KSU_IOCTL_NEW_GET_DENY_LIST, .name = "NEW_GET_DENY_LIST", .handler = do_new_get_deny_list, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_UID_GRANTED_ROOT, .name = "UID_GRANTED_ROOT", .handler = do_uid_granted_root, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_UID_SHOULD_UMOUNT, .name = "UID_SHOULD_UMOUNT", .handler = do_uid_should_umount, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_GET_MANAGER_APPID, .name = "GET_MANAGER_APPID", .handler = do_get_manager_appid, .perm_check = manager_or_root },
