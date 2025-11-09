@@ -1,6 +1,7 @@
 #include <linux/security.h>
 #include <linux/atomic.h>
 
+#include "feature.h"
 #include "klog.h"
 #include "ksud.h"
 #include "kernel_compat.h"
@@ -15,6 +16,49 @@ static u32 kernel_sid = 0;
 
 // init as disabled by default
 static atomic_t disable_spoof = ATOMIC_INIT(1);
+
+void ksu_avc_spoof_enable();
+void ksu_avc_spoof_disable();
+
+static bool ksu_avc_spoof_enabled = true;
+static bool boot_completed = false;
+
+static int avc_spoof_feature_get(u64 *value)
+{
+	*value = ksu_avc_spoof_enabled ? 1 : 0;
+	return 0;
+}
+
+static int avc_spoof_feature_set(u64 value)
+{
+	bool enable = value != 0;
+
+	if (enable == ksu_avc_spoof_enabled) {
+		pr_info("avc_spoof: no need to change\n");
+		return 0;
+	}
+
+	ksu_avc_spoof_enabled = enable;
+
+	if (boot_completed) {
+		if (enable) {
+			ksu_avc_spoof_enable();
+		} else {
+			ksu_avc_spoof_disable();
+		}
+	}
+
+	pr_info("avc_spoof: set to %d\n", enable);
+
+	return 0;
+}
+
+static const struct ksu_feature_handler avc_spoof_handler = {
+	.feature_id = KSU_FEATURE_AVC_SPOOF,
+	.name = "avc_spoof",
+	.get_handler = avc_spoof_feature_get,
+	.set_handler = avc_spoof_feature_set,
+};
 
 static int get_sid()
 {
@@ -115,7 +159,7 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
 }
 #endif // CONFIG_KPROBES
 
-void avc_spoof_exit(void) 
+void ksu_avc_spoof_disable(void) 
 {
 #ifdef CONFIG_KPROBES
 	pr_info("avc_spoof/exit: unregister slow_avc_audit kprobe!\n");
@@ -125,7 +169,7 @@ void avc_spoof_exit(void)
 	pr_info("avc_spoof/exit: slow_avc_audit spoofing disabled!\n");
 }
 
-void avc_spoof_init(void) 
+void ksu_avc_spoof_enable(void) 
 {
 	int ret = get_sid();
 	if (ret) {
@@ -141,4 +185,28 @@ void avc_spoof_init(void)
 	atomic_set(&disable_spoof, 0);
 	
 	pr_info("avc_spoof/init: slow_avc_audit spoofing enabled!\n");
+}
+
+void ksu_avc_spoof_late_init()
+{
+	boot_completed = true;
+	
+	if (ksu_avc_spoof_enabled) {
+		ksu_avc_spoof_enable();
+	}
+}
+
+void ksu_avc_spoof_init()
+{
+	if (ksu_register_feature_handler(&avc_spoof_handler)) {
+		pr_err("Failed to register avc spoof feature handler\n");
+	}
+}
+
+void ksu_avc_spoof_exit()
+{
+	if (ksu_avc_spoof_enabled) {
+		ksu_avc_spoof_disable();
+	}
+	ksu_unregister_feature_handler(KSU_FEATURE_AVC_SPOOF);
 }
