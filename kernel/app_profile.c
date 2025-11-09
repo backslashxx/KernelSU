@@ -1,7 +1,13 @@
+#include <linux/version.h>
 #include <linux/capability.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
-#include <linux/sched/signal.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+#include <linux/sched/signal.h> // signal_struct
+#include <linux/sched/task.h>
+#else
+#include <linux/sched.h>
+#endif
 #include <linux/seccomp.h>
 #include <linux/slab.h>
 #include <linux/thread_info.h>
@@ -14,6 +20,7 @@
 #include "selinux/selinux.h"
 #include "su_mount_ns.h"
 #include "sucompat.h"
+#include "kernel_compat.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION (6, 7, 0)
 static struct group_info root_groups = { .usage = REFCOUNT_INIT(2) };
@@ -53,7 +60,11 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 			put_group_info(group_info);
 			return;
 		}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
 		group_info->gid[i] = kgid;
+#else
+		GROUP_AT(group_info, i) = kgid;
+#endif
 	}
 
 	groups_sort(group_info);
@@ -63,6 +74,11 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 
 static void disable_seccomp()
 {
+
+// for < 5.9 lets have free_task do it for us (put_seccomp_filter)
+// we risk a double free / double decrement which isn't safe on old kernels
+// I'm not even sure if this thing is needed on newer kernels
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 	struct task_struct *fake;
 
 	fake = kmalloc(sizeof(*fake), GFP_ATOMIC);
@@ -70,10 +86,12 @@ static void disable_seccomp()
 		pr_warn("failed to alloc fake task_struct\n");
 		return;
 	}
+#endif
 
 	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
 	// When disabling Seccomp, ensure that current->sighand->siglock is held during the operation.
 	spin_lock_irq(&current->sighand->siglock);
+
 	// disable seccomp
 #if defined(CONFIG_GENERIC_ENTRY) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 	clear_syscall_work(SECCOMP);
@@ -81,13 +99,17 @@ static void disable_seccomp()
 	clear_thread_flag(TIF_SECCOMP);
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 	memcpy(fake, current, sizeof(*fake));
+	atomic_set(&current->seccomp.filter_count, 0);
+#endif
 
 	current->seccomp.mode = 0;
 	current->seccomp.filter = NULL;
-	atomic_set(&current->seccomp.filter_count, 0);
+
 	spin_unlock_irq(&current->sighand->siglock);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
 	// https://github.com/torvalds/linux/commit/bfafe5efa9754ebc991750da0bcca2a6694f3ed3#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R576-R577
 	fake->flags |= PF_EXITING;
@@ -98,6 +120,7 @@ static void disable_seccomp()
 
 	seccomp_filter_release(fake);
 	kfree(fake);
+#endif // 5.9
 }
 
 void escape_with_root_profile(void)
