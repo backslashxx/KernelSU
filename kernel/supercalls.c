@@ -10,9 +10,16 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+#include <linux/sched/task.h> // put_task_struct
+#else
+#include <linux/sched.h>
+#endif
+
 #include "supercalls.h"
 #include "arch.h"
 #include "allowlist.h"
+#include "core_hook.h"
 #include "feature.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
@@ -418,7 +425,7 @@ static int do_nuke_ext4_sysfs(void __user *arg)
 
 	memset(mnt, 0, sizeof(mnt));
 
-	ret = strncpy_from_user(mnt, cmd.arg, sizeof(mnt));
+	ret = strncpy_from_user(mnt, (void __user *)cmd.arg, sizeof(mnt));
 	if (ret < 0) {
 		pr_err("nuke ext4 copy mnt failed: %ld\\n", ret);
 		return -EFAULT;   // 或者 return ret;
