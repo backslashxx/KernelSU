@@ -10,6 +10,8 @@
 #define EVENT_BOOT_COMPLETED 2
 #define EVENT_MODULE_MOUNTED 3
 
+bool ksu_queue_work(struct work_struct *work);
+
 static inline int startswith(char *s, char *prefix)
 {
 	return strncmp(s, prefix, strlen(prefix));
