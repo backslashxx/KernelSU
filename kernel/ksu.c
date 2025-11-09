@@ -54,6 +54,10 @@ int __init kernelsu_init(void)
 
 	ksu_sucompat_init(); // so the feature is registered
 
+#ifdef CONFIG_KSU_EXTRAS
+	ksu_avc_spoof_init(); // so the feature is registered
+#endif
+
 #ifdef CONFIG_KSU_KPROBES_KSUD
 	kp_ksud_init();
 #endif
