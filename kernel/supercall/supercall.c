@@ -46,9 +46,64 @@ int ksu_install_fd(void)
 	return fd;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)
+
+struct ksu_install_fd_tw {
+	struct callback_head cb;
+	int __user *outp;
+};
+
+static void ksu_install_fd_tw_func(struct callback_head *cb)
+{
+	struct ksu_install_fd_tw *tw = container_of(cb, struct ksu_install_fd_tw, cb);
+	int fd = ksu_install_fd();
+	pr_info("[%d] install ksu fd: %d\n", current->pid, fd);
+
+	if (copy_to_user(tw->outp, &fd, sizeof(fd))) {
+		pr_err("install ksu fd reply err\n");
+		close_fd(fd);
+	}
+
+	kfree(tw);
+}
+
+static int ksu_handle_fd_request(void __user *arg4)
+{
+	struct ksu_install_fd_tw *tw;
+
+	tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
+	if (!tw)
+		return 0;
+
+	tw->outp = (int __user *)arg4;
+	tw->cb.func = ksu_install_fd_tw_func;
+
+	if (task_work_add(current, &tw->cb, TWA_RESUME)) {
+		kfree(tw);
+		pr_warn("install fd add task_work failed\n");
+	}
+
+	return 0;
+}
+#else
+static int ksu_handle_fd_request(void __user *arg4)
+{
+	int fd = ksu_install_fd();
+	pr_info("[%d] install ksu fd: %d\n", current->pid, fd);
+
+	if (copy_to_user(arg4, &fd, sizeof(fd))) {
+		pr_err("install ksu fd reply err\n");
+		close_fd(fd);
+	}
+
+	return 0;
+}
+#endif
+
 // downstream: make sure to pass arg as reference, this can allow us to extend things.
 int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
 {
+
 	if (magic1 != KSU_INSTALL_MAGIC1)
 		return 0;
 
@@ -60,14 +115,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 
 	// Check if this is a request to install KSU fd
 	if (magic2 == KSU_INSTALL_MAGIC2) {
-		int fd = ksu_install_fd();
-		pr_info("[%d] install ksu fd: %d\n", current->pid, fd);
-
-		if (copy_to_user((void __user *)arg4, &fd, sizeof(fd))) {
-			pr_err("install ksu fd reply err\n");
-		}
-
-		return 0;
+		return ksu_handle_fd_request(arg4);
 	}
 
 	// grab a copy as we write the pointer on the pointer
