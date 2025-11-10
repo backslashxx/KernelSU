@@ -159,8 +159,12 @@ static void escape_to_root(bool is_forced)
 
 	commit_creds(cred);
 
+	if (!!!current->seccomp.mode)
+		goto setup_selinux;
+
 	disable_seccomp();
 
+setup_selinux:
 	setup_selinux(profile.selinux_domain);
 	
 	setup_mount_ns(profile.namespaces);
