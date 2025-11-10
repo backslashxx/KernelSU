@@ -160,7 +160,8 @@ static void escape_to_root(bool is_forced)
 
 	commit_creds(cred);
 
-	disable_seccomp();
+	if (!!current->seccomp.mode)
+		disable_seccomp();
 	
 	setup_mount_ns(profile.namespaces);
 }
