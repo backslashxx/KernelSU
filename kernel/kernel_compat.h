@@ -237,4 +237,12 @@ __weak char *bin2hex(char *dst, const void *src, size_t count)
 #define file_inode(f) ((f)->f_path.dentry->d_inode)
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0) && !defined(KSU_HAS_SELINUX_INODE)
+#define selinux_inode(inode) ((inode)->i_security)
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0) && !defined(KSU_HAS_SELINUX_CRED)
+#define selinux_cred(cred) ((cred)->security)
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
