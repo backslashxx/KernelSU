@@ -148,4 +148,18 @@ static inline struct inode *ksu_file_inode(struct file *f)
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+static inline struct inode_security_struct *selinux_inode(const struct inode *inode)
+{
+	return inode->i_security;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+static inline struct task_security_struct *selinux_cred(const struct cred *cred)
+{
+	return cred->security;
+}
+#endif
+
 #endif
