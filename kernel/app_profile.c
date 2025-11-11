@@ -80,6 +80,7 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 
 
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
 #if defined(__aarch64__)
 extern long __arm64_sys_setns(const struct pt_regs *regs);
 #elif defined(__x86_64__)
@@ -102,6 +103,29 @@ static long ksu_sys_setns(int fd, int flags)
 	return -ENOSYS;
 #endif
 }
+#else
+static long ksu_sys_setns(int fd, int flags)
+{
+	return sys_setns(fd, flags);
+}
+__weak int ksys_unshare(unsigned long unshare_flags)
+{
+	return sys_unshare(unshare_flags);
+}
+
+#endif
+
+// TODO: revisit
+// https://elixir.bootlin.com/linux/v3.18.140/source/fs/proc/namespaces.c#L109
+// https://elixir.bootlin.com/linux/v3.10.108/source/fs/proc/namespaces.c#L115
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
+__weak void *ns_get_path(struct path *path, struct task_struct *task,
+			const struct proc_ns_operations *ns_ops)
+{
+	return -1;
+}
+#endif
+
 
 static void setup_mount_namespace(int32_t ns_mode)
 {
@@ -181,11 +205,7 @@ static void setup_mount_namespace(int32_t ns_mode)
 		if (ret) {
 			pr_warn("sys_setns failed: %ld\n", ret);
 		}
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0)
-		ksys_close(fd);
-#else
 		close_fd(fd);
-#endif
 	}
 	// independent mode , need CAP_SYS_ADMIN to perform unshare
 	if (ns_mode == 2) {
