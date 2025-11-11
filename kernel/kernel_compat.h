@@ -7,6 +7,7 @@
 #include <linux/version.h>
 #include <linux/key.h>
 #include <linux/syscalls.h>
+#include <linux/cred.h>
 
 extern struct file *ksu_filp_open_compat(const char *filename, int flags,
 					 umode_t mode);
@@ -84,6 +85,20 @@ __weak char *bin2hex(char *dst, const void *src, size_t count)
 static inline struct inode *file_inode(struct file *f)
 {
 	return f->f_path.dentry->d_inode;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+static inline struct inode_security_struct *selinux_inode(const struct inode *inode)
+{
+	return inode->i_security;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+static inline struct task_security_struct *selinux_cred(const struct cred *cred)
+{
+	return cred->security;
 }
 #endif
 
