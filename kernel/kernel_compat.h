@@ -6,6 +6,7 @@
 #include "linux/key.h"
 #include "linux/version.h"
 #include "linux/key.h"
+#include "linux/cred.h"
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 extern struct key *init_session_keyring;
@@ -112,6 +113,13 @@ __weak int anon_inode_getfd_secure(const char *name, const struct file_operation
 static inline struct inode_security_struct *selinux_inode(const struct inode *inode)
 {
 	return inode->i_security;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+static inline struct task_security_struct *selinux_cred(const struct cred *cred)
+{
+	return cred->security;
 }
 #endif
 
