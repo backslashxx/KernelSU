@@ -339,4 +339,24 @@ static inline int __must_check ksu_kref_get_unless_zero(struct kref *kref)
 #define kref_get_unless_zero ksu_kref_get_unless_zero
 #endif // < 3.9
 
+/**
+ *  kver agnostic workaround for < 3.14's CONFIG_UIDGID_STRICT_TYPE_CHECKS=n
+ *
+ *  - force dereferences an unsigned int (uid_t)
+ *  - redefines current_uid / current_euid macros
+ *
+ * ref
+ *  - https://elixir.bootlin.com/linux/v3.13/source/include/linux/uidgid.h
+ *  - https://elixir.bootlin.com/linux/v3.13/source/include/linux/cred.h#L331
+ */
+#define ksu_get_uid_t(x) *(unsigned int *)&(x)
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION (3, 14, 0)
+#undef current_uid
+#undef current_euid
+typedef struct { uid_t val; } ksu_kuid_t;
+static inline ksu_kuid_t current_uid() { return *(ksu_kuid_t *)(&current_cred()->uid); }
+static inline ksu_kuid_t current_euid() { return *(ksu_kuid_t *)(&current_cred()->euid); }
+#endif // < 3.14
+
 #endif // __KSU_H_KERNEL_COMPAT
