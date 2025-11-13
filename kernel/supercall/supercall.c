@@ -119,7 +119,8 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	}
 
 	// only root is allowed for these commands
-	if (current_uid().val != 0)
+	kuid_t current_uid = current_uid();
+	if (ksu_get_uid_t(current_uid) != 0)
 		return 0;
 	
 	// extensions
