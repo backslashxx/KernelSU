@@ -1,5 +1,7 @@
 #include "kernel_includes.h"
 
+#define ksu_get_uid_t(x) *(unsigned int *)&(x)
+
 #include "allowlist.h"
 #include "apk_sign.h"
 #include "app_profile.h"
