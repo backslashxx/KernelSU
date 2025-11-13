@@ -16,6 +16,5 @@ bool ksu_is_safe_mode(void);
 
 extern u32 ksu_file_sid;
 extern bool ksu_module_mounted;
-extern bool ksu_boot_completed;
 
 #endif
