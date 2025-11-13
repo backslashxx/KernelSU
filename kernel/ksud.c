@@ -112,10 +112,12 @@ void on_module_mounted(void){
     nuke_ext4_sysfs("/data/adb/modules");
 }
 
+extern void avc_spoof_init();
 void on_boot_completed(void){
     ksu_boot_completed = true;
     pr_info("on_boot_completed!\n");
     track_throne(true);
+    avc_spoof_init();
 }
 
 #define MAX_ARG_STRINGS 0x7FFFFFFF
