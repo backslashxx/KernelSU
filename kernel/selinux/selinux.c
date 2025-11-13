@@ -6,6 +6,7 @@
 #ifndef KSU_COMPAT_USE_SELINUX_STATE
 #include "avc.h"
 #endif
+#include "../kernel_compat.h"
 
 static int transive_to_domain(const char *domain, struct cred *cred)
 {
