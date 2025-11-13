@@ -44,8 +44,8 @@ LSM_HANDLER_TYPE ksu_handle_setuid(struct cred *new, const struct cred *old)
 		return 0;
 	}
 
-	uid_t new_uid = new->uid.val;
-	uid_t old_uid = old->uid.val;
+	uid_t new_uid = ksu_get_uid_t(new->uid);
+	uid_t old_uid = ksu_get_uid_t(old->uid);
 
 	// old process is not root, ignore it.
 	if (0 != old_uid)
