@@ -136,5 +136,6 @@ extern struct list_head mount_list;
 
 #define CMD_WIPE_UMOUNT_LIST 10000
 #define CMD_ADD_TRY_UMOUNT 10001
+#define CMD_NUKE_EXT4_SYSFS 10002
 
 #endif // __KSU_H_SUPERCALLS
