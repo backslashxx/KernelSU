@@ -5,6 +5,7 @@
 #ifndef KSU_COMPAT_USE_SELINUX_STATE
 #include "avc.h"
 #endif
+#include "../kernel_compat.h"
 
 #define KERNEL_SU_DOMAIN "u:r:su:s0"
 
