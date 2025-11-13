@@ -135,20 +135,26 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
         return 0;
     }
 
-    // FIXME: isolated process which directly forks from zygote is not handled
-    if (!is_appuid(new_uid)) {
+    if (is_non_appuid(new_uid)) {
+        //pr_info("handle setuid ignore non application uid: %d\n", new_uid.val);
         return 0;
+    }
+
+    // isolated process may be directly forked from zygote, always unmount
+    if (is_unsupported_app_uid(new_uid)) {
+        // pr_info("handle umount for unsupported application uid: %d\n", new_uid.val);
+        goto do_umount;
     }
 
     if (!ksu_uid_should_umount(new_uid)) {
         return 0;
     }
 
+do_umount:
     // check old process's selinux context, if it is not zygote, ignore it!
     // because some su apps may setuid to untrusted_app but they are in global mount namespace
     // when we umount for such process, that is a disaster!
-    bool is_zygote_child = is_zygote(get_current_cred());
-    if (!is_zygote_child) {
+    if (!is_zygote(get_current_cred())) {
         pr_info("handle umount ignore non zygote child: %d\n", current->pid);
         return 0;
     }
