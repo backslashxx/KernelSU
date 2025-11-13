@@ -1,6 +1,8 @@
 #ifndef __KSU_H_KERNEL_COMPAT
 #define __KSU_H_KERNEL_COMPAT
 
+#define ksu_get_uid_t(x) *(unsigned int *)&(x)
+
 #if defined(CONFIG_KEYS) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 
 extern int install_session_keyring_to_cred(struct cred *cred, struct key *keyring);
