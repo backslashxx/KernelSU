@@ -23,4 +23,12 @@ config KSU_THRONE_TRACKER_ALWAYS_THREADED
 	  boot time, but can cause crowning failure on some FDE/FBEv1 setups.
 	  If you are having issues, say n.
 
+config KSU_ALLOWLIST_WORKAROUND
+        bool "KernelSU Session Keyring Init workaround"
+        depends on KSU
+        default n
+        help
+          Enable session keyring init workaround for problematic devices.
+          Useful for situations where the SU allowlist is not kept after a reboot.
+
 endmenu
