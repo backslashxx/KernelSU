@@ -223,6 +223,7 @@ static noinline void ksu_install_rc_hook(struct file *file)
 	apply_kernelsu_rules();
 	cache_sid();
 	setup_ksu_cred();
+	ksu_grab_init_session_keyring();
 
 	// now we can sure that the init process is reading
 	// `/system/etc/init/init.rc`
