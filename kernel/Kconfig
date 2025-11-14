@@ -41,7 +41,7 @@ config KSU_DEBUG
 
 config KSU_THRONE_TRACKER_ALWAYS_THREADED
 	bool "Always run throne tracker in a kthread"
-	default n
+	default y
 	help
 	  Enable this option to run throne tracker in a kthread for the first
 	  run, which happens at boot time / decryption stage. This can decrease

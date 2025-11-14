@@ -29,6 +29,7 @@
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
 #include "kernel_compat.h"
+#include "throne_tracker.h"
 #include "selinux/selinux.h"
 
 bool ksu_module_mounted __read_mostly = false;
@@ -140,6 +141,7 @@ void on_module_mounted(void){
 void on_boot_completed(void){
 	ksu_boot_completed = true;
 	pr_info("on_boot_completed!\n");
+	track_throne();
 	kp_ksud_transition_routine_end(); // security_bounded_transition rp
 	ksu_avc_spoof_late_init(); // slow_avc_init kp
 }
