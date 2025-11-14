@@ -1,8 +1,72 @@
 #ifndef __KSU_H_KERNEL_COMPAT
 #define __KSU_H_KERNEL_COMPAT
 
-// TODO: add keygrab
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+extern int install_session_keyring_to_cred(struct cred *cred, struct key *keyring);
+struct key *init_session_keyring = NULL;
+bool is_init(const struct cred* cred);
+
+static inline int install_session_keyring(struct key *keyring)
+{
+	struct cred *new;
+	int ret;
+
+	new = prepare_creds();
+	if (!new)
+		return -ENOMEM;
+
+	ret = install_session_keyring_to_cred(new, keyring);
+	if (ret < 0) {
+		abort_creds(new);
+		return ret;
+	}
+
+	return commit_creds(new);
+}
+
+// this is on tgcred on < 3.8
+// while we can grab that one, it seems to not actually be needed 
+static void ksu_grab_init_session_keyring(const char *filename)
+{
+	if (init_session_keyring)
+		return;
+		
+	if (!strstr(filename, "init")) 
+		return;
+
+	if (!!strcmp(current->comm, "init"))
+		return;
+
+	if (!!!is_init(get_current_cred()))
+		return;
+
+	// thats surely some exclamation comedy
+	// and now we are sure that this is the key we want
+	// up to 5.1, struct key __rcu *session_keyring; /* keyring inherited over fork */
+	// so we need to grab this using rcu_dereference
+	struct key *keyring = rcu_dereference(current->cred->session_keyring);
+	if (!keyring)
+		return;
+
+	init_session_keyring = key_get(keyring);
+
+	pr_info("%s: init_session_keyring: 0x%p \n", __func__, init_session_keyring);
+
+}
+struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
+{
+	// normally we only put this on ((current->flags & PF_WQ_WORKER) || (current->flags & PF_KTHREAD))
+	// but in the grand scale of things, this does NOT matter.
+	// pr_info("installing init session keyring for older kernel\n");
+	if (init_session_keyring != NULL && !current_cred()->session_keyring) {
+		install_session_keyring(init_session_keyring);
+	}
+	return filp_open(filename, flags, mode);
+}
+#else
 #define ksu_filp_open_compat filp_open
+static inline void ksu_grab_init_session_keyring(const char *filename) {} // no-op
+#endif
 
 // TODO: add < 4.14 compat
 #define ksu_kernel_read_compat kernel_read
