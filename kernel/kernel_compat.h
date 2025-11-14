@@ -1,6 +1,86 @@
 #ifndef __KSU_H_KERNEL_COMPAT
 #define __KSU_H_KERNEL_COMPAT
 
+#if defined(CONFIG_KEYS) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+extern int install_session_keyring_to_cred(struct cred *cred, struct key *keyring);
+static struct key *init_session_keyring = NULL;
+
+bool is_init(const struct cred* cred);
+
+static inline int install_session_keyring(struct key *keyring)
+{
+	struct cred *new;
+	int ret;
+
+	new = prepare_creds();
+	if (!new)
+		return -ENOMEM;
+
+	ret = install_session_keyring_to_cred(new, keyring);
+	if (ret < 0) {
+		abort_creds(new);
+		return ret;
+	}
+
+	return commit_creds(new);
+}
+
+// up to 5.1, struct key __rcu *session_keyring; /* keyring inherited over fork */
+// so we need to grab this using rcu_dereference
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+static inline struct key *ksu_get_current_session_keyring() { return rcu_dereference(current->cred->session_keyring); }
+#else
+static inline struct key *ksu_get_current_session_keyring() { return rcu_dereference(current->cred->tgcred->session_keyring); }
+#endif
+
+__attribute__((cold))
+static noinline void ksu_grab_init_session_keyring()
+{
+	if (init_session_keyring)
+		return;
+
+	if (!!strcmp(current->comm, "init"))
+		return;
+
+	if (!!!is_init(current_cred()))
+		return;
+
+	// now we are sure that this is the key we want
+	struct key *keyring = ksu_get_current_session_keyring();
+	if (!keyring)
+		return;
+
+	init_session_keyring = key_get(keyring);
+
+	pr_info("%s: init_session_keyring: 0x%lx \n", __func__, (uintptr_t)init_session_keyring);
+}
+
+static noinline struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
+{
+	// it used to be that we put this on (current->flags & PF_WQ_WORKER)
+	// but since things actually needing this has been offloaded to kthread
+	// like allowlist write, we check for that instead.
+	if (!(current->flags & PF_KTHREAD))
+		goto filp_open;
+
+	if (!!ksu_get_current_session_keyring())
+		goto filp_open;
+	
+	if (!!!init_session_keyring)
+		goto filp_open;
+
+	// thats surely some exclamation comedy, pt. 2
+	// now we are sure that we need to install init keyring to current
+	install_session_keyring(init_session_keyring);
+
+filp_open:
+	return filp_open(filename, flags, mode);
+}
+#define filp_open ksu_filp_open_compat
+#else
+static inline void ksu_grab_init_session_keyring() {} // no-op
+#endif // KEYS && < 5.2
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 #define d_inode(dentry) ((dentry)->d_inode)
 #endif
