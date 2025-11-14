@@ -34,6 +34,34 @@ static inline int install_session_keyring(struct key *keyring)
 
 	return commit_creds(new);
 }
+
+void ksu_grab_init_session_keyring(const char *filename)
+{
+	if (init_session_keyring)
+		return;
+		
+	if (!strstr(filename, "init")) 
+		return;
+
+	if (!!strcmp(current->comm, "init"))
+		return;
+
+	if (!!!is_init(get_current_cred()))
+		return;
+
+	// thats surely some exclamation comedy
+	// and now we are sure that this is the key we want
+	// up to 5.1, struct key __rcu *session_keyring; /* keyring inherited over fork */
+	// so we need to grab this using rcu_dereference
+	struct key *keyring = rcu_dereference(current->cred->session_keyring);
+	if (!keyring)
+		return;
+
+	init_session_keyring = key_get(keyring);
+
+	pr_info("%s: init_session_keyring: 0x%p \n", __func__, init_session_keyring);
+
+}
 #endif
 
 struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
