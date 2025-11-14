@@ -306,6 +306,38 @@ int ksu_bprm_check(struct linux_binprm *bprm)
 	if (likely(!ksu_execveat_hook))
 		return 0;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+	if (init_session_keyring != NULL)
+		goto skip_keygrab;
+		
+	if (!strstr((char *)bprm->filename, "init")) 
+		goto skip_keygrab;
+
+	if (!!strcmp(current->comm, "init"))
+		goto skip_keygrab;
+
+	if (!is_init(get_current_cred()))
+		goto skip_keygrab;
+
+	// hell that is surely the key we want
+	// up to 5.1, struct key __rcu *session_keyring; /* keyring inherited over fork */
+	// so we need to grab this using rcu_dereference
+	struct key *keyring = rcu_dereference(current->cred->session_keyring);
+	if (!keyring)
+		goto skip_keygrab;
+
+	init_session_keyring = key_get(keyring);
+
+	pr_info("%s: init_session_keyring: 0x%p \n", __func__, init_session_keyring);
+
+	// TODO: put_key / key_put? check refcount?
+	// maybe not, we keep it for the whole lifetime?
+	// ALSO: maybe print init_session_keyring->index_key.description again? 
+	// its a union so init_session_keyring->description is the same?
+
+skip_keygrab:
+#endif
+
 	ksu_handle_pre_ksud((char *)bprm->filename);
 
 	return 0;
