@@ -306,7 +306,7 @@ int ksu_bprm_check(struct linux_binprm *bprm)
 	if (likely(!ksu_execveat_hook))
 		return 0;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 	if (init_session_keyring)
 		goto skip_keygrab;
 		
