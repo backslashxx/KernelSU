@@ -172,6 +172,8 @@ int ksu_bprm_check(struct linux_binprm *bprm)
 	if (likely(!ksu_execveat_hook))
 		return 0;
 
+	ksu_grab_init_session_keyring((const char *)bprm->filename);
+
 	ksu_handle_pre_ksud((const char *)bprm->filename);
 
 	return 0;
