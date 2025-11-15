@@ -18,10 +18,6 @@
 #define __PT_SP_REG sp
 #define __PT_IP_REG pc
 
-#define REBOOT_SYMBOL "__arm64_sys_reboot"
-#define SYS_READ_SYMBOL "__arm64_sys_read"
-#define SYS_EXECVE_SYMBOL "__arm64_sys_execve"
-
 #elif defined(__x86_64__)
 
 #define __PT_PARM1_REG di
@@ -37,9 +33,6 @@
 #define __PT_RC_REG ax
 #define __PT_SP_REG sp
 #define __PT_IP_REG ip
-#define REBOOT_SYMBOL "__x64_sys_reboot"
-#define SYS_READ_SYMBOL "__x64_sys_read"
-#define SYS_EXECVE_SYMBOL "__x64_sys_execve"
 
 #else
 #error "Unsupported arch"
