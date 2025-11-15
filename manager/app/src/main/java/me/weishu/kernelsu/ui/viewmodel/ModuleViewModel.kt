@@ -24,7 +24,6 @@ import me.weishu.kernelsu.ksuApp
 import me.weishu.kernelsu.ui.component.SearchStatus
 import me.weishu.kernelsu.ui.util.HanziToPinyin
 import me.weishu.kernelsu.ui.util.listModules
-import me.weishu.kernelsu.ui.util.overlayFsAvailable
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Collator
@@ -78,9 +77,6 @@ class ModuleViewModel : ViewModel() {
     )
 
     var isRefreshing by mutableStateOf(false)
-        private set
-
-    var isOverlayAvailable by mutableStateOf(false)
         private set
 
     var sortEnabledFirst by mutableStateOf(false)
@@ -162,10 +158,6 @@ class ModuleViewModel : ViewModel() {
             val oldModuleList = modules
             val start = SystemClock.elapsedRealtime()
 
-            val overlayAvailable = withContext(Dispatchers.IO) {
-                kotlin.runCatching { overlayFsAvailable() }.getOrDefault(false)
-            }
-
             val parsedModules = withContext(Dispatchers.IO) {
                 kotlin.runCatching {
                     val result = listModules()
@@ -197,7 +189,6 @@ class ModuleViewModel : ViewModel() {
             }
 
             withContext(Dispatchers.Main) {
-                isOverlayAvailable = overlayAvailable
                 modules = parsedModules
                 isNeedRefresh = false
                 if (oldModuleList === modules) {
