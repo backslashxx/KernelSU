@@ -11,6 +11,7 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 #include <linux/compiler_types.h>
 #endif
+#include <linux/kthread.h>
 
 #define FILE_MAGIC 0x7f4b5355 // ' KSU', u32
 #define FILE_FORMAT_VERSION 3 // u32
@@ -85,6 +86,7 @@ static uint8_t allow_list_bitmap[PAGE_SIZE] __read_mostly __aligned(PAGE_SIZE);
 
 #define KERNEL_SU_ALLOWLIST "/data/adb/ksu/.allowlist"
 
+static struct task_struct *allowlist_thread;
 void persistent_allow_list(void);
 
 void ksu_show_allow_list(void)
@@ -345,7 +347,7 @@ bool ksu_get_allow_list(int *array, int *length, bool allow)
 	return true;
 }
 
-void persistent_allow_list()
+void persistent_allow_list_fn()
 {
 	u32 magic = FILE_MAGIC;
 	u32 version = FILE_FORMAT_VERSION;
@@ -390,6 +392,39 @@ exit:
 	mutex_unlock(&allowlist_mutex);
 }
 
+extern void kthread_escape(void);
+
+// this is a bit heavier than task work / workqueue but this allows
+// us to have our own context. we give it a full escaped-to-root one.
+static int persistent_allow_list_pre(void *data)
+{
+	pr_info("persistent_allow_list: pid: %d started\n", current->pid);
+
+	// give permissions for everything
+	kthread_escape();
+	persistent_allow_list_fn();	
+	allowlist_thread = NULL;
+	smp_mb();
+	
+	pr_info("persistent_allow_list: pid: %d exit\n", current->pid);
+	return 0;
+}
+
+void persistent_allow_list()
+{
+	smp_mb();
+	if (allowlist_thread != NULL)
+		return;
+
+	allowlist_thread = kthread_run(persistent_allow_list_pre, NULL, "allowlist");
+	if (IS_ERR(allowlist_thread)) {
+		allowlist_thread = NULL;
+		return;
+	}
+}
+
+// we can leave this synchronous it seems
+// this can be revisited if escaping/deferring is needed.
 void ksu_load_allow_list()
 {
 	loff_t off = 0;
