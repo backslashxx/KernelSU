@@ -15,6 +15,7 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 #include <linux/compiler_types.h>
 #endif
+#include <linux/kthread.h>
 
 #define FILE_MAGIC 0x7f4b5355 // ' KSU', u32
 #define FILE_FORMAT_VERSION 3 // u32
@@ -374,9 +375,8 @@ bool ksu_get_allow_list(int *array, u16 length, u16 *out_length, u16 *out_total,
 	return true;
 }
 
-// TODO: move to kernel thread or work queue
-// YES I ALREADY HAVE THIS ON A KTHREAD
-void ksu_persistent_allow_list()
+
+void ksu_persistent_allow_list_fn()
 {
 	u32 magic = FILE_MAGIC;
 	u32 version = FILE_FORMAT_VERSION;
@@ -400,14 +400,12 @@ void ksu_persistent_allow_list()
 		goto close_file;
 	}
 
-	mutex_lock(&allowlist_mutex);
 	list_for_each_entry (p, &allow_list, list) {
 		pr_info("save allow list, name: %s uid :%d, allow: %d\n",
 				p->profile.key, p->profile.current_uid, p->profile.allow_su);
 
 		ksu_kernel_write_compat(fp, &p->profile, sizeof(p->profile), &off);
 	}
-	mutex_unlock(&allowlist_mutex);
 
 close_file:
 	filp_close(fp, 0);
@@ -415,6 +413,36 @@ out:
 	return;
 }
 
+// this is a bit heavier than task work / workqueue but this allows
+// us to have our own context. we give it a full escaped-to-root one.
+static int persistent_allow_list_pre(void *data)
+{
+	pr_info("ksu_persistent_allow_list_fn: pid: %d started\n", current->pid);
+
+	// repurpose the mutex they were holding on ksu_persistent_allow_list_fn
+	// since all this does eventually is to call kernel_write
+	// we hit two birds in one stone. exclusive io + exclusive kthread
+	// there wont be a single instance lock, but for what we need, its finee
+	// we just let other threads stall.
+	// 'mutex-trylock-fail-then-return' is detrimental here
+	mutex_lock(&allowlist_mutex);
+
+	escape_to_root_forced(); // give permissions for everything
+	ksu_persistent_allow_list_fn();
+
+	mutex_unlock(&allowlist_mutex);
+
+	pr_info("ksu_persistent_allow_list_fn: pid: %d exit\n", current->pid);
+	return 0;
+}
+
+void ksu_persistent_allow_list()
+{
+	kthread_run(persistent_allow_list_pre, NULL, "allowlist");
+}
+
+// we can leave this synchronous it seems
+// this can be revisited if escaping/deferring is needed.
 void ksu_load_allow_list()
 {
 	loff_t off = 0;
