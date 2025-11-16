@@ -133,7 +133,6 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
 	// now put this on candidate_path
 	if (d_type == DT_REG && !strncmp(name, "base.apk", 8)) {
 		snprintf(candidate_path, DATA_PATH_LEN, "%s/%.*s", my_ctx->parent_dir, namelen, name);
-		pr_info("Found new base.apk at path: %s \n", candidate_path);
 	}
 
 	return FILLDIR_ACTOR_CONTINUE;
@@ -202,12 +201,17 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 			// we were calling is_manager_apk inside iterate_dir
 			// now we defer file opens after iterate_dir
 			// this way we dont open apks while inside that
-			if (!stop && strstarts(candidate_path, "/data/ap") ) {
-				if (is_manager_apk(candidate_path)) {
-					crown_manager(candidate_path, uid_data);
-					stop = 1;
-				}
-			}
+			if (!strstarts(candidate_path, "/data/ap") )
+				goto skip_iterate;
+
+			bool is_manager = is_manager_apk(candidate_path);
+			pr_info("Found new base.apk at path: %s, is_manager: %d\n", candidate_path, is_manager);
+
+			if (likely(!is_manager))
+				goto skip_iterate;
+
+			crown_manager(candidate_path, uid_data);
+			stop = 1;
 
 skip_iterate:
 			list_del(&pos->list);
