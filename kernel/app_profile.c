@@ -115,7 +115,7 @@ void disable_seccomp()
 #endif // 5.9
 }
 
-void escape_with_root_profile(void)
+static void escape_to_root(bool is_forced)
 {
 	struct cred *cred;
 	struct root_profile profile;
@@ -126,7 +126,7 @@ void escape_with_root_profile(void)
 		return;
 	}
 
-	if (cred->euid.val == 0) {
+	if (!is_forced && cred->euid.val == 0) {
 		pr_warn("Already root, don't escape!\n");
 		abort_creds(cred);
 		return;
@@ -168,4 +168,17 @@ void escape_with_root_profile(void)
 
 void escape_to_root_for_init(void) {
 	setup_selinux(KERNEL_SU_CONTEXT);
+}
+
+void escape_with_root_profile(void)
+{
+	escape_to_root(false);
+}
+
+void escape_to_root_forced(void)
+{
+	// I'm not really sure which permissions are needed
+	// its just escape to root but bypasses cred check
+	// which we likely already have on contexts where this will be used.
+	escape_to_root(true);
 }
