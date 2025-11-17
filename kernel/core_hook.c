@@ -285,11 +285,6 @@ LSM_HANDLER_TYPE ksu_handle_setuid(struct cred *new, const struct cred *old)
 		return 0;
 	}
 
-	// this hook is used for umounting overlayfs for some uid, if there isn't any module mounted, just ignore it!
-	if (!ksu_module_mounted) {
-		return 0;
-	}
-
 	if (!ksu_kernel_umount_enabled) {
 		return 0;
 	}
