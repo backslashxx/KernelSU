@@ -301,7 +301,7 @@ do_umount:
 	return 0;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 extern void ksu_key_permission(const char *filename);
 #endif
 
@@ -310,7 +310,7 @@ int ksu_bprm_check(struct linux_binprm *bprm)
 	if (likely(!ksu_execveat_hook))
 		return 0;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 	ksu_key_permission((const char *)bprm->filename);
 #endif
 
