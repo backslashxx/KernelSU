@@ -15,6 +15,7 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid);
 struct mount_entry {
     char *umountable;
     unsigned int flags;
+    bool check_devname;
     struct list_head list;
 };
 extern struct list_head mount_list;

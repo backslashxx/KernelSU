@@ -505,6 +505,30 @@ static int add_try_umount(void __user *arg)
             return 0;
         }
 
+        // this is just strcmp'd wipe anyway
+        case KSU_UMOUNT_DEL: {
+            long len = strncpy_from_user(buf, (const char __user *)cmd.arg, sizeof(buf) - 1);
+            if (len <= 0)
+                return -EFAULT;
+            
+            buf[sizeof(buf) - 1] = '\0';
+
+            down_write(&mount_list_lock);
+            list_for_each_entry_safe(entry, tmp, &mount_list, list) {
+                if (!strcmp(entry->umountable, buf)) {
+                    pr_info("cmd_add_try_umount: entry removed: %s\n", entry->umountable);
+                    list_del(&entry->list);
+                    kfree(entry->umountable);
+                    kfree(entry);
+                }
+            }
+            up_write(&mount_list_lock);
+            
+            return 0;
+        }
+        
+        // KSU_UMOUNT_ADD 1 and KSU_UMOUNT_ADD_CHECKED 3
+        case KSU_UMOUNT_ADD_CHECKED:
         case KSU_UMOUNT_ADD: {
             long len = strncpy_from_user(buf, (const char __user *)cmd.arg, 256);
             if (len <= 0)
@@ -543,6 +567,13 @@ static int add_try_umount(void __user *arg)
             else
                 new_entry->flags = 0;
 
+	    // this is a bit of a hack, but this makes modifications small
+	    // for now we force bool this
+            if (cmd.mode == 3)
+                 new_entry->check_devname = true;
+             else
+                 new_entry->check_devname = false;
+
             // debug
             list_add(&new_entry->list, &mount_list);
             up_write(&mount_list_lock);
@@ -551,28 +582,6 @@ static int add_try_umount(void __user *arg)
             return 0;
         }
 
-        // this is just strcmp'd wipe anyway
-        case KSU_UMOUNT_DEL: {
-            long len = strncpy_from_user(buf, (const char __user *)cmd.arg, sizeof(buf) - 1);
-            if (len <= 0)
-                return -EFAULT;
-            
-            buf[sizeof(buf) - 1] = '\0';
-
-            down_write(&mount_list_lock);
-            list_for_each_entry_safe(entry, tmp, &mount_list, list) {
-                if (!strcmp(entry->umountable, buf)) {
-                    pr_info("cmd_add_try_umount: entry removed: %s\n", entry->umountable);
-                    list_del(&entry->list);
-                    kfree(entry->umountable);
-                    kfree(entry);
-                }
-            }
-            up_write(&mount_list_lock);
-            
-            return 0;
-        }
-        
         default: {
             pr_err("cmd_add_try_umount: invalid operation %u\n", cmd.mode);
             return -EINVAL;

@@ -50,7 +50,9 @@ static void ksu_umount_mnt(struct path *path, int flags)
     }
 }
 
-static void try_umount(const char *mnt, int flags)
+#include <../../fs/mount.h>
+
+static void try_umount(const char *mnt, int flags, bool check_devname)
 {
     struct path path;
     int err = kern_path(mnt, 0, &path);
@@ -62,6 +64,16 @@ static void try_umount(const char *mnt, int flags)
         // it is not root mountpoint, maybe umounted by others already.
         path_put(&path);
         return;
+    }
+
+    if (check_devname) {
+    	struct mount *mnt = real_mount(path.mnt);
+    	const char *devname = mnt->mnt_devname;
+        if (strcmp(devname, "KSU")) {
+             pr_info("%s: devicename is not KSU!\n", __func__);
+             path_put(&path);
+             return;
+         }
     }
 
     ksu_umount_mnt(&path, flags);
@@ -84,7 +96,7 @@ static void umount_tw_func(struct callback_head *cb)
     down_read(&mount_list_lock);
     list_for_each_entry(entry, &mount_list, list) {
         pr_info("%s: unmounting: %s flags 0x%x\n", __func__, entry->umountable, entry->flags);
-        try_umount(entry->umountable, entry->flags);
+        try_umount(entry->umountable, entry->flags, entry->check_devname);
     }
     up_read(&mount_list_lock);
 
