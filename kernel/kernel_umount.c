@@ -9,6 +9,7 @@
 #include <linux/path.h>
 #include <linux/printk.h>
 #include <linux/types.h>
+#include <../../fs/mount.h>
 
 #include "kernel_umount.h"
 #include "klog.h" // IWYU pragma: keep
@@ -49,8 +50,6 @@ static void ksu_umount_mnt(struct path *path, int flags)
         pr_info("umount %s failed: %d\n", path->dentry->d_iname, err);
     }
 }
-
-#include <../../fs/mount.h>
 
 static void try_umount(const char *mnt, int flags, bool check_devname)
 {
