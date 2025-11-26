@@ -136,32 +136,45 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 	return ksu_sucompat_user_common(filename_user, "sys_execve", true);
 }
 
-// the call from execve_handler_pre won't provided correct value for __never_use_argument, use them after fix execve_handler_pre, keeping them for consistence for manually patched code
+static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_name, bool escalate)
+{
+
+	if (likely(memcmp(filename_ptr, SU_PATH, sizeof(SU_PATH))))
+		return 0;
+
+	if (escalate) {
+		pr_info("%s su found\n", function_name);
+		memcpy(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH));
+		escape_with_root_profile();
+	} else {
+		pr_info("%s su->sh\n", function_name);
+		memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
+	}
+	return 0;
+}
+
 int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 				 void *__never_use_argv, void *__never_use_envp,
 				 int *__never_use_flags)
 {
-	struct filename *filename;
-	const char sh[] = KSUD_PATH;
-	const char su[] = SU_PATH;
-
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
-	filename = *filename_ptr;
-	if (IS_ERR(filename)) {
+	// struct filename *filename = *filename_ptr;
+	// return ksu_do_execveat_common((void *)filename->name, "do_execveat_common");
+	// nvm this, just inline
+
+	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
+}
+
+// for compatibility to old hooks
+int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+			void *envp, int *flags)
+{
+	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
-	}
 
-	if (likely(memcmp(filename->name, su, sizeof(su))))
-		return 0;
-
-	pr_info("do_execveat_common su found\n");
-	memcpy((void *)filename->name, sh, sizeof(sh));
-
-	escape_with_root_profile();
-
-	return 0;
+	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
 }
 
 static void ksu_sucompat_enable()
