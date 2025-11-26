@@ -190,6 +190,19 @@ int ksu_legacy_execve_sucompat(const char **filename_ptr,
 }
 #endif
 
+// vfs_statx for 5.18+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
+int ksu_handle_vfs_statx(void *__never_use_dfd, struct filename **filename_ptr,
+			void *__never_use_flags, void **__never_use_stat,
+			void *__never_use_request_mask)
+{
+	if (!is_su_allowed((const void **)filename_ptr))
+		return 0;
+
+	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "vfs_statx", false);
+}
+#endif
+
 // getname_flags on fs/namei.c, this hooks ALL fs-related syscalls.
 // put the hook right after usercopy
 // NOT RECOMMENDED for daily use. mostly for debugging purposes.
