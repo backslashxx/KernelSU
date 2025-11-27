@@ -11,14 +11,15 @@
 #include "app_profile.h"
 #include "klog.h" // IWYU pragma: keep
 #include "selinux/selinux.h"
-#include "syscall_hook_manager.h"
+#include "sucompat.h"
 
 static struct group_info root_groups = { .usage = ATOMIC_INIT(2) };
 
-void setup_groups(struct root_profile *profile, struct cred *cred)
+static void setup_groups(struct root_profile *profile, struct cred *cred)
 {
 	if (profile->groups_count > KSU_MAX_GROUPS) {
-		pr_warn("Failed to setgroups, too large group: %d!\n", profile->uid);
+		pr_warn("Failed to setgroups, too large group: %d!\n",
+			profile->uid);
 		return;
 	}
 
@@ -54,7 +55,7 @@ void setup_groups(struct root_profile *profile, struct cred *cred)
 	put_group_info(group_info);
 }
 
-static void disable_seccomp(void)
+static void disable_seccomp()
 {
 	assert_spin_locked(&current->sighand->siglock);
 	// disable seccomp
@@ -76,8 +77,6 @@ static void disable_seccomp(void)
 void escape_with_root_profile(void)
 {
 	struct cred *cred;
-	struct task_struct *p = current;
-	struct task_struct *t;
 
 	cred = prepare_creds();
 	if (!cred) {
@@ -110,8 +109,10 @@ void escape_with_root_profile(void)
 	// setup capabilities
 	// we need CAP_DAC_READ_SEARCH becuase `/data/adb/ksud` is not accessible for non root process
 	// we add it here but don't add it to cap_inhertiable, it would be dropped automaticly after exec!
-	u64 cap_for_ksud = profile->capabilities.effective | CAP_DAC_READ_SEARCH;
-	memcpy(&cred->cap_effective, &cap_for_ksud, sizeof(cred->cap_effective));
+	u64 cap_for_ksud =
+		profile->capabilities.effective | CAP_DAC_READ_SEARCH;
+	memcpy(&cred->cap_effective, &cap_for_ksud,
+	       sizeof(cred->cap_effective));
 	memcpy(&cred->cap_permitted, &profile->capabilities.effective,
 	       sizeof(cred->cap_permitted));
 	memcpy(&cred->cap_bset, &profile->capabilities.effective,
@@ -128,8 +129,4 @@ void escape_with_root_profile(void)
 	spin_unlock_irq(&current->sighand->siglock);
 
 	setup_selinux(profile->selinux_domain);
-
-	for_each_thread (p, t) {
-		ksu_set_task_tracepoint_flag(t);
-	}
 }

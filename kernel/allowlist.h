@@ -39,13 +39,13 @@ struct root_profile *ksu_get_root_profile(uid_t uid);
 
 static inline bool is_appuid(uid_t uid)
 {
-    uid_t appid = uid % PER_USER_RANGE;
-    return appid >= FIRST_APPLICATION_UID && appid <= LAST_APPLICATION_UID;
+	uid_t appid = uid % PER_USER_RANGE;
+	return appid >= FIRST_APPLICATION_UID && appid <= LAST_APPLICATION_UID;
 }
 
 static inline bool is_isolated_process(uid_t uid)
 {
-    uid_t appid = uid % PER_USER_RANGE;
-    return appid >= FIRST_ISOLATED_UID && appid <= LAST_ISOLATED_UID;
+	uid_t appid = uid % PER_USER_RANGE;
+	return appid >= FIRST_ISOLATED_UID && appid <= LAST_ISOLATED_UID;
 }
 #endif
