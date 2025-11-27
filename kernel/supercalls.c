@@ -688,10 +688,25 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	if (magic2 == KSU_INSTALL_MAGIC2) {
 		return ksu_handle_fd_request(arg4);
 	}
-
-	// grab a copy as we write the pointer on the pointer
-	// u64 reply = (u64)*arg;	
+	
 	// extensions
+	u64 reply = (u64)*arg;
+
+	if (magic2 == CHANGE_MANAGER_UID) {
+		// only root is allowed for this command
+		if (current_uid().val != 0)
+			return 0;
+
+		pr_info("sys_reboot: ksu_set_manager_appid to: %d\n", cmd);
+		ksu_set_manager_appid(cmd);
+
+		if (cmd == ksu_get_manager_appid()) {
+			if (copy_to_user((void __user *)*arg, &reply, sizeof(reply)))
+				pr_info("sys_reboot: reply fail\n");
+		}
+
+		return 0;
+	}
 
 	return 0;
 }
