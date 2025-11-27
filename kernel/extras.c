@@ -1,5 +1,6 @@
 #include <linux/security.h>
 #include <linux/atomic.h>
+#include <linux/version.h>
 
 #include "feature.h"
 #include "klog.h"
@@ -107,8 +108,6 @@ static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 		return 0;
 
 	/* 
-	 * just pass both arg2 and arg3 to original handler
-	 * this removes all the headache.
 	 * for < 4.17 int slow_avc_audit(u32 ssid, u32 tsid
 	 * for >= 4.17 int slow_avc_audit(struct selinux_state *state, u32 ssid, u32 tsid
 	 * for >= 6.4 int slow_avc_audit(u32 ssid, u32 tsid
@@ -116,14 +115,15 @@ static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 	 * since its hard to make sure this selinux state thing 
 	 * cross crossing with 4.17 ~ 6.4's where slow_avc_audit
 	 * changes abi (tsid in arg2 vs arg3)
-	 * lets just pass both to the handler
 	 */
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
 	u32 *tsid = (u32 *)&PT_REGS_PARM2(regs);
 	ksu_handle_slow_avc_audit(tsid);
-
-	tsid = (u32 *)&PT_REGS_PARM3(regs);
+#else
+	u32 *tsid = (u32 *)&PT_REGS_PARM3(regs);
 	ksu_handle_slow_avc_audit(tsid);
+#endif
 
 	return 0;
 }
