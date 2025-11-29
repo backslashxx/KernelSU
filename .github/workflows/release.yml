@@ -9,6 +9,7 @@ jobs:
   build-manager:
     uses: ./.github/workflows/build-manager.yml
     secrets: inherit
+
   release:
     needs:
       - build-manager
@@ -71,3 +72,4 @@ jobs:
             kernel-WSA*.zip
             kernel-ARCVM*.zip
             ksud/ksud-*
+            meta-overlayfs/meta-overlayfs-*.zip
