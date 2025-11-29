@@ -156,12 +156,6 @@ fun HomePagerMaterial(
             if (isManager && !BuildConfig.IS_PR_BUILD && Natives.isPrBuild) {
                 WarningCard(stringResource(id = R.string.home_pr_kernel_warning))
             }
-            if (ksuVersion != null && !Natives.isLkmMode) {
-                WarningCard(
-                    stringResource(id = R.string.home_gki_warning),
-                    MaterialTheme.colorScheme.tertiaryContainer
-                )
-            }
             if (isManager && Natives.requireNewKernel()) {
                 WarningCard(
                     stringResource(id = R.string.require_kernel_version).format(
