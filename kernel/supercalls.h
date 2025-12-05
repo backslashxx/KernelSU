@@ -145,5 +145,7 @@ void ksu_supercalls_exit(void);
 
 // extensions
 #define CHANGE_MANAGER_UID 10006
+#define KSU_UMOUNT_GETSIZE 10007   // get list size
+#define KSU_UMOUNT_GETLIST 10008   // get list
 
 #endif // __KSU_H_SUPERCALLS
