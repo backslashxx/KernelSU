@@ -99,7 +99,8 @@ check_ptr:
 
 static __always_inline void ksu_sucompat_user_common(const char __user **filename_user,
 				const char *syscall_name,
-				const bool escalate)
+				const bool escalate,
+				const uint8_t sym)
 {
 	uintptr_t buf;
 	const char su[] = SU_PATH;
@@ -160,6 +161,8 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 	if (unlikely(buf != su_p[0]))
 		return;
 
+	write_sulog(sym);
+
 	if (!escalate)
 		goto no_escalate;
 
@@ -193,7 +196,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
-	ksu_sucompat_user_common(filename_user, "faccessat", false);
+	ksu_sucompat_user_common(filename_user, "faccessat", false, 'a');
 	return 0;
 }
 
@@ -203,7 +206,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
-	ksu_sucompat_user_common(filename_user, "newfstatat", false);
+	ksu_sucompat_user_common(filename_user, "newfstatat", false, 's');
 	return 0;
 }
 
@@ -219,7 +222,7 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user, void 
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
-	ksu_sucompat_user_common(filename_user, "sys_execve", true);
+	ksu_sucompat_user_common(filename_user, "sys_execve", true, 'x');
 	return 0;
 }
 
@@ -261,6 +264,9 @@ static __always_inline void ksu_sucompat_kernel_common(void **filename_ptr, void
 
 	if (unlikely(fn_p[0] != su_p[0]))
 		return;
+
+	// we only handle execve here after removing vfs_statx hook for >= 6.1
+	write_sulog('x');
 
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	ksu_sulog_emit(KSU_SULOG_EVENT_SUCOMPAT, NULL, NULL, GFP_KERNEL);
