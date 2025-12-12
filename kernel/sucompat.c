@@ -119,7 +119,8 @@ static inline void kernel_execve_escape_ksud(void *filename_ptr) {} // no-op
 
 static int ksu_sucompat_user_common(const char __user **filename_user,
 				const char *syscall_name,
-				const bool escalate)
+				const bool escalate,
+				const uint8_t sym)
 {
 	const char su[] = SU_PATH;
 
@@ -132,6 +133,8 @@ static int ksu_sucompat_user_common(const char __user **filename_user,
 
 	if (memcmp(path, su, sizeof(su)))
 		return 0;
+
+	write_sulog(sym);
 
 	if (escalate) {
 		pr_info("%s su found\n", syscall_name);
@@ -152,7 +155,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
-	return ksu_sucompat_user_common(filename_user, "faccessat", false);
+	return ksu_sucompat_user_common(filename_user, "faccessat", false, 'a');
 }
 
 // sys_newfstatat, sys_fstat64
@@ -161,7 +164,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
-	return ksu_sucompat_user_common(filename_user, "newfstatat", false);
+	return ksu_sucompat_user_common(filename_user, "newfstatat", false, 's');
 }
 
 // sys_execve, compat_sys_execve
@@ -174,7 +177,7 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
-	return ksu_sucompat_user_common(filename_user, "sys_execve", true);
+	return ksu_sucompat_user_common(filename_user, "sys_execve", true, 'x');
 }
 
 // getname_flags on fs/namei.c, this hooks ALL fs-related syscalls.
@@ -186,14 +189,25 @@ int ksu_getname_flags_user(const char __user **filename_user, int flags)
 
 	// sys_execve always calls getname, which sets flags = 0 on getname_flags
 	// we can use it to deduce if caller is likely execve
-	return ksu_sucompat_user_common(filename_user, "getname_flags", !!!flags);
+
+	uint8_t sym = '$';
+	bool escalate = false;
+	
+	if (!flags) {
+		escalate = true;
+		sym = 'x';
+	}
+
+	return ksu_sucompat_user_common(filename_user, "getname_flags", escalate, sym);
 }
 
-static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_name, bool escalate)
+static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_name, bool escalate, const uint8_t sym)
 {
 
 	if (likely(memcmp(filename_ptr, SU_PATH, sizeof(SU_PATH))))
 		return 0;
+
+	write_sulog(sym);
 
 	if (escalate) {
 		pr_info("%s su found\n", function_name);
@@ -222,7 +236,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	// return ksu_do_execveat_common((void *)filename->name, "do_execveat_common");
 	// nvm this, just inline
 
-	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
+	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true, 'x');
 }
 
 // for compatibility to old hooks
@@ -234,7 +248,7 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
-	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true);
+	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "do_execveat_common", true, 'x');
 }
 #else
 // for do_execve_common on < 3.14
@@ -248,7 +262,7 @@ int ksu_legacy_execve_sucompat(const char **filename_ptr,
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
-	return ksu_sucompat_kernel_common((void *)*filename_ptr, "do_execve_common", true);
+	return ksu_sucompat_kernel_common((void *)*filename_ptr, "do_execve_common", true, 'x');
 }
 #endif
 
@@ -261,7 +275,7 @@ int ksu_handle_vfs_statx(void *__never_use_dfd, struct filename **filename_ptr,
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
-	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "vfs_statx", false);
+	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "vfs_statx", false, 's');
 }
 #endif
 
@@ -273,7 +287,15 @@ int ksu_getname_flags_kernel(char **kname, int flags)
 	if (!is_su_allowed((const void **)kname))
 		return 0;
 
-	return ksu_sucompat_kernel_common((void *)*kname, "getname_flags", !!!flags);
+	uint8_t sym = '$';
+	bool escalate = false;
+	
+	if (!flags) {
+		escalate = true;
+		sym = 'x';
+	}
+
+	return ksu_sucompat_kernel_common((void *)*kname, "getname_flags", escalate, sym);
 }
 
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
