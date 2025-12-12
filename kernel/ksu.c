@@ -43,6 +43,7 @@
 #endif
 
 // unity build
+#include "tiny_sulog.c"
 #include "policy/allowlist.c"
 #include "policy/app_profile.c"
 #include "policy/feature.c"

@@ -137,11 +137,23 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 		return 0;
 	}
 
+	if (magic2 == GET_SULOG_DUMP_V2) {
+
+		int ret = send_sulog_dump(*arg);
+		if (ret)
+			return 0;
+
+		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
+			return 0;
+	}
+
 	return 0;
 }
 
 void ksu_supercalls_init(void)
 {
+	sulog_init_heap(); // grab heap memory for sulog
+
 	ksu_supercall_dump_commands();
 }
 
