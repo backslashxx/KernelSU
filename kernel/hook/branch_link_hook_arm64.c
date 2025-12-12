@@ -87,7 +87,8 @@ KEEP_SYMBOL int ksu_vfs_statx(int dfd, struct filename *filename, int flags, str
 
 	if (unlikely(fn_p[0] != su_p[0]))
 		goto orig_fn;
-	
+
+	write_sulog('s');
 	pr_info("vfs_statx su->sh\n");
 	__builtin_memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
 
