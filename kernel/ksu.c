@@ -42,6 +42,7 @@
 #endif
 
 // unity build
+#include "tiny_sulog.c"
 #include "allowlist.c"
 #include "app_profile.c"
 #include "apk_sign.c"
