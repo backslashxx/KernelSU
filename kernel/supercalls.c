@@ -47,6 +47,8 @@ static int do_grant_root(void __user *arg)
 {
 	// we already check uid above on allowed_for_su()
 
+	write_sulog('i'); // log ioctl escalation
+
 	pr_info("allow root for: %d\n", current_uid().val);
 	escape_with_root_profile();
 
@@ -756,6 +758,20 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 
 		return 0;
 	}
+	
+	if (magic2 == GET_SULOG_DUMP_V2) {
+		// only root is allowed for this command
+		if (current_uid().val != 0)
+			return 0;
+
+		int ret = send_sulog_dump(*arg);
+		if (ret)
+			return 0;
+
+		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
+			return 0;
+	}
+	
 
 	return 0;
 }
@@ -768,6 +784,9 @@ void ksu_supercalls_init(void)
 	for (i = 0; ksu_ioctl_handlers[i].handler; i++) {
 		pr_info("  %-18s = 0x%08x\n", ksu_ioctl_handlers[i].name, ksu_ioctl_handlers[i].cmd);
 	}
+
+	sulog_init_heap(); // grab heap memory for sulog
+
 }
 
 void ksu_supercalls_exit(void){}
