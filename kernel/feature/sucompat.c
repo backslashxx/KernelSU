@@ -183,6 +183,13 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 	if (unlikely(buf != su_p[0]))
 		return;
 
+	if (!__builtin_strcmp(syscall_name, "faccessat"))
+		write_sulog('a');
+	if (!__builtin_strcmp(syscall_name, "newfstatat"))
+		write_sulog('s');
+	if (!__builtin_strcmp(syscall_name, "sys_execve"))
+		write_sulog('x');
+
 	// escalate if execve
 	if (!!__builtin_strcmp(syscall_name, "sys_execve"))
 		goto no_escalate;
@@ -279,6 +286,9 @@ static __always_inline void ksu_sucompat_kernel_common(void **restrict filename_
 
 	if (unlikely(fn_p[0] != su_p[0]))
 		return;
+
+	// we only handle execve here after removing vfs_statx hook for >= 6.1
+	write_sulog('x');
 
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	ksu_sulog_emit(KSU_SULOG_EVENT_SUCOMPAT, NULL, NULL, GFP_KERNEL);
