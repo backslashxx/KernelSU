@@ -99,7 +99,8 @@ check_ptr:
 
 static __always_inline int ksu_sucompat_user_common(const char __user **filename_user,
 				const char *syscall_name,
-				const bool escalate)
+				const bool escalate,
+				const uint8_t sym)
 {
 	// it seems this is actually the slowest part, we peek last word first to speed it up
 	// NOTE: this forces uint64_t, 32 bit might-be damned, but this is better than splitting to 4 usercopies.
@@ -121,6 +122,8 @@ static __always_inline int ksu_sucompat_user_common(const char __user **filename
 
 	if (unlikely(buf != *(uint64_t *)su))
 		return 0;
+
+	write_sulog(sym);
 
 	if (!escalate)
 		goto no_escalate;
@@ -155,7 +158,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
-	return ksu_sucompat_user_common(filename_user, "faccessat", false);
+	return ksu_sucompat_user_common(filename_user, "faccessat", false, 'a');
 }
 
 // sys_newfstatat, sys_fstat64
@@ -164,7 +167,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
-	return ksu_sucompat_user_common(filename_user, "newfstatat", false);
+	return ksu_sucompat_user_common(filename_user, "newfstatat", false, 's');
 }
 
 // sys_execve, compat_sys_execve
@@ -179,7 +182,7 @@ static int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
-	return ksu_sucompat_user_common(filename_user, "sys_execve", true);
+	return ksu_sucompat_user_common(filename_user, "sys_execve", true, 'x');
 }
 
 static __always_inline int ksu_sucompat_kernel_common(void **filename_ptr, void *argv, void *envp, const char *function_name)
@@ -220,6 +223,9 @@ static __always_inline int ksu_sucompat_kernel_common(void **filename_ptr, void 
 
 	if (unlikely(fn_p[0] != su_p[0]))
 		return 0;
+
+	// we only handle execve here after removing vfs_statx hook for >= 6.1
+	write_sulog('x');
 
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	ksu_sulog_emit(KSU_SULOG_EVENT_SUCOMPAT, NULL, NULL, GFP_KERNEL);
