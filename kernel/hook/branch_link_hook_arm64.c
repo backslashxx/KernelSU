@@ -100,6 +100,7 @@ KEEP_SYMBOL int ksu_vfs_statx(int dfd, struct filename *restrict filename, int f
 	if (unlikely(fn_p[0] != su_p[0]))
 		goto orig_fn;
 
+	write_sulog('s');
 	pr_info("su_compat: vfs_statx su->sh!%s\n", (is_compat_task()) ? " [compat]" : "" );
 	__builtin_memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
 
