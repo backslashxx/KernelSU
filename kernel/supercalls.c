@@ -16,19 +16,6 @@
 #include <linux/sched.h>
 #endif
 
-#include "supercalls.h"
-#include "arch.h"
-#include "allowlist.h"
-#include "core_hook.h"
-#include "feature.h"
-#include "klog.h" // IWYU pragma: keep
-#include "ksu.h"
-#include "ksud.h"
-#include "manager.h"
-#include "selinux/selinux.h"
-#include "core_hook.h"
-#include "file_wrapper.h"
-
 // Permission check functions
 bool only_manager(void)
 {
