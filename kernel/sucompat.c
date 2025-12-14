@@ -14,14 +14,6 @@
 #include <linux/sched.h>
 #endif
 
-#include "allowlist.h"
-#include "feature.h"
-#include "klog.h" // IWYU pragma: keep
-#include "ksud.h"
-#include "kernel_compat.h"
-#include "sucompat.h"
-#include "app_profile.h"
-
 #define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
 
