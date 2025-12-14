@@ -1,17 +1,3 @@
-#include <linux/uaccess.h>
-#include <linux/types.h>
-#include <linux/version.h>
-#include <linux/slab.h>
-#include <linux/vmalloc.h>
-#include <linux/string.h>
-
-#include "../klog.h" // IWYU pragma: keep
-#include "selinux.h"
-#include "sepolicy.h"
-#include "ss/services.h"
-#include "linux/lsm_audit.h"
-#include "xfrm.h"
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 #define SELINUX_POLICY_INSTEAD_SELINUX_SS
 #endif

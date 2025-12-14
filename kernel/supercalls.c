@@ -1,34 +1,3 @@
-#include <linux/anon_inodes.h>
-#include <linux/capability.h>
-#include <linux/cred.h>
-#include <linux/err.h>
-#include <linux/fdtable.h>
-#include <linux/file.h>
-#include <linux/fs.h>
-#include <linux/slab.h>
-#include <linux/syscalls.h>
-#include <linux/uaccess.h>
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-#include <linux/sched/task.h> // put_task_struct
-#else
-#include <linux/sched.h>
-#endif
-
-#include "supercalls.h"
-#include "arch.h"
-#include "allowlist.h"
-#include "core_hook.h"
-#include "feature.h"
-#include "klog.h" // IWYU pragma: keep
-#include "ksu.h"
-#include "ksud.h"
-#include "manager.h"
-#include "selinux/selinux.h"
-#include "core_hook.h"
-#include "file_wrapper.h"
-
 // Permission check functions
 bool only_manager(void)
 {

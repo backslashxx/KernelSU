@@ -1,8 +1,6 @@
 #ifndef __KSU_H_ARCH
 #define __KSU_H_ARCH
 
-#include <linux/version.h>
-
 #if defined(__aarch64__)
 
 #define __PT_PARM1_REG regs[0]
