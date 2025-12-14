@@ -1,8 +1,6 @@
 #ifndef __KSU_H_SUPERCALLS
 #define __KSU_H_SUPERCALLS
 
-#include <linux/types.h>
-#include <linux/ioctl.h>
 #include "app_profile.h"
 
 // Magic numbers for reboot hook to install fd

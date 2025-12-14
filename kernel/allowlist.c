@@ -1,30 +1,3 @@
-#include <linux/rcupdate.h>
-#include <linux/limits.h>
-#include <linux/rculist.h>
-#include <linux/mutex.h>
-#include <linux/capability.h>
-#include <linux/compiler.h>
-#include <linux/fs.h>
-#include <linux/gfp.h>
-#include <linux/kernel.h>
-#include <linux/list.h>
-#include <linux/printk.h>
-#include <linux/slab.h>
-#include <linux/types.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-#include <linux/compiler_types.h>
-#endif
-
-#include "klog.h" // IWYU pragma: keep
-#include "ksu.h"
-#include "ksud.h"
-#include "selinux/selinux.h"
-#include "kernel_compat.h"
-#include "allowlist.h"
-#include "manager.h"
-#include "su_mount_ns.h"
-
 #define FILE_MAGIC 0x7f4b5355 // ' KSU', u32
 #define FILE_FORMAT_VERSION 3 // u32
 

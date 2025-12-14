@@ -1,12 +1,3 @@
-#include <linux/gfp.h>
-#include <linux/printk.h>
-#include <linux/slab.h>
-#include <linux/version.h>
-
-#include "sepolicy.h"
-#include "../klog.h" // IWYU pragma: keep
-#include "ss/symtab.h"
-
 #define KSU_SUPPORT_ADD_TYPE
 
 /*

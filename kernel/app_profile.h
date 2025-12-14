@@ -1,8 +1,6 @@
 #ifndef __KSU_H_APP_PROFILE
 #define __KSU_H_APP_PROFILE
 
-#include <linux/types.h>
-
 // Forward declarations
 struct cred;
 
