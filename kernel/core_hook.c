@@ -26,19 +26,6 @@
 #include <linux/fs.h>
 #include <linux/namei.h>
 
-#include "allowlist.h"
-#include "core_hook.h"
-#include "feature.h"
-#include "klog.h" // IWYU pragma: keep
-#include "ksu.h"
-#include "ksud.h"
-#include "manager.h"
-#include "selinux/selinux.h"
-#include "throne_tracker.h"
-#include "kernel_compat.h"
-#include "supercalls.h"
-#include "ksud.h"
-
 static bool ksu_kernel_umount_enabled = true;
 
 static int kernel_umount_feature_get(u64 *value)
