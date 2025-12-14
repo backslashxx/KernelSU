@@ -1,8 +1,6 @@
 #ifndef __KSU_H_SEPOLICY
 #define __KSU_H_SEPOLICY
 
-#include <linux/types.h>
-
 #include "ss/policydb.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
