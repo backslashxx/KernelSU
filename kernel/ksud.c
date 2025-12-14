@@ -24,13 +24,6 @@
 #include <linux/sched.h> /* fatal_signal_pending */
 #endif
 
-#include "allowlist.h"
-#include "klog.h" // IWYU pragma: keep
-#include "ksud.h"
-#include "kernel_compat.h"
-#include "selinux/selinux.h"
-#include "throne_tracker.h"
-
 bool ksu_module_mounted __read_mostly = false;
 bool ksu_boot_completed __read_mostly = false;
 
