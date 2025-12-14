@@ -13,14 +13,6 @@
 #include <linux/version.h>
 #include <linux/mount.h>
 
-#include "objsec.h"
-
-#include "klog.h" // IWYU pragma: keep
-#include "selinux/selinux.h"
-#include "ksud.h"
-
-#include "file_wrapper.h"
-
 struct ksu_file_wrapper {
 	struct file *orig;
 	struct file_operations ops;
