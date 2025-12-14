@@ -1,12 +1,3 @@
-#include "selinux.h"
-#include "objsec.h"
-#include "linux/version.h"
-#include "../klog.h" // IWYU pragma: keep
-#include "../ksu.h"
-#ifndef KSU_COMPAT_USE_SELINUX_STATE
-#include "avc.h"
-#endif
-
 static int transive_to_domain(const char *domain, struct cred *cred)
 {
 	u32 sid;
