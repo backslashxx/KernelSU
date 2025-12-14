@@ -1,9 +1,6 @@
 #ifndef __KSU_H_KSU
 #define __KSU_H_KSU
 
-#include <linux/types.h>
-#include <linux/cred.h>
-
 #define KERNEL_SU_VERSION KSU_VERSION
 
 #define EVENT_POST_FS_DATA 1

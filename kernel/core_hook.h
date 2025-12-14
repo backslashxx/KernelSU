@@ -1,10 +1,6 @@
 #ifndef __KSU_H_KSU_CORE
 #define __KSU_H_KSU_CORE
 
-#include <linux/init.h>
-#include <linux/list.h>
-#include <linux/rwsem.h>
-
 void __init ksu_core_init(void);
 
 // for the umount list
