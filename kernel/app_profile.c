@@ -14,14 +14,6 @@
 #include <linux/uidgid.h>
 #include <linux/version.h>
 
-#include "allowlist.h"
-#include "app_profile.h"
-#include "klog.h" // IWYU pragma: keep
-#include "selinux/selinux.h"
-#include "su_mount_ns.h"
-#include "sucompat.h"
-#include "kernel_compat.h"
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION (6, 7, 0)
 static struct group_info root_groups = { .usage = REFCOUNT_INIT(2) };
 #else 
