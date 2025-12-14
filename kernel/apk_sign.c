@@ -14,12 +14,6 @@
 #include <crypto/sha.h>
 #endif
 
-#include "apk_sign.h"
-#include "app_profile.h"
-#include "klog.h" // IWYU pragma: keep
-#include "kernel_compat.h"
-
-
 struct sdesc {
 	struct shash_desc shash;
 	char ctx[];
@@ -294,8 +288,6 @@ clean:
 #ifdef CONFIG_KSU_DEBUG
 
 int ksu_debug_manager_appid = -1;
-
-#include "manager.h"
 
 static int set_expected_size(const char *val, const struct kernel_param *kp)
 {
