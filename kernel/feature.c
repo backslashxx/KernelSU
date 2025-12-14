@@ -1,9 +1,6 @@
 #include <linux/slab.h>
 #include <linux/mutex.h>
 
-#include "feature.h"
-#include "klog.h" // IWYU pragma: keep
-
 static const struct ksu_feature_handler *feature_handlers[KSU_FEATURE_MAX];
 
 static DEFINE_MUTEX(feature_mutex);
