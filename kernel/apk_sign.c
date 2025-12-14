@@ -1,25 +1,3 @@
-#include <linux/err.h>
-#include <linux/fs.h>
-#include <linux/gfp.h>
-#include <linux/kernel.h>
-#include <linux/slab.h>
-#include <linux/version.h>
-#ifdef CONFIG_KSU_DEBUG
-#include <linux/moduleparam.h>
-#endif
-#include <crypto/hash.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-#include <crypto/sha2.h>
-#else
-#include <crypto/sha.h>
-#endif
-
-#include "apk_sign.h"
-#include "app_profile.h"
-#include "klog.h" // IWYU pragma: keep
-#include "kernel_compat.h"
-
-
 struct sdesc {
 	struct shash_desc shash;
 	char ctx[];
@@ -294,8 +272,6 @@ clean:
 #ifdef CONFIG_KSU_DEBUG
 
 int ksu_debug_manager_appid = -1;
-
-#include "manager.h"
 
 static int set_expected_size(const char *val, const struct kernel_param *kp)
 {

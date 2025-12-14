@@ -1,28 +1,3 @@
-#include <linux/version.h>
-#include <linux/capability.h>
-#include <linux/cred.h>
-#include <linux/sched.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-#include <linux/sched/signal.h> // signal_struct
-#include <linux/sched/task.h>
-#include <linux/sched/user.h>
-#else
-#include <linux/sched.h>
-#endif
-#include <linux/seccomp.h>
-#include <linux/slab.h>
-#include <linux/thread_info.h>
-#include <linux/uidgid.h>
-#include <linux/version.h>
-
-#include "allowlist.h"
-#include "app_profile.h"
-#include "klog.h" // IWYU pragma: keep
-#include "selinux/selinux.h"
-#include "su_mount_ns.h"
-#include "sucompat.h"
-#include "kernel_compat.h"
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION (6, 7, 0)
 static struct group_info root_groups = { .usage = REFCOUNT_INIT(2) };
 #else 

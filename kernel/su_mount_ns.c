@@ -1,24 +1,3 @@
-#include <linux/dcache.h>
-#include <linux/errno.h>
-#include <linux/fdtable.h>
-#include <linux/file.h>
-#include <linux/fs.h>
-#include <linux/fs_struct.h>
-#include <linux/limits.h>
-#include <linux/namei.h>
-#include <linux/proc_ns.h>
-#include <linux/pid.h>
-#include <linux/sched/task.h>
-#include <linux/slab.h>
-#include <linux/syscalls.h>
-#include <linux/version.h>
-#include <uapi/linux/mount.h>
-
-#include "arch.h"
-#include "klog.h" // IWYU pragma: keep
-#include "ksu.h"
-#include "su_mount_ns.h"
-
 extern int path_mount(const char *dev_name, struct path *path,
 					  const char *type_page, unsigned long flags,
 					  void *data_page);
