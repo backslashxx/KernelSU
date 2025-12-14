@@ -10,7 +10,6 @@
 #include <linux/uaccess.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
-#include "klog.h" // IWYU pragma: keep
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 #include <linux/key.h>
