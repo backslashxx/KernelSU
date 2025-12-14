@@ -4,17 +4,60 @@
 #include <linux/module.h>
 #include <linux/version.h> /* LINUX_VERSION_CODE, KERNEL_VERSION macros */
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+#include <uapi/asm-generic/errno.h>
+#else
+#include <asm-generic/errno.h>
+#endif
+
+
 #include "allowlist.h"
+#include "apk_sign.h"
+#include "app_profile.h"
+#include "arch.h"
 #include "core_hook.h"
 #include "feature.h"
-#include "klog.h" // IWYU pragma: keep
-#include "ksu.h"
-#include "throne_tracker.h"
-#include "sucompat.h"
-#include "ksud.h"
-#include "supercalls.h"
-#include "ksu.h"
 #include "file_wrapper.h"
+#include "kernel_compat.h"
+#include "klog.h"
+#include "ksud.h"
+#include "ksu.h"
+#include "manager.h"
+#include "sucompat.h"
+#include "supercalls.h"
+#include "throne_tracker.h"
+#include "su_mount_ns.h"
+#include "selinux/selinux.h"
+#include "selinux/sepolicy.h"
+
+// selinux includes
+#include <linux/lsm_audit.h>
+#include "avc_ss.h"
+#include "objsec.h"
+#include "ss/services.h"
+#include "ss/symtab.h"
+#include "xfrm.h"
+#ifndef KSU_COMPAT_USE_SELINUX_STATE
+#include "avc.h"
+#endif
+
+// unity build
+#include "allowlist.c"
+#include "app_profile.c"
+#include "apk_sign.c"
+#include "sucompat.c"
+#include "throne_tracker.c"
+#include "core_hook.c"
+#include "supercalls.c"
+#include "feature.c"
+#include "su_mount_ns.c"
+#include "ksud.c"
+#include "kernel_compat.c"
+#include "file_wrapper.c"
+
+#include "selinux/selinux.c"
+#include "selinux/sepolicy.c"
+#include "selinux/rules.c"
 
 struct cred* ksu_cred;
 
