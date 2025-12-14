@@ -6,13 +6,6 @@
 #include <linux/types.h>
 #include <linux/version.h>
 
-#include "allowlist.h"
-#include "klog.h" // IWYU pragma: keep
-#include "ksu.h"
-#include "manager.h"
-#include "throne_tracker.h"
-#include "kernel_compat.h"
-
 uid_t ksu_manager_appid = KSU_INVALID_APPID;
 
 #define SYSTEM_PACKAGES_LIST_PATH "/data/system/packages.list.tmp"
