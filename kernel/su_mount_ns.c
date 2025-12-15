@@ -6,22 +6,42 @@
 #include <linux/fs_struct.h>
 #include <linux/limits.h>
 #include <linux/namei.h>
-#include <linux/proc_ns.h>
 #include <linux/pid.h>
-#include <linux/sched/task.h>
 #include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+#include <linux/proc_ns.h>
+#else
+#include <linux/proc_fs.h>
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+#include <linux/sched/task.h>
+#else
+#include <linux/sched.h>
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
 #include <uapi/linux/mount.h>
+#else
+#include <uapi/linux/fs.h>
+#endif
+#endif
 
 extern int path_mount(const char *dev_name, struct path *path,
 					  const char *type_page, unsigned long flags,
 					  void *data_page);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
 #if defined(__aarch64__)
 extern long __arm64_sys_setns(const struct pt_regs *regs);
 #elif defined(__x86_64__)
 extern long __x64_sys_setns(const struct pt_regs *regs);
+#elif defined(__arm__) // https://syscalls.mebeim.net/?table=arm/32/eabi/latest
+extern long sys_setns(const struct pt_regs *regs);
 #endif
 
 static long ksu_sys_setns(int fd, int flags)
@@ -36,10 +56,22 @@ static long ksu_sys_setns(int fd, int flags)
 	return __arm64_sys_setns(&regs);
 #elif defined(__x86_64__)
 	return __x64_sys_setns(&regs);
+#elif defined(__arm__)
+	return sys_setns(&regs);
 #else
-#error "Unsupported arch"
+	return -ENOSYS;
 #endif
 }
+#else
+static long ksu_sys_setns(int fd, int flags)
+{
+	return sys_setns(fd, flags);
+}
+__weak int ksys_unshare(unsigned long unshare_flags)
+{
+	return sys_unshare(unshare_flags);
+}
+#endif
 
 // global mode , need CAP_SYS_ADMIN and CAP_SYS_CHROOT to perform setns
 static void ksu_mnt_ns_global(void)
@@ -67,6 +99,7 @@ static void ksu_mnt_ns_global(void)
 		pwd_path = NULL;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 try_setns:
 
 	rcu_read_lock();
@@ -86,13 +119,38 @@ try_setns:
 		goto out;
 	}
 	struct path ns_path;
-	long ret = ns_get_path(&ns_path, pid1_task, &mntns_operations);
+	long ret = (long)ns_get_path(&ns_path, pid1_task, &mntns_operations);
 	put_task_struct(pid1_task);
 	if (ret) {
 		pr_warn("failed get path for init mount namespace: %ld\n", ret);
 		goto out;
 	}
+#else
+try_setns:
+	barrier(); // to shutup declaration after label
+
+	// on UL kernels we can try to just feed it with struct path of /proc/1/ns/mnt
+	// we do NOT have ns_get_path. if it works, GOOD. if it doesn't I don't care.
+
+	struct path ns_path;
+	const struct cred *saved = override_creds(ksu_cred);
+
+	// make sure to LOOKUP_FOLLOW
+	// /proc/1/ns/mnt -> 'mnt:[4026531840]'
+	long ret = kern_path("/proc/1/ns/mnt", LOOKUP_FOLLOW, &ns_path);
+	if (ret) {
+		revert_creds(saved);
+		pr_warn("kern_path /proc/1/ns/mnt fail! ret: %d\n", ret);
+		goto out;
+	}
+	revert_creds(saved);
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
 	struct file *ns_file = dentry_open(&ns_path, O_RDONLY, ksu_cred);
+#else
+	struct file *ns_file = dentry_open(ns_path.dentry, ns_path.mnt, O_RDONLY, ksu_cred);
+#endif
 
 	path_put(&ns_path);
 	if (IS_ERR(ns_file)) {
@@ -111,11 +169,7 @@ try_setns:
 	fd_install(fd, ns_file);
 	ret = ksu_sys_setns(fd, CLONE_NEWNS);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0)
-	ksys_close(fd);
-#else
 	close_fd(fd);
-#endif
 
 	if (ret) {
 		pr_warn("call setns failed: %ld\n", ret);
