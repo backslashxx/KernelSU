@@ -404,7 +404,7 @@ int ksu_handle_initrc(struct file **file_ptr)
 		return 0;
 	}
 
-	if (strcmp(dpath, "/system/etc/init/hw/init.rc")) {
+	if (!!strcmp(dpath, "/init.rc") && !!strcmp(dpath, "/system/etc/init/hw/init.rc")) {
 		return 0;
 	}
 
