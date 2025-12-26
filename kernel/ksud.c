@@ -392,7 +392,7 @@ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, si
 	}
 
 	const char *short_name = file->f_path.dentry->d_name.name;
-	if (strcmp(short_name, "init.rc")) {
+	if (!!strcmp(short_name, "atrace.rc") && !!strcmp(short_name, "init.rc")) {
 		// we are only interest `init.rc` file name file
 		return 0;
 	}
@@ -403,7 +403,7 @@ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, si
 		return 0;
 	}
 
-	if (strcmp(dpath, "/system/etc/init/hw/init.rc")) {
+	if (!!strcmp(dpath, "/system/etc/init/atrace.rc") && !!strcmp(dpath, "/system/etc/init/hw/init.rc")) {
 		return 0;
 	}
 
