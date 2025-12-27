@@ -369,7 +369,8 @@ use_default:
     memcpy(profile, &default_root_profile, sizeof(*profile));
 }
 
-bool ksu_get_allow_list(int *array, u16 *length, u16 *total, bool allow)
+bool ksu_get_allow_list(int *array, u16 length, u16 *out_length, u16 *out_total,
+                        bool allow)
 {
     struct perm_data *p = NULL;
     u16 i = 0, j = 0;
@@ -378,15 +379,19 @@ bool ksu_get_allow_list(int *array, u16 *length, u16 *total, bool allow)
         // pr_info("get_allow_list uid: %d allow: %d\n", p->uid, p->allow);
         if (p->profile.allow_su == allow &&
             !is_uid_manager(p->profile.current_uid)) {
-            if (j < *length) {
+            if (j < length) {
                 array[j++] = p->profile.current_uid;
             }
             ++i;
         }
     }
     rcu_read_unlock();
-    *length = j;
-    *total = i;
+    if (out_length) {
+        *out_length = j;
+    }
+    if (out_total) {
+        *out_total = i;
+    }
 
     return true;
 }
