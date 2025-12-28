@@ -55,9 +55,14 @@ static int do_grant_root(void __user *arg)
 	return 0;
 }
 
+static uint32_t ksuver_override = 0;
+
 static int do_get_info(void __user *arg)
 {
 	struct ksu_get_info_cmd cmd = {.version = KERNEL_SU_VERSION, .flags = 0};
+
+	if (ksuver_override)
+		cmd.version = ksuver_override;
 
 	if (is_manager()) {
 		cmd.flags |= 0x2;
@@ -771,7 +776,18 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
 			return 0;
 	}
-	
+
+	if (magic2 == CHANGE_KSUVER) {
+		// only root is allowed for this command
+		if (current_uid().val != 0)
+			return 0;
+
+		pr_info("sys_reboot: ksu_change_ksuver to: %d\n", cmd);
+		ksuver_override = cmd;
+
+		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
+			return 0;
+	}
 
 	return 0;
 }
