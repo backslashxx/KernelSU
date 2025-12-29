@@ -276,4 +276,8 @@ __weak char *bin2hex(char *dst, const void *src, size_t count)
 #define selinux_cred(cred) ((cred)->security)
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION (4, 15, 0)
+__weak void groups_sort(struct group_info *group_info) { } // no-op
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
