@@ -198,4 +198,8 @@ static inline struct task_security_struct *selinux_cred(const struct cred *cred)
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION (4, 15, 0)
+__weak void groups_sort(struct group_info *group_info) { } // no-op
+#endif
+
 #endif
