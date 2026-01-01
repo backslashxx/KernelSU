@@ -332,7 +332,163 @@ append_ksu_rc:
 	return ret;
 }
 
-// TODO: add init.rc handling here!
+static bool is_init_rc(struct file *fp)
+{
+	if (strcmp(current->comm, "init")) {
+		// we are only interest in `init` process
+		return false;
+	}
+
+	if (!d_is_reg(fp->f_path.dentry)) {
+		return false;
+	}
+
+	const char *short_name = fp->f_path.dentry->d_name.name;
+	if (strcmp(short_name, "init.rc")) {
+		// we are only interest `init.rc` file name file
+		return false;
+	}
+	char path[256] = {0};
+	char *dpath = d_path(&fp->f_path, path, sizeof(path));
+
+	if (IS_ERR(dpath)) {
+		return false;
+	}
+
+	if (strcmp(dpath, "/system/etc/init/hw/init.rc")) {
+		return false;
+	}
+
+	pr_info("%s: %s \n", __func__, dpath);
+
+	return true;
+}
+
+static void ksu_handle_initrc(struct file *file)
+{
+	if (!ksu_vfs_read_hook) {
+		return;
+	}
+
+	if (!is_init(get_current_cred()))
+		return;
+
+	if (!is_init_rc(file)) {
+		return;
+	}
+
+	// we only process the first read
+	static bool rc_hooked = false;
+	if (rc_hooked) {
+		// we don't need this kprobe, unregister it!
+		stop_vfs_read_hook();
+		return;
+	}
+	rc_hooked = true;
+
+	// now we can sure that the init process is reading
+	// `/system/etc/init/init.rc`
+
+	pr_info("read init.rc, comm: %s, rc_count: %zu\n", current->comm, ksu_rc_len);
+
+	// Now we need to proxy the read and modify the result!
+	// But, we can not modify the file_operations directly, because it's in read-only memory.
+	// We just replace the whole file_operations with a proxy one.
+	memcpy(&fops_proxy, file->f_op, sizeof(struct file_operations));
+	orig_read = file->f_op->read;
+	if (orig_read) {
+		fops_proxy.read = read_proxy;
+	}
+	orig_read_iter = file->f_op->read_iter;
+	if (orig_read_iter) {
+		fops_proxy.read_iter = read_iter_proxy;
+	}
+	// replace the file_operations
+	file->f_op = &fops_proxy;
+
+	return;
+}
+
+// NOTE: https://github.com/tiann/KernelSU/commit/df640917d11dd0eff1b34ea53ec3c0dc49667002
+// - added 260110, seems needed for A17
+
+#define STAT_NATIVE 0
+#define STAT_STAT64 1
+
+static __always_inline void ksu_common_newfstat_ret(unsigned long fd_long, void **statbuf_ptr, const int type)
+{
+	
+	if (!ksu_vfs_read_hook) {
+		return;
+	}
+
+	if (!is_init(get_current_cred()))
+		return;
+
+	struct file *file = fget(fd_long);
+	if (!file)
+		return;
+
+	if (!is_init_rc(file)) {
+		fput(file);
+		return;
+	}
+	fput(file);
+
+	pr_info("%s: stat init.rc \n", __func__);
+
+	uintptr_t statbuf_ptr_local = (uintptr_t)*(void **)statbuf_ptr;
+	void __user *statbuf = (void __user *)statbuf_ptr_local;
+	if (!statbuf)
+		return;
+
+	void __user *st_size_ptr;
+	long size, new_size;
+	size_t len;
+
+	st_size_ptr = statbuf + offsetof(struct stat, st_size);
+	len = sizeof(long);
+
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+	if (type) {
+		st_size_ptr = statbuf + offsetof(struct stat64, st_size);
+		len = sizeof(long long);
+	}
+#endif
+
+	if (copy_from_user(&size, st_size_ptr, len)) {
+		pr_info("%s: read statbuf 0x%lx failed \n", __func__, (unsigned long)st_size_ptr);
+		return;
+	}
+
+	new_size = size + ksu_rc_len;
+	pr_info("%s: adding ksu_rc_len: %ld -> %ld \n", __func__, size, new_size);
+		
+	if (!copy_to_user(st_size_ptr, &new_size, len))
+		pr_info("%s: added ksu_rc_len \n", __func__);
+	else
+		pr_info("%s: add ksu_rc_len failed: statbuf 0x%lx \n", __func__, (unsigned long)st_size_ptr);
+	
+	return;
+}
+
+void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr)
+{
+	unsigned long fd_long = (unsigned long)*fd;
+
+	// native
+	ksu_common_newfstat_ret(fd_long, (void **)statbuf_ptr, STAT_NATIVE);
+}
+
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr)
+{
+	unsigned long fd_long = (unsigned long)*fd;
+
+	// 32-bit call uses this!
+	ksu_common_newfstat_ret(fd_long, (void **)statbuf_ptr, STAT_STAT64);
+}
+#endif
 
 static unsigned int volumedown_pressed_count = 0;
 
