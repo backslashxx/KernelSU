@@ -436,29 +436,16 @@ int ksu_handle_initrc(struct file **file_ptr)
 	return 0;
 }
 
-// for manual hooks
+// dummies for manual hooks
+__attribute__((deprecated))
 int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *count_ptr, loff_t **pos)
 {
-
-	if (!ksu_vfs_read_hook)
-		return 0;
-
-	ksu_handle_initrc(file_ptr);
 	return 0;
 }
 
+__attribute__((deprecated))
 int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_ptr)
 {
-	if (!ksu_vfs_read_hook)
-		return 0;
-
-	struct file *file = fget(fd);
-	if (!file) {
-		return 0;
-	}
-
-	ksu_handle_initrc(&file);
-	fput(file);
 	return 0;
 }
 
