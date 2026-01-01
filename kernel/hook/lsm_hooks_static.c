@@ -78,6 +78,45 @@ asmlinkage long hook_armeabi_setresuid(const struct pt_regs *regs)
 }
 #endif
 
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
+#ifdef CONFIG_COMPAT
+#define __ARMEABI_read		3
+extern long __arm64_sys_read(const struct pt_regs *regs);
+static syscall_fn_t armeabi_read __read_mostly = nullptr;
+asmlinkage long hook_armeabi_read(const struct pt_regs *regs)
+{
+	unsigned int fd = (unsigned int)regs->regs[0];	
+
+	ksu_handle_sys_read_fd(fd);
+	return __arm64_sys_read(regs);
+}
+#endif // CONFIG_COMPAT
+#define __AARCH64_read		63
+extern long __arm64_sys_read(const struct pt_regs *regs);
+static syscall_fn_t aarch64_read __read_mostly = nullptr;
+asmlinkage long hook_aarch64_read(const struct pt_regs *regs)
+{
+	unsigned int fd = (unsigned int)regs->regs[0];
+
+	ksu_handle_sys_read_fd(fd);
+	return __arm64_sys_read(regs);
+}
+static int ksu_syscall_table_restore(void *data)
+{
+	set_user_nice(current, 19); // low prio
+loop_start:
+	msleep(1000);
+	if (*(volatile bool *)&ksu_vfs_read_hook)
+		goto loop_start;
+
+#if defined(CONFIG_COMPAT)
+	restore_syscall((void *)&armeabi_read, __ARMEABI_read, (void *)hook_armeabi_read, compat_sct);
+#endif
+	restore_syscall((void *)&aarch64_read, __AARCH64_read, (void *)hook_aarch64_read, native_sct);
+	return 0;
+}
+#endif // !CONFIG_KSU_TAMPER_SYSCALL_TABLE && !CONFIG_KSU_HACK_ARM64_BRANCH_LINK
+
 static void __init ksu_lsm_hook_init(void)
 {
 	int ret;
@@ -131,5 +170,15 @@ rename_hook_done:
 	#endif
 	} else
 		pr_info("LSM: security_task_fix_setuid: ret %d \n", ret);
+
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
+#ifdef CONFIG_COMPAT
+	replace_syscall((void *)&armeabi_read, __ARMEABI_read, (void *)hook_armeabi_read, compat_sct);
+#endif
+	replace_syscall((void *)&aarch64_read, __AARCH64_read, (void *)hook_aarch64_read, native_sct);
+	kthread_run(ksu_syscall_table_restore, NULL, "unhook");
+#endif // !CONFIG_KSU_TAMPER_SYSCALL_TABLE && !CONFIG_KSU_HACK_ARM64_BRANCH_LINK
+
+
 
 }
