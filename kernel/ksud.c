@@ -332,15 +332,17 @@ append_ksu_rc:
 	return ret;
 }
 
-int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *count_ptr, loff_t **pos)
+
+int ksu_handle_initrc(struct file **file_ptr)
 {
+	struct file *file;
 
 	if (!ksu_vfs_read_hook) {
 		return 0;
 	}
 
-	struct file *file;
-	size_t count;
+	if (!is_init(get_current_cred()))
+		return 0;
 
 	if (strcmp(current->comm, "init")) {
 		// we are only interest in `init` process
@@ -383,10 +385,8 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *c
 
 	// now we can sure that the init process is reading
 	// `/system/etc/init/init.rc`
-	count = *count_ptr;
 
-	pr_info("vfs_read: %s, comm: %s, count: %zu, rc_count: %zu\n", dpath,
-			current->comm, count, ksu_rc_len);
+	pr_info("vfs_read: %s, comm: %s, rc_count: %zu\n", dpath, current->comm, ksu_rc_len);
 
 	// Now we need to proxy the read and modify the result!
 	// But, we can not modify the file_operations directly, because it's in read-only memory.
@@ -408,15 +408,17 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *c
 	return 0;
 }
 
+// working dummies for manual hooks
+// __attribute__((deprecated))
+int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *count_ptr, loff_t **pos)
+{
+	return 0;
+}
+
+// __attribute__((deprecated))
 int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_ptr)
 {
-	struct file *file = fget(fd);
-	if (!file) {
-		return 0;
-	}
-	int result = ksu_handle_vfs_read(&file, buf_ptr, count_ptr, NULL);
-	fput(file);
-	return result;
+	return 0;
 }
 
 static unsigned int volumedown_pressed_count = 0;
