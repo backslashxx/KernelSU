@@ -93,6 +93,27 @@ static int ksu_bprm_check(struct linux_binprm *bprm)
 	return security_bprm_check(bprm);
 }
 
+// vfs_read, as security_file_permission is a bit spotty to hook!
+extern ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos);
+static ssize_t ksu_vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+{
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_install_rc_hook(file);
+#endif
+
+	return vfs_read(file, buf, count, pos);
+}
+
+extern int security_file_permission(struct file *file, int mask);
+static int ksu_security_file_permission(struct file *file, int mask)
+{
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_install_rc_hook(file);
+
+	return security_file_permission(file, mask);
+}
+
 static void __init ksu_core_init(void)
 {
 	int ret;
@@ -136,6 +157,23 @@ rename_hook_done:
 	if (ret)
 		ret = arm64_bl_patch(ksu_kallsyms_lookup_name("exec_binprm"), 256 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_bprm_check);
 	pr_info("lsm_hijack: security_bprm_check: ret %d \n", ret);
+
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	symbol_addr = ksu_kallsyms_lookup_name("vfs_read");
+	ret = arm64_bl_patch(ksu_kallsyms_lookup_name("ksys_read"), 64 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_read);
+	if (ret)
+		ret = arm64_bl_patch(ksu_kallsyms_lookup_name("__arm64_sys_read"), 64 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_read);
+	pr_info("lsm_hijack: ksys_read: ret %d \n", ret);
+	if (!ret)
+		goto read_hook_done;
+
+	symbol_addr = ksu_kallsyms_lookup_name("security_file_permission");
+	ret = arm64_bl_patch(ksu_kallsyms_lookup_name("rw_verify_area"), 64 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_security_file_permission);
+	pr_info("lsm_hijack: rw_verify_area: ret %d \n", ret);
+
+read_hook_done:
+	;
+#endif
 
 #undef ksu_kallsyms_lookup_name
 }
