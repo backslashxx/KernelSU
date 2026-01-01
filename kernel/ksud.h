@@ -17,6 +17,9 @@ int nuke_ext4_sysfs(const char* mnt);
 bool ksu_execveat_hook __read_mostly;
 static noinline int ksu_handle_pre_ksud(const char *filename);
 
+bool ksu_vfs_read_hook __read_mostly;
+static noinline void ksu_install_rc_hook(struct file *file);
+
 extern u32 ksu_file_sid;
 extern bool ksu_module_mounted;
 extern bool ksu_boot_completed;
