@@ -372,6 +372,9 @@ int ksu_handle_initrc(struct file **file_ptr)
 {
 	struct file *file;
 
+	if (!is_init(get_current_cred()))
+		return 0;
+
 	if (strcmp(current->comm, "init")) {
 		// we are only interest in `init` process
 		return 0;
