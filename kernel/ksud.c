@@ -371,7 +371,6 @@ append_ksu_rc:
 int ksu_handle_initrc(struct file **file_ptr)
 {
 	struct file *file;
-	size_t count;
 
 	if (strcmp(current->comm, "init")) {
 		// we are only interest in `init` process
@@ -414,10 +413,8 @@ int ksu_handle_initrc(struct file **file_ptr)
 
 	// now we can sure that the init process is reading
 	// `/system/etc/init/init.rc`
-	count = *count_ptr;
 
-	pr_info("vfs_read: %s, comm: %s, count: %zu, rc_count: %zu\n", dpath,
-			current->comm, count, ksu_rc_len);
+	pr_info("vfs_read: %s, comm: %s, rc_count: %zu\n", dpath, current->comm, ksu_rc_len);
 
 	// Now we need to proxy the read and modify the result!
 	// But, we can not modify the file_operations directly, because it's in read-only memory.
