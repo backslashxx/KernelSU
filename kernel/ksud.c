@@ -367,13 +367,9 @@ append_ksu_rc:
 }
 #endif
 
-int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *count_ptr, loff_t **pos)
+
+int ksu_handle_initrc(struct file **file_ptr)
 {
-
-	if (!ksu_vfs_read_hook) {
-		return 0;
-	}
-
 	struct file *file;
 	size_t count;
 
@@ -443,15 +439,30 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *c
 	return 0;
 }
 
+// for manual hooks
+int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *count_ptr, loff_t **pos)
+{
+
+	if (!ksu_vfs_read_hook)
+		return 0;
+
+	ksu_handle_initrc(file_ptr);
+	return 0;
+}
+
 int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_ptr)
 {
+	if (!ksu_vfs_read_hook)
+		return 0;
+
 	struct file *file = fget(fd);
 	if (!file) {
 		return 0;
 	}
-	int result = ksu_handle_vfs_read(&file, buf_ptr, count_ptr, NULL);
+
+	ksu_handle_initrc(&file);
 	fput(file);
-	return result;
+	return 0;
 }
 
 static unsigned int volumedown_pressed_count = 0;
