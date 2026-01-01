@@ -56,6 +56,25 @@ static int ksu_bprm_check(struct linux_binprm *bprm)
 	return security_bprm_check(bprm);
 }
 
+// vfs_read, as security_file_permission is a bit spotty to hook!
+extern ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos);
+static ssize_t ksu_vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+{
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_install_rc_hook(file);
+
+	return vfs_read(file, buf, count, pos);
+}
+
+extern int security_file_permission(struct file *file, int mask);
+static int ksu_security_file_permission(struct file *file, int mask)
+{
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_install_rc_hook(file);
+
+	return security_file_permission(file, mask);
+}
+
 static void __init ksu_core_init(void)
 {
 	int ret;
@@ -103,11 +122,44 @@ skip_bprm1:
 	if (!ret)
 		goto bprm_done;
 skip_bprm2:
+	ret = -ENXIO;
 	target_callsite = kallsyms_lookup_retry("exec_binprm");
 	if (!target_callsite)
 		goto bprm_done;
 	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 256 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_bprm_check);
 bprm_done:
 	pr_info("lsm_hijack: security_bprm_check: ret %d \n", ret);
+
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
+	symbol_addr = kallsyms_lookup_retry("vfs_read");
+	if (!symbol_addr)
+		goto skip_read2;
+	target_callsite = kallsyms_lookup_retry("__arm64_sys_read");
+	if (!target_callsite)
+		goto skip_read1;
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_vfs_read);
+	if (!ret)
+		goto read_hook_done;
+skip_read1:
+	target_callsite = kallsyms_lookup_retry("ksys_read");
+	if (!target_callsite)
+		goto skip_read2;
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_vfs_read);
+	if (!ret)
+		goto read_hook_done;
+skip_read2:
+	ret = -ENXIO;
+	symbol_addr = kallsyms_lookup_retry("security_file_permission");
+	if (!symbol_addr)
+		goto read_hook_done;
+	target_callsite = kallsyms_lookup_retry("rw_verify_area");
+	if (!target_callsite)
+		goto read_hook_done;
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_security_file_permission);
+
+read_hook_done:
+	pr_info("lsm_hijack: security_file_permission: ret %d \n", ret);
+	;
+#endif
 
 }
