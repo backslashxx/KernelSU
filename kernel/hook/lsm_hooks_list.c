@@ -36,6 +36,15 @@ static __nocfi void ksu_bprm_committing_creds(struct linux_binprm *bprm)
 	bprm_committing_creds_fn(bprm); // NOTE: void LSM hook
 }
 
+static int (*file_permission_fn)(struct file *file, int mask) __read_mostly = NULL;
+static __nocfi int ksu_file_permission(struct file *file, int mask)
+{
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_install_rc_hook(file);
+
+	return file_permission_fn(file, mask);
+}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) || defined(KSU_COMPAT_SECURITY_ADD_HOOKS_V2)
 // reserved for setprocattr
 #endif
@@ -162,12 +171,32 @@ do {														\
 	ksu_hack_lsm_slot(&security_hook_heads.hook_name, &dummy_int, (uintptr_t)hook_name##_fn);		\
 } while (0)
 
+static int ksu_restore_file_permission(void *data)
+{
+	set_user_nice(current, 19); // low prio
+
+loop_start:
+	msleep(1000);
+	if (*(volatile bool *)&ksu_vfs_read_hook)
+		goto loop_start;
+
+	msleep(1000);
+
+	LSM_HACK_RESTORE(file_permission);
+	return 0;
+}
 
 static __init void ksu_lsm_hook_init(void)
 {
 	LSM_HACK_INIT(task_fix_setuid, ksu_task_fix_setuid);
 	LSM_HACK_INIT(inode_rename, ksu_inode_rename);
 	LSM_HACK_INIT(bprm_committing_creds, ksu_bprm_committing_creds);
+
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	LSM_HACK_INIT(file_permission, ksu_file_permission);
+	kthread_run(ksu_restore_file_permission, NULL, "kthread");
+#endif
+
 }
 
 static void __init ksu_core_init(void)
