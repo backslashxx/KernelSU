@@ -79,6 +79,18 @@ static __nocfi int ksu_bprm_check(struct linux_binprm *bprm)
 	return security_bprm_check(bprm);
 }
 
+// vfs_read, as security_file_permission is a bit spotty to hook!
+extern ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos);
+static __nocfi ssize_t ksu_vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+{
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_install_rc_hook(file);
+#endif
+
+	return vfs_read(file, buf, count, pos);
+}
+
 static void __init ksu_core_init(void)
 {
 	int ret;
@@ -108,5 +120,12 @@ static void __init ksu_core_init(void)
 	symbol_addr = kp_cfi_kallsyms_lookup_name("security_bprm_check");
 	ret = arm64_bl_patch(target_callsite, 256 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_bprm_check);
 	pr_info("lsm_hijack: security_bprm_check: ret %d \n", ret);
+
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	target_callsite = kp_cfi_kallsyms_lookup_name("ksys_read");
+	symbol_addr = kp_cfi_kallsyms_lookup_name("vfs_read");
+	ret = arm64_bl_patch(target_callsite, 64 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_read);
+	pr_info("lsm_hijack: ksys_read: ret %d \n", ret);
+#endif
 
 }
