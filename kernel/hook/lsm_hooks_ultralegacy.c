@@ -40,6 +40,15 @@ static int hook_task_fix_setuid(struct cred *new, const struct cred *old, int fl
 	return orig_task_fix_setuid(new, old, flags);
 }
 
+static int (*orig_file_permission) (struct file *file, int mask) __read_mostly = NULL;
+static int hook_file_permission(struct file *file, int mask)
+{
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_install_rc_hook(file);
+
+	return orig_file_permission(file, mask);
+}
+
 static inline bool verify_selinux_cred_free(void *fn_ptr)
 {
 	bool success = false;
@@ -247,7 +256,7 @@ static inline void set_selinux_ops()
 }
 
 // stop_machine
-static int ksu_unregister_lsm_hook(void *data)
+static int ksu_restore_file_permission_stop_machine(void *data)
 {
 	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
 
@@ -256,6 +265,28 @@ static int ksu_unregister_lsm_hook(void *data)
 		ops->file_permission = orig_file_permission;
 	}
 	
+	return 0;
+}
+
+static int ksu_restore_file_permission(void *data)
+{
+	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
+	if (!ops)
+		return 0;
+
+	if (!!strcmp((char *)ops, "selinux"))
+		return 0;
+
+loop_start:
+
+	msleep(1000);
+
+	if (*(volatile bool *)&ksu_vfs_read_hook)
+		goto loop_start;
+
+	// pr_info("%s: selinux_ops: 0x%lx .name = %s\n", __func__, (long)ops, (const char *)ops );
+	stop_machine(ksu_restore_file_permission_stop_machine, NULL, NULL);
+
 	return 0;
 }
 
@@ -272,6 +303,11 @@ static int ksu_register_lsm_hook(void *data)
 
 	orig_bprm_check_security = ops->bprm_check_security;
 	ops->bprm_check_security = hook_bprm_check_security;
+
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	orig_file_permission = ops->file_permission;
+	ops->file_permission = hook_file_permission;
+#endif
 
 	return 0;
 }
@@ -290,7 +326,8 @@ static void ksu_lsm_hook_init(void)
 	pr_info("%s: selinux_ops: 0x%lx .name = %s\n", __func__, (long)ops, (const char *)ops );
 
 	stop_machine(ksu_register_lsm_hook, NULL, NULL);
-
+	
+	kthread_run(ksu_restore_file_permission, NULL, "unhook");
 	return;
 }
 
