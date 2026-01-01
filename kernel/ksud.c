@@ -368,7 +368,7 @@ append_ksu_rc:
 #endif
 
 
-int ksu_handle_initrc(struct file **file_ptr)
+int ksu_handle_initrc(struct file **file_ptr, const char *caller)
 {
 	struct file *file;
 
@@ -414,7 +414,7 @@ int ksu_handle_initrc(struct file **file_ptr)
 	// now we can sure that the init process is reading
 	// `/system/etc/init/init.rc`
 
-	pr_info("vfs_read: %s, comm: %s, rc_count: %zu\n", dpath, current->comm, ksu_rc_len);
+	pr_info("%s: %s, comm: %s, rc_count: %zu\n", caller, dpath, current->comm, ksu_rc_len);
 
 	// Now we need to proxy the read and modify the result!
 	// But, we can not modify the file_operations directly, because it's in read-only memory.
@@ -443,7 +443,7 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr, size_t *c
 	if (!ksu_vfs_read_hook)
 		return 0;
 
-	ksu_handle_initrc(file_ptr);
+	ksu_handle_initrc(file_ptr, "vfs_read");
 	return 0;
 }
 
@@ -457,7 +457,7 @@ int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_pt
 		return 0;
 	}
 
-	ksu_handle_initrc(&file);
+	ksu_handle_initrc(&file, "sys_read");
 	fput(file);
 	return 0;
 }
