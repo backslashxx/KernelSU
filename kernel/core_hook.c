@@ -250,16 +250,14 @@ LSM_HANDLER_TYPE ksu_bprm_check(struct linux_binprm *bprm)
 }
 
 extern bool ksu_vfs_read_hook __read_mostly;
-extern int ksu_handle_initrc(struct file **file_ptr, const char *caller);
+extern int ksu_handle_initrc(struct file **file_ptr);
 
-// file permission is earlier and abi is same 3.0 ~ 6.19
-// file_open changes abi
 int ksu_file_permission(struct file *file, int mask)
 {
 	if (!ksu_vfs_read_hook)
 		return 0;
 
-	ksu_handle_initrc(&file, "security_file_permission");
+	ksu_handle_initrc(&file);
 
 	return 0;
 }
