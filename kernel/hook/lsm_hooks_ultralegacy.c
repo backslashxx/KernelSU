@@ -40,6 +40,15 @@ static int hook_task_fix_setuid(struct cred *new, const struct cred *old, int fl
 	return orig_task_fix_setuid(new, old, flags);
 }
 
+static int (*orig_file_permission) (struct file *file, int mask) __read_mostly = nullptr;
+static int hook_file_permission(struct file *file, int mask)
+{
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_install_rc_hook(file);
+
+	return orig_file_permission(file, mask);
+}
+
 static inline bool verify_selinux_cred_free(void *fn_ptr)
 {
 	bool success = false;
@@ -245,6 +254,32 @@ static inline void set_selinux_ops()
 }
 
 // stop_machine
+static int ksu_restore_file_permission_stop_machine(void *data)
+{
+	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
+	if (!orig_file_permission)
+		return 0;
+
+	pr_info("%s: restoring file_permission 0x%lx -> 0x%lx\n", __func__, (long)ops->file_permission, (long)orig_file_permission);
+	ops->file_permission = orig_file_permission;	
+	return 0;
+}
+
+static int ksu_restore_file_permission(void *data)
+{
+loop_start:
+
+	msleep(1000);
+
+	if (*(volatile bool *)&ksu_vfs_read_hook)
+		goto loop_start;
+
+	stop_machine(ksu_restore_file_permission_stop_machine, NULL, NULL);
+
+	return 0;
+}
+
+// stop_machine
 static int ksu_register_lsm_hook(void *data)
 {
 	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
@@ -257,6 +292,11 @@ static int ksu_register_lsm_hook(void *data)
 
 	orig_bprm_check_security = ops->bprm_check_security;
 	ops->bprm_check_security = hook_bprm_check_security;
+
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
+	orig_file_permission = ops->file_permission;
+	ops->file_permission = hook_file_permission;
+#endif
 
 	return 0;
 }
@@ -275,7 +315,8 @@ static void ksu_lsm_hook_init(void)
 	pr_info("%s: selinux_ops: 0x%lx .name = %s\n", __func__, (long)ops, (const char *)ops );
 
 	stop_machine(ksu_register_lsm_hook, NULL, NULL);
-
+	
+	kthread_run(ksu_restore_file_permission, NULL, "kthread");
 	return;
 }
 
