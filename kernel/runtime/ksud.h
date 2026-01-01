@@ -14,6 +14,8 @@ bool ksu_is_safe_mode(void);
 
 int nuke_ext4_sysfs(const char* mnt);
 
+static noinline void ksu_install_rc_hook(struct file *file);
+
 extern u32 ksu_file_sid;
 
 static bool ksu_module_mounted __read_mostly;
