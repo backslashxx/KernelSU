@@ -67,6 +67,10 @@
 #include "extras.c"
 #endif
 
+#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+#include "sycall_hook_manager_legacy.c"
+#endif
+
 struct cred* ksu_cred;
 
 extern void ksu_supercalls_init();
@@ -137,6 +141,10 @@ int __init kernelsu_init(void)
 	ksu_ksud_init();
 
 	ksu_file_wrapper_init();
+
+#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+	ksu_syscall_table_hook_init();
+#endif
 
 #ifdef CONFIG_KSU_KPROBES_KSUD
 	kp_ksud_init();
