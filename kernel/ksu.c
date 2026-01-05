@@ -94,6 +94,14 @@
 #include "selinux/sepolicy.c"
 #include "selinux/rules.c"
 
+#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+#ifdef CONFIG_ARM64
+	#include "hook/syscall_table_hook_arm64.c"
+#elif defined(CONFIG_ARM)
+	#include "hook/syscall_table_hook_arm.c"
+#endif
+#endif /* CONFIG_KSU_TAMPER_SYSCALL_TABLE */
+
 // __weak fn's
 #include "kernel_compat.c"
 
@@ -135,6 +143,10 @@ static int __init kernelsu_init(void)
 	ksu_ksud_init();
 
 	ksu_file_wrapper_init();
+
+#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+	ksu_syscall_table_hook_init();
+#endif
 
 	return 0;
 }
