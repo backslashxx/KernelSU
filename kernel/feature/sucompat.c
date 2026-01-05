@@ -177,7 +177,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 
 // sys_execve, compat_sys_execve
 // NOTE: not offerred on manual hooks as do_execve is better
-static inline int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user, void *argv, void *envp, int *flags)
+static __always_inline int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user, void *argv, void *envp, int *flags)
 {
 	sys_execve_escape_ksud((void *)filename_user);
 
