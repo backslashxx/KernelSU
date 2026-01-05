@@ -81,6 +81,14 @@
 #include "selinux/sepolicy.c"
 #include "selinux/rules.c"
 
+#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+#ifdef CONFIG_ARM64
+	#include "hook/syscall_table_hook_arm64.c"
+#elif defined(CONFIG_ARM)
+	#include "hook/syscall_table_hook_arm.c"
+#endif
+#endif /* CONFIG_KSU_TAMPER_SYSCALL_TABLE */
+
 // __weak fn's
 #include "kernel_compat.c"
 
