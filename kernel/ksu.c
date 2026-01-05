@@ -81,6 +81,18 @@
 #include "selinux/sepolicy.c"
 #include "selinux/rules.c"
 
+#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+#ifdef CONFIG_ARM64
+	#include "hook/syscall_table_hook_arm64.c"
+#elif defined(CONFIG_ARM)
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION (3, 7, 0)
+	#include "hook/syscall_table_hook_arm.c"
+	#else
+	#include "hook/syscall_table_hook_arm_old.c"
+	#endif
+#endif
+#endif /* CONFIG_KSU_TAMPER_SYSCALL_TABLE */
+
 // __weak fn's
 #include "kernel_compat.c"
 
