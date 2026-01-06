@@ -140,4 +140,8 @@ int ksu_install_fd(void);
 
 void ksu_supercalls_init(void);
 void ksu_supercalls_exit(void);
+
+// extensions
+#define CHANGE_MANAGER_UID 10006
+
 #endif // __KSU_H_SUPERCALLS
