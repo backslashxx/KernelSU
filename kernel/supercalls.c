@@ -649,18 +649,22 @@ static void ksu_install_fd_tw_func(struct callback_head *cb)
     kfree(tw);
 }
 
-static int reboot_handler_pre(struct kprobe *p, struct pt_regs *regs)
+// downstream: make sure to pass arg as reference, this can allow us to extend things.
+static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
 {
-    struct pt_regs *real_regs = PT_REAL_REGS(regs);
-    int magic1 = (int)PT_REGS_PARM1(real_regs);
-    int magic2 = (int)PT_REGS_PARM2(real_regs);
-    unsigned long arg4;
+
+    if (magic1 != KSU_INSTALL_MAGIC1)
+    	return 0;
+
+    pr_info("sys_reboot: intercepted call! magic: 0x%x id: %d\n", magic1, magic2);
+
+    // arg4 = (unsigned long)PT_REGS_SYSCALL_PARM4(real_regs);
+    // downstream: dereference arg as arg4 so we can be inline to upstream
+    void __user *arg4 = (void __user *)*arg;
 
     // Check if this is a request to install KSU fd
-    if (magic1 == KSU_INSTALL_MAGIC1 && magic2 == KSU_INSTALL_MAGIC2) {
+    if (magic2 == KSU_INSTALL_MAGIC2) {
         struct ksu_install_fd_tw *tw;
-
-        arg4 = (unsigned long)PT_REGS_SYSCALL_PARM4(real_regs);
 
         tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
         if (!tw)
@@ -675,7 +679,21 @@ static int reboot_handler_pre(struct kprobe *p, struct pt_regs *regs)
         }
     }
 
+    // downstream: extensions go here!
+
     return 0;
+}
+
+static int reboot_handler_pre(struct kprobe *p, struct pt_regs *regs)
+{
+    struct pt_regs *real_regs = PT_REAL_REGS(regs);
+    int magic1 = (int)PT_REGS_PARM1(real_regs);
+    int magic2 = (int)PT_REGS_PARM2(real_regs);
+    int cmd = (int)PT_REGS_PARM3(real_regs);
+    void __user **arg = (void __user **)&PT_REGS_SYSCALL_PARM4(real_regs);
+
+    return ksu_handle_sys_reboot(magic1, magic2, cmd, arg);
+
 }
 
 static struct kprobe reboot_kp = {
