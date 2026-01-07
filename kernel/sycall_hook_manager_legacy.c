@@ -83,15 +83,24 @@ static void read_and_replace_syscall(syscall_fn_t *old_ptr, unsigned long syscal
 
 	// so technically its just a ** / *sys_call_table[];
 	syscall_fn_t *syscall_addr = (syscall_fn_t *)&sys_call_table[syscall_nr];
+
+	vm_unmap_aliases();
 	set_memory_rw(((unsigned long)syscall_addr), 1); // unlock whole page
+	
+	flush_tlb_kernel_range((unsigned long)syscall_addr, (unsigned long)syscall_addr + PAGE_SIZE);
 
-	barrier();
+	smp_mb();
 	*old_ptr = FORCE_VOLATILE(*syscall_addr);
-	barrier();
+	smp_mb();
 	FORCE_VOLATILE(*syscall_addr) = (syscall_fn_t)new_ptr;
-	barrier();
+	smp_mb();
 
+	vm_unmap_aliases();
 	set_memory_ro(((unsigned long)syscall_addr), 1); // relock it
+	
+	flush_tlb_kernel_range((unsigned long)syscall_addr, (unsigned long)syscall_addr + PAGE_SIZE);
+
+	smp_mb();
 }
 
 #else // 4.19+
