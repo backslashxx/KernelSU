@@ -6,6 +6,8 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/version.h>
+#include <linux/kthread.h>
+#include <linux/input.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 #include <linux/input-event-codes.h>
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
@@ -492,34 +494,14 @@ int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_pt
 	return 0;
 }
 
-static unsigned int volumedown_pressed_count = 0;
-
-static bool is_volumedown_enough(unsigned int count)
+//__attribute__((deprecated))
+int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value)
 {
-	return count >= 3;
-}
-
-int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
-				  int *value)
-{
-	if (!ksu_input_hook) {
-		return 0;
-	}
-
-	if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
-		int val = *value;
-		pr_info("KEY_VOLUMEDOWN val: %d\n", val);
-		if (val) {
-			// key pressed, count it
-			volumedown_pressed_count += 1;
-			if (is_volumedown_enough(volumedown_pressed_count)) {
-				stop_input_hook();
-			}
-		}
-	}
-
 	return 0;
 }
+
+static unsigned int volume_pressed_count = 0;
+#define VOLUME_PRESS_THRESHOLD_COUNT 3
 
 bool ksu_is_safe_mode()
 {
@@ -532,15 +514,125 @@ bool ksu_is_safe_mode()
 	// stop hook first!
 	stop_input_hook();
 
-	pr_info("volumedown_pressed_count: %d\n", volumedown_pressed_count);
-	if (is_volumedown_enough(volumedown_pressed_count)) {
+	pr_info("volume_pressed_count: %d\n", volume_pressed_count);
+	if (volume_pressed_count >= VOLUME_PRESS_THRESHOLD_COUNT) {
 		// pressed over 3 times
-		pr_info("KEY_VOLUMEDOWN pressed max times, safe mode detected!\n");
+		pr_info("volume keys pressed max times, safe mode detected!\n");
 		safe_mode = true;
 		return true;
 	}
 
 	return false;
+}
+
+static void vol_detector_event(struct input_handle *handle, unsigned int type, unsigned int code, int value)
+{
+	if (!value)
+		return;
+	
+	if (type != EV_KEY)
+		return;
+	
+	if (code == KEY_VOLUMEDOWN)
+		pr_info("KEY_VOLUMEDOWN press detected!\n");
+
+	if (code == KEY_VOLUMEUP)
+		pr_info("KEY_VOLUMEUP press detected!\n");
+
+	volume_pressed_count++;
+	pr_info("volume_pressed_count: %d\n", volume_pressed_count);
+
+	if (volume_pressed_count >= VOLUME_PRESS_THRESHOLD_COUNT) {
+		pr_info("volume keys pressed max times, safe mode detected!\n");
+		stop_input_hook();
+	}
+}
+
+static int vol_detector_connect(struct input_handler *handler, struct input_dev *dev,
+					  const struct input_device_id *id)
+{
+	struct input_handle *handle;
+	int error;
+
+	handle = kzalloc(sizeof(struct input_handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+
+	handle->dev = dev;
+	handle->handler = handler;
+	handle->name = "ksu_handle_input";
+
+	error = input_register_handle(handle);
+	if (error)
+		goto err_free_handle;
+
+	error = input_open_device(handle);
+	if (error)
+		goto err_unregister_handle;
+
+	return 0;
+
+err_unregister_handle:
+	input_unregister_handle(handle);
+err_free_handle:
+	kfree(handle);
+	return error;
+}
+
+static const struct input_device_id vol_detector_ids[] = { 
+	// we add key volume up so that
+	// 1. if you have broken volume down you get shit
+	// 2. we can make sure to trigger only ksu safemode, not android's safemode.
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT | INPUT_DEVICE_ID_MATCH_KEYBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { [BIT_WORD(KEY_VOLUMEUP)] = BIT_MASK(KEY_VOLUMEUP) },
+	},
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT | INPUT_DEVICE_ID_MATCH_KEYBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { [BIT_WORD(KEY_VOLUMEDOWN)] = BIT_MASK(KEY_VOLUMEDOWN) },
+	},
+	{ }
+};
+
+static void vol_detector_disconnect(struct input_handle *handle)
+{
+	input_close_device(handle);
+	input_unregister_handle(handle);
+	kfree(handle);
+}
+
+MODULE_DEVICE_TABLE(input, vol_detector_ids);
+
+static struct input_handler vol_detector_handler = {
+        .event =	vol_detector_event,
+        .connect =	vol_detector_connect,
+        .disconnect =	vol_detector_disconnect,
+        .name =		"ksu",
+        .id_table =	vol_detector_ids,
+};
+
+static int vol_detector_init()
+{
+	pr_info("vol_detector: init\n");
+	return input_register_handler(&vol_detector_handler);
+}
+
+static void vol_detector_exit_fn()
+{
+	pr_info("vol_detector: exit\n");
+	input_unregister_handler(&vol_detector_handler);
+}
+
+static struct task_struct *unregister_input_kthr = NULL;
+static void vol_detector_exit()
+{
+	unregister_input_kthr = kthread_run(vol_detector_exit_fn, NULL, "unreg_input");
+	if (IS_ERR(unregister_input_kthr)) {
+		unregister_input_kthr = NULL;
+		return;
+	}
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0) // is_ksu_transition
@@ -605,10 +697,12 @@ static void stop_input_hook()
 	if (!ksu_input_hook) { return; }
 	ksu_input_hook = false;
 	pr_info("stop input_hook\n");
+	
+	vol_detector_exit();
 }
 
 void ksu_ksud_init()
 {
-
+	vol_detector_init();
 }
 
