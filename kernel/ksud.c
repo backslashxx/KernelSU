@@ -17,6 +17,7 @@
 #include <linux/namei.h>
 #include <linux/workqueue.h>
 #include <linux/uio.h>
+#include <linux/input.h>
 
 #include "manager.h"
 #include "allowlist.h"
@@ -60,7 +61,6 @@ static void stop_input_hook();
 
 static struct work_struct stop_vfs_read_work;
 static struct work_struct stop_execve_hook_work;
-static struct work_struct stop_input_hook_work;
 
 void on_post_fs_data(void)
 {
@@ -435,30 +435,8 @@ static int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
     return result;
 }
 
-static unsigned int volumedown_pressed_count = 0;
-
-static bool is_volumedown_enough(unsigned int count)
-{
-    return count >= 3;
-}
-
-int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
-                                  int *value)
-{
-    if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
-        int val = *value;
-        pr_info("KEY_VOLUMEDOWN val: %d\n", val);
-        if (val) {
-            // key pressed, count it
-            volumedown_pressed_count += 1;
-            if (is_volumedown_enough(volumedown_pressed_count)) {
-                stop_input_hook();
-            }
-        }
-    }
-
-    return 0;
-}
+static unsigned int volume_pressed_count = 0;
+#define VOLUME_PRESS_THRESHOLD_COUNT 3
 
 bool ksu_is_safe_mode()
 {
@@ -471,15 +449,117 @@ bool ksu_is_safe_mode()
     // stop hook first!
     stop_input_hook();
 
-    pr_info("volumedown_pressed_count: %d\n", volumedown_pressed_count);
-    if (is_volumedown_enough(volumedown_pressed_count)) {
+    pr_info("volume_pressed_count: %d\n", volume_pressed_count);
+    if (volume_pressed_count >= VOLUME_PRESS_THRESHOLD_COUNT) {
         // pressed over 3 times
-        pr_info("KEY_VOLUMEDOWN pressed max times, safe mode detected!\n");
+        pr_info("KEY_VOLUMEDOWN / KEY_VOLUMEUP pressed max times, safe mode detected!\n");
         safe_mode = true;
         return true;
     }
 
     return false;
+}
+
+static void vol_detector_event(struct input_handle *handle, unsigned int type, unsigned int code, int value)
+{
+    if (!value)
+        return;
+    
+    if (type != EV_KEY)
+        return;
+    
+    if (code == KEY_VOLUMEDOWN)
+        pr_info("KEY_VOLUMEDOWN press detected!\n");
+
+    if (code == KEY_VOLUMEUP)
+        pr_info("KEY_VOLUMEUP press detected!\n");
+
+    volume_pressed_count++;
+    pr_info("volume_pressed_count: %d\n", volume_pressed_count);
+
+    // yeah this fucks up, seems unreg in the same context is an issue 
+    // but then again, tehres no need to unreg here, just let on_post_fs_data do it
+    //if (volume_pressed_count >= 3) {
+    //    pr_info("KEY_VOLUMEDOWN pressed max times, safe mode detected!\n");
+    //    stop_input_hook();
+    //}
+}
+
+static int vol_detector_connect(struct input_handler *handler, struct input_dev *dev,
+                      const struct input_device_id *id)
+{
+    struct input_handle *handle;
+    int error;
+
+    handle = kzalloc(sizeof(struct input_handle), GFP_KERNEL);
+    if (!handle)
+        return -ENOMEM;
+
+    handle->dev = dev;
+    handle->handler = handler;
+    handle->name = "ksu_handle_input";
+
+    error = input_register_handle(handle);
+    if (error)
+        goto err_free_handle;
+
+    error = input_open_device(handle);
+    if (error)
+        goto err_unregister_handle;
+
+    return 0;
+
+err_unregister_handle:
+    input_unregister_handle(handle);
+err_free_handle:
+    kfree(handle);
+    return error;
+}
+
+static const struct input_device_id vol_detector_ids[] = { 
+    // we add key volume up so that
+    // 1. if you have broken volume down you get shit
+    // 2. we can make sure to trigger only ksu safemode, not android's safemode.
+    {
+        .flags = INPUT_DEVICE_ID_MATCH_EVBIT | INPUT_DEVICE_ID_MATCH_KEYBIT,
+        .evbit = { BIT_MASK(EV_KEY) },
+        .keybit = { [BIT_WORD(KEY_VOLUMEUP)] = BIT_MASK(KEY_VOLUMEUP) },
+    },
+    {
+        .flags = INPUT_DEVICE_ID_MATCH_EVBIT | INPUT_DEVICE_ID_MATCH_KEYBIT,
+        .evbit = { BIT_MASK(EV_KEY) },
+        .keybit = { [BIT_WORD(KEY_VOLUMEDOWN)] = BIT_MASK(KEY_VOLUMEDOWN) },
+    },
+    { }
+};
+
+static void vol_detector_disconnect(struct input_handle *handle)
+{
+    input_close_device(handle);
+    input_unregister_handle(handle);
+    kfree(handle);
+}
+
+MODULE_DEVICE_TABLE(input, vol_detector_ids);
+
+static struct input_handler vol_detector_handler = {
+        .event =    vol_detector_event,
+        .connect =    vol_detector_connect,
+        .disconnect =    vol_detector_disconnect,
+        .name =        "ksu",
+        .id_table =    vol_detector_ids,
+};
+
+static int vol_detector_init()
+{
+    pr_info("vol_detector: init\n");
+    return input_register_handler(&vol_detector_handler);
+}
+
+static void vol_detector_exit()
+{
+    pr_info("vol_detector: exit\n");
+    input_unregister_handler(&vol_detector_handler);
 }
 
 static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
@@ -527,15 +607,6 @@ static int sys_read_handler_pre(struct kprobe *p, struct pt_regs *regs)
     return ksu_handle_sys_read(fd, buf_ptr, count_ptr);
 }
 
-static int input_handle_event_handler_pre(struct kprobe *p,
-                                          struct pt_regs *regs)
-{
-    unsigned int *type = (unsigned int *)&PT_REGS_PARM2(regs);
-    unsigned int *code = (unsigned int *)&PT_REGS_PARM3(regs);
-    int *value = (int *)&PT_REGS_CCALL_PARM4(regs);
-    return ksu_handle_input_handle_event(type, code, value);
-}
-
 static struct kprobe execve_kp = {
     .symbol_name = SYS_EXECVE_SYMBOL,
     .pre_handler = sys_execve_handler_pre,
@@ -546,11 +617,6 @@ static struct kprobe vfs_read_kp = {
     .pre_handler = sys_read_handler_pre,
 };
 
-static struct kprobe input_event_kp = {
-    .symbol_name = "input_event",
-    .pre_handler = input_handle_event_handler_pre,
-};
-
 static void do_stop_vfs_read_hook(struct work_struct *work)
 {
     unregister_kprobe(&vfs_read_kp);
@@ -559,11 +625,6 @@ static void do_stop_vfs_read_hook(struct work_struct *work)
 static void do_stop_execve_hook(struct work_struct *work)
 {
     unregister_kprobe(&execve_kp);
-}
-
-static void do_stop_input_hook(struct work_struct *work)
-{
-    unregister_kprobe(&input_event_kp);
 }
 
 static void stop_vfs_read_hook()
@@ -585,8 +646,8 @@ static void stop_input_hook()
         return;
     }
     input_hook_stopped = true;
-    bool ret = schedule_work(&stop_input_hook_work);
-    pr_info("unregister input kprobe: %d!\n", ret);
+
+    vol_detector_exit();
 }
 
 // ksud: module support
@@ -600,12 +661,10 @@ void ksu_ksud_init()
     ret = register_kprobe(&vfs_read_kp);
     pr_info("ksud: vfs_read_kp: %d\n", ret);
 
-    ret = register_kprobe(&input_event_kp);
-    pr_info("ksud: input_event_kp: %d\n", ret);
+    vol_detector_init();
 
     INIT_WORK(&stop_vfs_read_work, do_stop_vfs_read_hook);
     INIT_WORK(&stop_execve_hook_work, do_stop_execve_hook);
-    INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
 }
 
 void ksu_ksud_exit()
@@ -613,5 +672,4 @@ void ksu_ksud_exit()
     unregister_kprobe(&execve_kp);
     // this should be done before unregister vfs_read_kp
     // unregister_kprobe(&vfs_read_kp);
-    unregister_kprobe(&input_event_kp);
 }
