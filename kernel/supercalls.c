@@ -807,13 +807,13 @@ static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void 
         uint64_t u_pptr = 0;
         uint64_t u_ptr = 0;
 
-        pr_info("sys_reboot: ppptr: 0x%lx \n", ppptr);
+        pr_info("sys_reboot: ppptr: 0x%lx \n", (uintptr_t)ppptr);
 
         // arg here is ***, dereference to pull out **
         if (copy_from_user(&u_pptr, (void __user *)*ppptr, sizeof(u_pptr)))
             return 0;
 
-        pr_info("sys_reboot: u_pptr: 0x%lx \n", u_pptr);
+        pr_info("sys_reboot: u_pptr: 0x%lx \n", (uintptr_t)u_pptr);
 
         // now we got the __user **
         // we cannot dereference this as this is __user
@@ -821,7 +821,7 @@ static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void 
         if (copy_from_user(&u_ptr, (void __user *)u_pptr, sizeof(u_ptr)))
             return 0;
 
-        pr_info("sys_reboot: u_ptr: 0x%lx \n", u_ptr);
+        pr_info("sys_reboot: u_ptr: 0x%lx \n", (uintptr_t)u_ptr);
 
         // for release
         if (strncpy_from_user(release_buf, (char __user *)u_ptr, sizeof(release_buf)) < 0)
