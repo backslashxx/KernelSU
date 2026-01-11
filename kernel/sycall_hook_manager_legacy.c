@@ -2,14 +2,14 @@
 
 #define FORCE_VOLATILE(x) *(volatile typeof(x) *)&(x)
 
-// on 4.19+ its is no longer just a void *sys_call_table[]
-// it becomes syscall_fn_t sys_call_table[];
-// ref: https://github.com/wszxl516/syscall_hook/blob/master/src/custom_syscall.c
-
 // compiles but not tested!!
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 
 #error "syscall table tampering is probably broken on 4.19+ !!! unfixed! might fail!" // remove this shit if you really want it
+
+// on 4.19+ its is no longer just a void *sys_call_table[]
+// it becomes syscall_fn_t sys_call_table[];
+// ref: https://github.com/wszxl516/syscall_hook/blob/master/src/custom_syscall.c
 
 #if 0
 
@@ -96,6 +96,8 @@ static void read_and_replace_syscall(void *old_ptr, unsigned long syscall_nr, vo
 	smp_mb();
 }
 #endif
+
+void ksu_syscall_table_hook_init() { }
 
 #else // 4.19+
 
@@ -233,7 +235,6 @@ static void read_and_replace_syscall(void *old_ptr, unsigned long syscall_nr, vo
 	set_memory_ro(((unsigned long)syscall_addr), 1); // relock it
 	return;
 }
-#endif // 4.19+
 
 void ksu_syscall_table_hook_init()
 {
@@ -256,3 +257,5 @@ void ksu_syscall_table_hook_init()
 
 	preempt_enable();
 }
+
+#endif // 4.19+
