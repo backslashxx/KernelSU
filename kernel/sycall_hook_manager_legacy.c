@@ -148,10 +148,8 @@ static long hook_sys_newfstatat(int dfd, const char __user * filename, struct st
 static long (*old_newfstat)(unsigned int fd, struct stat __user * statbuf);
 static long hook_sys_newfstat(unsigned int fd, struct stat __user * statbuf)
 {
-	// rp-like handling
-
+	// we handle it like rp
 	long ret = old_newfstat(fd, statbuf);
-
 	ksu_handle_newfstat_ret(&fd, &statbuf);
 	return ret;
 }
@@ -195,6 +193,16 @@ static long hook_compat_fstatat64(int dfd, const char __user * filename, struct 
 {
 	ksu_handle_stat(&dfd, &filename, &flag);
 	return old_compat_fstatat64(dfd, filename, statbuf, flag);
+}
+
+#define __COMPAT_newfstat 108 // __NR_fstat
+static long (*old_compat_newfstat)(unsigned int fd, struct stat __user * statbuf);
+static long hook_compat_newfstat(unsigned int fd, struct stat __user * statbuf)
+{
+	// we handle it like rp
+	long ret = old_compat_newfstat(fd, statbuf);
+	ksu_compat_newfstat_ret(&fd, &statbuf);
+	return ret;
 }
 #endif
 
@@ -245,7 +253,7 @@ void ksu_syscall_table_hook_init()
 	read_and_replace_syscall((void *)&old_faccessat, __NATIVE_faccessat, &hook_sys_faccessat, sys_call_table);
 	read_and_replace_syscall((void *)&old_newfstatat, __NATIVE_newfstatat, &hook_sys_newfstatat, sys_call_table);
 	
-	// TODO: unhook this
+	// TODO: maybe unhook/restore ptr
 	read_and_replace_syscall((void *)&old_newfstat, __NATIVE_newfstat, &hook_sys_newfstat, sys_call_table);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) && defined(CONFIG_COMPAT)
@@ -253,6 +261,9 @@ void ksu_syscall_table_hook_init()
 	read_and_replace_syscall((void *)&old_compat_execve, __COMPAT_execve, &hook_compat_sys_execve, compat_sys_call_table);
 	read_and_replace_syscall((void *)&old_compat_faccessat, __COMPAT_faccessat, &hook_compat_faccessat, compat_sys_call_table);
 	read_and_replace_syscall((void *)&old_compat_fstatat64, __COMPAT_fstatat64, &hook_compat_fstatat64, compat_sys_call_table);
+
+	// TODO: maybe unhook/restore ptr
+	read_and_replace_syscall((void *)&old_compat_newfstat, __COMPAT_newfstat, &hook_compat_newfstat, compat_sys_call_table);
 #endif
 
 	preempt_enable();

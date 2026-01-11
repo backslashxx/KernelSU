@@ -469,7 +469,7 @@ void ksu_handle_initrc(struct file *file)
  *	}
  */
 
-void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr)
+static __always_inline void ksu_common_newfstat_ret(unsigned int *fd, void **statbuf_ptr, const bool is_compat)
 {
 	
 	if (!ksu_vfs_read_hook) {
@@ -499,6 +499,11 @@ void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr)
 	void __user *st_size_ptr = statbuf + offsetof(struct stat, st_size);
 	long size, new_size;
 
+#ifdef CONFIG_COMPAT
+	if (is_compat)
+		st_size_ptr = statbuf + offsetof(struct compat_stat, st_size); // compat stat
+#endif
+
 	if (copy_from_user(&size, st_size_ptr, sizeof(long))) {
 		pr_info("%s: read statbuf 0x%lx failed \n", __func__, (unsigned long)st_size_ptr);
 		return;
@@ -515,6 +520,22 @@ void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr)
 	return;
 
 }
+
+void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr)
+{
+	// native
+	return ksu_common_newfstat_ret(fd, (void **)statbuf_ptr, false);
+}
+
+#ifdef CONFIG_COMPAT
+void ksu_compat_newfstat_ret(unsigned int *fd, struct compat_stat __user **statbuf_ptr)
+{
+	// compat: is this even worth the trouble?
+	// only 32-on-64 can benefit, its questionable that init is on compat on A17
+	// this is BULLSHIT so lets do it
+	return ksu_common_newfstat_ret(fd, (void **)statbuf_ptr, true);
+}
+#endif
 
 // working dummies for manual hooks
 // __attribute__((deprecated))
