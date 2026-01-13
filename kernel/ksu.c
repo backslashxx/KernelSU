@@ -12,6 +12,7 @@
 #include <asm-generic/errno.h>
 #endif
 
+#define ksu_get_uid_t(x) *(unsigned int *)&(x)
 
 #include "allowlist.h"
 #include "apk_sign.h"

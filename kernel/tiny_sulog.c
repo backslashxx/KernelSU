@@ -55,10 +55,12 @@ void write_sulog(uint8_t sym)
 
 	unsigned int offset = sulog_index_next * sizeof(struct sulog_entry);
 	struct sulog_entry entry = {0};
+	
+	kuid_t current_uid = current_uid();
 
 	// WARNING!!! this is LE only!
 	entry.s_time = boottime_s_get();
-	entry.data = (uint32_t)current_uid().val;
+	entry.data = (uint32_t)ksu_get_uid_t(current_uid);
 	*((char *)&entry.data + 3) = sym;
 
 	// we can perform this write atomic on 64-bit
