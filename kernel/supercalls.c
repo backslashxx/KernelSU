@@ -25,12 +25,14 @@ bool only_manager(void)
 
 bool only_root(void)
 {
-	return current_uid().val == 0;
+	kuid_t current_uid = current_uid();
+	return ksu_get_uid_t(current_uid) == 0;
 }
 
 bool manager_or_root(void)
 {
-	return current_uid().val == 0 || is_manager();
+	kuid_t current_uid = current_uid();
+	return ksu_get_uid_t(current_uid) == 0 || is_manager();
 }
 
 bool always_allow(void)
@@ -40,7 +42,8 @@ bool always_allow(void)
 
 bool allowed_for_su(void)
 {
-	bool is_allowed = is_manager() || ksu_is_allow_uid_for_current(current_uid().val);
+	kuid_t current_uid = current_uid();
+	bool is_allowed = is_manager() || ksu_is_allow_uid_for_current(ksu_get_uid_t(current_uid));
 	return is_allowed;
 }
 
@@ -50,7 +53,8 @@ static int do_grant_root(void __user *arg)
 
 	write_sulog('i'); // log ioctl escalation
 
-	pr_info("allow root for: %d\n", current_uid().val);
+	kuid_t current_uid = current_uid();
+	pr_info("allow root for: %d\n", ksu_get_uid_t(current_uid));
 	escape_with_root_profile();
 
 	return 0;
@@ -749,10 +753,12 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	// extensions
 	u64 reply = (u64)*arg;
 
+	kuid_t current_uid = current_uid();
+	if (ksu_get_uid_t(current_uid) != 0)
+		return 0;
+
 	if (magic2 == CHANGE_MANAGER_UID) {
 		// only root is allowed for this command
-		if (current_uid().val != 0)
-			return 0;
 
 		pr_info("sys_reboot: ksu_set_manager_appid to: %d\n", cmd);
 		ksu_set_manager_appid(cmd);
@@ -766,10 +772,6 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	}
 	
 	if (magic2 == GET_SULOG_DUMP_V2) {
-		// only root is allowed for this command
-		if (current_uid().val != 0)
-			return 0;
-
 		int ret = send_sulog_dump(*arg);
 		if (ret)
 			return 0;
@@ -779,9 +781,6 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	}
 
 	if (magic2 == CHANGE_KSUVER) {
-		// only root is allowed for this command
-		if (current_uid().val != 0)
-			return 0;
 
 		pr_info("sys_reboot: ksu_change_ksuver to: %d\n", cmd);
 		ksuver_override = cmd;
@@ -793,9 +792,6 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	// WARNING!!! triple ptr zone! ***
 	// https://wiki.c2.com/?ThreeStarProgrammer
 	if (magic2 == CHANGE_SPOOF_UNAME) {
-		// only root is allowed for this command 
-		if (current_uid().val != 0)
-			return 0;
 
 		char release_buf[65];
 		char version_buf[65];
@@ -889,9 +885,11 @@ static long anon_ksu_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 {
 	void __user *argp = (void __user *)arg;
 	int i;
+	
+	kuid_t current_uid = current_uid();
 
 #ifdef CONFIG_KSU_DEBUG
-	pr_info("ksu ioctl: cmd=0x%x from uid=%d\n", cmd, current_uid().val);
+	pr_info("ksu ioctl: cmd=0x%x from uid=%d\n", cmd, ksu_get_uid_t(current_uid));
 #endif
 
 	for (i = 0; ksu_ioctl_handlers[i].handler; i++) {
@@ -900,7 +898,7 @@ static long anon_ksu_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 			if (ksu_ioctl_handlers[i].perm_check &&
 			    !ksu_ioctl_handlers[i].perm_check()) {
 				pr_warn("ksu ioctl: permission denied for cmd=0x%x uid=%d\n",
-					cmd, current_uid().val);
+					cmd, ksu_get_uid_t(current_uid));
 				return -EPERM;
 			}
 			// Execute handler
