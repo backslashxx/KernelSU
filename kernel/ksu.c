@@ -12,6 +12,9 @@
 #include <asm-generic/errno.h>
 #endif
 
+#include <linux/uidgid.h>
+
+#define FORCE_UID_T(x) *(unsigned int *)&(x)
 
 #include "allowlist.h"
 #include "apk_sign.h"
