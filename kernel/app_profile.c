@@ -126,23 +126,23 @@ static void escape_to_root(bool is_forced)
 		return;
 	}
 
-	if (!is_forced && cred->euid.val == 0) {
+	if (!is_forced && ksu_get_uid_t(cred->euid) == 0) {
 		pr_warn("Already root, don't escape!\n");
 		abort_creds(cred);
 		return;
 	}
 
-	ksu_get_root_profile(cred->uid.val, &profile);
+	ksu_get_root_profile(ksu_get_uid_t(cred->uid), &profile);
 
-	cred->uid.val = profile.uid;
-	cred->suid.val = profile.uid;
-	cred->euid.val = profile.uid;
-	cred->fsuid.val = profile.uid;
+	ksu_get_uid_t(cred->uid) = profile.uid;
+	ksu_get_uid_t(cred->suid) = profile.uid;
+	ksu_get_uid_t(cred->euid) = profile.uid;
+	ksu_get_uid_t(cred->fsuid) = profile.uid;
 
-	cred->gid.val = profile.gid;
-	cred->fsgid.val = profile.gid;
-	cred->sgid.val = profile.gid;
-	cred->egid.val = profile.gid;
+	ksu_get_uid_t(cred->gid) = profile.gid;
+	ksu_get_uid_t(cred->fsgid) = profile.gid;
+	ksu_get_uid_t(cred->sgid) = profile.gid;
+	ksu_get_uid_t(cred->egid) = profile.gid;
 	cred->securebits = 0;
 
 	BUILD_BUG_ON(sizeof(profile.capabilities.effective) != sizeof(kernel_cap_t));

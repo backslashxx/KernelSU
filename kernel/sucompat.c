@@ -76,7 +76,8 @@ static __always_inline bool is_su_allowed(const void **ptr_to_check)
 		return false;
 
 	// with seccomp check above, we can make this neutral
-	if (!ksu_is_allow_uid_for_current(current_uid().val))
+	kuid_t current_uid = current_uid();
+	if (!ksu_is_allow_uid_for_current( ksu_get_uid_t(current_uid) ))
 		return false;
 
 	// first check the pointer-to-pointer
