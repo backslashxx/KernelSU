@@ -41,6 +41,7 @@
 #include "feature/sucompat.h"
 #include "feature/sulog.h"
 #include "runtime/ksud.h"
+#include "runtime/ksud_escape.h"
 #include "sulog/event.h"
 #include "sulog/fd.h"
 
@@ -67,6 +68,7 @@
 #include "feature/sucompat.c"
 #include "feature/sulog.c"
 #include "runtime/ksud.c"
+#include "runtime/ksud_escape.c"
 
 #include "sulog/event.c"
 #include "sulog/fd.c"
