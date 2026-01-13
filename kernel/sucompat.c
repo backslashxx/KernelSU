@@ -67,6 +67,56 @@ static __always_inline bool is_su_allowed(const void **ptr_to_check)
 	return true;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+static inline void sys_execve_escape_ksud(const char __user **filename_user)
+{
+	if (likely(ksu_boot_completed))
+		return;
+
+	// see if its init
+	if (!is_init(get_current_cred()))
+		return;
+
+	const char ksud_path[] = KSUD_PATH;
+	char path[sizeof(ksud_path)];
+
+	// see if its trying to execute ksud
+	if (ksu_copy_from_user_retry(path, *filename_user, sizeof(path)))
+		return;
+
+	if (memcmp(ksud_path, path, sizeof(path)))
+		return;
+
+	pr_info("sys_execve: escape init executing ksud with pid: %d\n", current->pid);
+
+	escape_to_root_forced(); // give this context all permissions
+	
+	return;
+}
+
+static inline void kernel_execve_escape_ksud(void *filename_ptr)
+{
+	if (likely(ksu_boot_completed))
+		return;
+
+	// see if its init
+	if (!is_init(get_current_cred()))
+		return;
+
+	if (likely(memcmp(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH))))
+		return;
+
+	pr_info("kernel_execve: escape init executing ksud with pid: %d\n", current->pid);
+
+	escape_to_root_forced(); // give this context all permissions
+	
+	return;
+}
+#else
+static inline void sys_execve_escape_ksud(const char __user **filename_user) { } // no-op
+static inline void kernel_execve_escape_ksud(void *filename_ptr) {} // no-op
+#endif
+
 static int ksu_sucompat_user_common(const char __user **filename_user,
 				const char *syscall_name,
 				const bool escalate)
@@ -119,6 +169,8 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 			       void *__never_use_argv, void *__never_use_envp,
 			       int *__never_use_flags)
 {
+	sys_execve_escape_ksud(filename_user);
+
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
@@ -161,6 +213,8 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 				 void *__never_use_argv, void *__never_use_envp,
 				 int *__never_use_flags)
 {
+	kernel_execve_escape_ksud((void *)(*filename_ptr)->name);
+
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
@@ -175,6 +229,8 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 			void *envp, int *flags)
 {
+	kernel_execve_escape_ksud((void *)(*filename_ptr)->name);
+
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
@@ -187,6 +243,8 @@ int ksu_legacy_execve_sucompat(const char **filename_ptr,
 				 void *__never_use_argv,
 				 void *__never_use_envp)
 {
+	kernel_execve_escape_ksud((void *)*filename_ptr);
+
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
