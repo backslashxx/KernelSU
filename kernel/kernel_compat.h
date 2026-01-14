@@ -201,4 +201,6 @@ struct user_arg_ptr {
 #define untagged_addr(addr) (addr)
 #endif
 
+extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+
 #endif // __KSU_H_KERNEL_COMPAT
