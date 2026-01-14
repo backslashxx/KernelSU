@@ -197,4 +197,6 @@ struct user_arg_ptr {
 	} ptr;
 };
 
+extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+
 #endif // __KSU_H_KERNEL_COMPAT
