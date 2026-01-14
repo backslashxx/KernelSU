@@ -301,8 +301,139 @@ static void ksu_lsm_hook_init(void)
 {
 	security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks));
 }
-#endif // 4.11
-#endif // 4.2
+#endif //  < 4.11
+
+#else // 4.2
+
+// selinux_ops (LSM), security_operations struct tampering for ultra legacy
+
+extern struct security_operations selinux_ops;
+
+static int (*orig_inode_rename) (struct inode *old_dir, struct dentry *old_dentry,
+			     struct inode *new_dir, struct dentry *new_dentry);
+static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
+			    struct inode *new_inode, struct dentry *new_dentry)
+{
+	ksu_inode_rename(old_inode, old_dentry, new_inode, new_dentry);
+	return orig_inode_rename(old_inode, old_dentry, new_inode, new_dentry);
+}
+
+static int (*orig_task_fix_setuid) (struct cred *new, const struct cred *old, int flags);
+static int hook_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
+{
+	ksu_task_fix_setuid(new, old, flags);
+	return orig_task_fix_setuid(new, old, flags);
+}
+
+static int (*orig_bprm_check_security)(struct linux_binprm *bprm);
+static int hook_bprm_check_security(struct linux_binprm *bprm)
+{
+	ksu_bprm_check(bprm);
+	return orig_bprm_check_security(bprm);
+}
+
+static int (*orig_file_permission) (struct file *file, int mask);
+static int hook_file_permission(struct file *file, int mask)
+{
+
+	ksu_file_permission(file, mask);
+	return orig_file_permission(file, mask);
+}
+
+static void ksu_lsm_hook_restore(void)
+{
+	struct security_operations *ops = (struct security_operations *)&selinux_ops;
+
+	if (!ops)
+		return;
+
+	if (!!strcmp((char *)ops, "selinux"))
+		return;
+
+	// TODO: maybe hunt for this in memory instead of exporting
+	// this is the first member of the struct so it points to the struct
+	pr_info("%s: selinux_ops: 0x%lx .name = %s\n", __func__, (long)ops, (const char *)ops );
+
+	preempt_disable();
+
+	if (orig_bprm_check_security) {
+		pr_info("%s: restoring: 0x%lx to 0x%lx\n", __func__, (long)ops->bprm_check_security, (long)orig_bprm_check_security);
+		ops->bprm_check_security = orig_bprm_check_security;
+	}
+
+	if (orig_file_permission) {
+		pr_info("%s: restoring: 0x%lx to 0x%lx\n", __func__, (long)ops->file_permission, (long)orig_file_permission);
+		ops->file_permission = orig_file_permission;
+	}
+
+	preempt_enable();
+	
+	smp_mb();
+	return;
+}
+
+static struct task_struct *unhook_thread;
+
+static int execveat_hook_wait_fn(void *data)
+{
+loop_start:
+
+	msleep(1000);
+
+	if ((volatile bool)ksu_execveat_hook)
+		goto loop_start;
+
+	ksu_lsm_hook_restore();
+
+	return 0;
+}
+
+static void execveat_hook_wait_thread()
+{
+	unhook_thread = kthread_run(execveat_hook_wait_fn, NULL, "unhook");
+	if (IS_ERR(unhook_thread)) {
+		unhook_thread = NULL;
+		return;
+	}
+}
+
+static void ksu_lsm_hook_init(void)
+{
+	struct security_operations *ops = (struct security_operations *)&selinux_ops;
+
+	if (!ops)
+		return;
+
+	if (!!strcmp((char *)ops, "selinux"))
+		return;
+
+	// TODO: maybe hunt for this in memory instead of exporting
+	// this is the first member of the struct so it points to the struct
+	pr_info("%s: selinux_ops: 0x%lx .name = %s\n", __func__, (long)ops, (const char *)ops );
+
+	preempt_disable();
+
+	orig_inode_rename = ops->inode_rename;
+	ops->inode_rename = hook_inode_rename;
+
+	orig_task_fix_setuid = ops->task_fix_setuid;
+	ops->task_fix_setuid = hook_task_fix_setuid;
+
+	orig_bprm_check_security = ops->bprm_check_security;
+	ops->bprm_check_security = hook_bprm_check_security;
+
+	orig_file_permission = ops->file_permission;
+	ops->file_permission = hook_file_permission;
+
+	preempt_enable();
+	
+	smp_mb();
+
+	execveat_hook_wait_thread();
+	return;
+}
+
+#endif // < 4.2
 
 #else
 void __init ksu_lsm_hook_init(void)
