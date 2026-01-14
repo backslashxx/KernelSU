@@ -181,4 +181,6 @@ static inline void ksu_static_key_disable(struct static_key *key)
 #endif // < 4.3
 #endif // >= 3.4 && CONFIG_JUMP_LABEL
 
+extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+
 #endif // __KSU_H_KERNEL_COMPAT
