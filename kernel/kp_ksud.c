@@ -170,9 +170,10 @@ static struct kprobe sys_reboot_kp = {
 
 static int unregister_kprobe_function(void *data)
 {
-	pr_info("kp_ksud: unregistering kprobes...\n");
 
 #ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+	pr_info("kp_ksud: unregistering kprobes...\n");
+
 	unregister_kretprobe(&sys_newfstat_rp);
 	pr_info("kp_ksud: unregister sys_newfstat_rp!\n");
 
