@@ -341,6 +341,8 @@ static int hook_file_permission(struct file *file, int mask)
 	return orig_file_permission(file, mask);
 }
 
+static void execveat_hook_wait_thread();
+
 void __init ksu_lsm_hook_init(void)
 {
 	struct security_operations *ops = (struct security_operations *)&selinux_ops;
@@ -367,8 +369,64 @@ void __init ksu_lsm_hook_init(void)
 	preempt_enable();
 	
 	smp_mb();
+
+	execveat_hook_wait_thread();
 	return;
 }
+
+static void ksu_lsm_hook_restore(void)
+{
+	struct security_operations *ops = (struct security_operations *)&selinux_ops;
+
+	if (!ops)
+		return;
+
+	pr_info("%s: selinux_ops: 0x%lx\n", __func__, (long)ops);
+
+	preempt_disable();
+
+	if (orig_bprm_check_security) {
+		pr_info("%s: restoring: 0x%lx to 0x%lx\n", __func__, (long)ops->bprm_check_security, (long)orig_bprm_check_security);
+		ops->bprm_check_security = orig_bprm_check_security;
+	}
+
+	if (orig_file_permission) {
+		pr_info("%s: restoring: 0x%lx to 0x%lx\n", __func__, (long)ops->file_permission, (long)orig_file_permission);
+		ops->file_permission = orig_file_permission;
+	}
+
+	preempt_enable();
+	
+	smp_mb();
+	return;
+}
+
+static struct task_struct *unhook_thread;
+
+static int execveat_hook_wait_fn(void *data)
+{
+loop_start:
+
+	msleep(1000);
+
+	if ((volatile bool)ksu_execveat_hook)
+		goto loop_start;
+
+	ksu_lsm_hook_restore();
+
+	return 0;
+}
+
+static void execveat_hook_wait_thread()
+{
+	unhook_thread = kthread_run(execveat_hook_wait_fn, NULL, "unhook");
+	if (IS_ERR(unhook_thread)) {
+		unhook_thread = NULL;
+		return;
+	}
+}
+
+
 #endif // < 4.2
 
 #else
