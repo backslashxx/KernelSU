@@ -27,7 +27,7 @@ config KSU_KPROBES_KSUD
 config KSU_TAMPER_SYSCALL_TABLE
 	bool "EXPERIMENTAL: tamper sys_call_table for sucompat + sys_reboot"
 	depends on ARM64 && !KSU_KRETPROBES_SUCOMPAT
-	default n
+	default y
 	help
 	  EXPERIMENTAL: use syscall table hijacking method demonstrated on zx2c4's
 	  kernel-assisted-superuser. Replaces sys_reboot, sys_execve, sys_newfstatat,
