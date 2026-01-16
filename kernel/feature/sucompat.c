@@ -29,9 +29,11 @@ static char __user *ksud_user_path(void)
 __attribute__((hot))
 static __always_inline bool is_su_allowed(const void **ptr_to_check)
 {
+#ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	barrier();
 	if (!ksu_su_compat_enabled)
 		return false;
+#endif
 
 	barrier();
 	if (likely(test_thread_flag(TIF_SECCOMP)))
@@ -221,14 +223,28 @@ int ksu_legacy_execve_sucompat(const char **filename_ptr, void *argv, void *envp
 }
 #endif
 
+#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+static void syscall_table_sucompat_enable();
+static void syscall_table_sucompat_disable();
+#else
+static inline void syscall_table_sucompat_enable() { } // no-op
+static inline void syscall_table_sucompat_disable() { } // no-op
+#endif
+
 static void ksu_sucompat_enable()
 {
+
+	syscall_table_sucompat_enable();
+
 	ksu_su_compat_enabled = true;
 	pr_info("%s: hooks enabled: exec, faccessat, stat\n", __func__);
 }
 
 static void ksu_sucompat_disable()
 {
+
+	syscall_table_sucompat_disable();
+
 	ksu_su_compat_enabled = false;
 	pr_info("%s: hooks disabled: exec, faccessat, stat\n", __func__);
 }
