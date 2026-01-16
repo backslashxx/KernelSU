@@ -321,4 +321,24 @@ static void ksu_syscall_table_hook_init()
 	kthread_run(ksu_syscall_table_restore, NULL, "unhook");
 }
 
+static DEFINE_MUTEX(sucompat_toggle_mutex);
+
+static void syscall_table_sucompat_enable()
+{
+	mutex_lock(&sucompat_toggle_mutex);
+	read_and_replace_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, (void *)sys_call_table);
+	read_and_replace_syscall((void *)&armeabi_faccessat, __ARMEABI_faccessat, (void *)hook_armeabi_faccessat, (void *)sys_call_table);
+	read_and_replace_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, (void *)sys_call_table);
+	mutex_unlock(&sucompat_toggle_mutex);
+}
+
+static void syscall_table_sucompat_disable()
+{
+	mutex_lock(&sucompat_toggle_mutex);
+	restore_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, (void *)sys_call_table);
+	restore_syscall((void *)&armeabi_faccessat, __ARMEABI_faccessat, (void *)hook_armeabi_faccessat, (void *)sys_call_table);
+	restore_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, (void *)sys_call_table);
+	mutex_unlock(&sucompat_toggle_mutex);
+}
+
 // EOF
