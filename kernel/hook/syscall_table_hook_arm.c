@@ -310,13 +310,32 @@ loop_start:
 	return 0;
 }
 
-static __init int ksu_syscall_table_hook_init()
-{
+static DEFINE_MUTEX(sucompat_toggle_mutex);
 
-	read_and_replace_syscall((void *)&armeabi_reboot, __ARMEABI_reboot, (void *)hook_armeabi_reboot, (void *)sys_call_table);
+static void syscall_table_sucompat_enable()
+{
+	mutex_lock(&sucompat_toggle_mutex);
 	read_and_replace_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, (void *)sys_call_table);
 	read_and_replace_syscall((void *)&armeabi_faccessat, __ARMEABI_faccessat, (void *)hook_armeabi_faccessat, (void *)sys_call_table);
 	read_and_replace_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, (void *)sys_call_table);
+	mutex_unlock(&sucompat_toggle_mutex);
+}
+
+static void syscall_table_sucompat_disable()
+{
+	mutex_lock(&sucompat_toggle_mutex);
+	restore_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, (void *)sys_call_table);
+	restore_syscall((void *)&armeabi_faccessat, __ARMEABI_faccessat, (void *)hook_armeabi_faccessat, (void *)sys_call_table);
+	restore_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, (void *)sys_call_table);
+	mutex_unlock(&sucompat_toggle_mutex);
+}
+
+static __init int ksu_syscall_table_hook_init()
+{
+	// enable on init!
+	syscall_table_sucompat_enable();
+
+	read_and_replace_syscall((void *)&armeabi_reboot, __ARMEABI_reboot, (void *)hook_armeabi_reboot, (void *)sys_call_table);
 
 	// will be unregged
 	read_and_replace_syscall((void *)&armeabi_fstat64, __ARMEABI_fstat64, (void *)hook_armeabi_fstat64_ret, (void *)sys_call_table);
