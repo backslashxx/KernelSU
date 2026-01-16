@@ -84,6 +84,74 @@ asmlinkage long hook_armeabi_read(unsigned int fd, char __user *buf, size_t coun
 	return armeabi_read(fd, buf, count);
 }
 
+static DEFINE_MUTEX(sucompat_toggle_mutex);
+
+static void syscall_table_sucompat_enable()
+{
+	void **sctable = (void **)sys_call_table;
+
+	mutex_lock(&sucompat_toggle_mutex);
+
+	preempt_disable();
+	local_irq_disable();
+
+	if (!armeabi_execve) {
+		*(void **)&armeabi_execve = FORCE_VOLATILE(*(void **)&sctable[__ARMEABI_execve]);
+		FORCE_VOLATILE(*(void **)&sctable[__ARMEABI_execve]) = ksu_sys_execve_wrapper;
+	}
+
+	if (!armeabi_faccessat) {
+		*(void **)&armeabi_faccessat = FORCE_VOLATILE(*(void **)&sctable[__ARMEABI_faccessat]);
+		FORCE_VOLATILE(*(void **)&sctable[__ARMEABI_faccessat]) = hook_armeabi_faccessat;
+	}
+
+	if (!armeabi_fstatat64) {
+		*(void **)&armeabi_fstatat64 = FORCE_VOLATILE(*(void **)&sctable[__ARMEABI_fstatat64]);
+		FORCE_VOLATILE(*(void **)&sctable[__ARMEABI_fstatat64]) = hook_armeabi_fstatat64;
+	}
+
+	local_irq_enable();
+	preempt_enable();
+
+	flush_cache_all();
+	smp_mb();
+
+	mutex_unlock(&sucompat_toggle_mutex);
+}
+
+static void syscall_table_sucompat_disable()
+{
+	void **sctable = (void **)sys_call_table;
+
+	mutex_lock(&sucompat_toggle_mutex);
+
+	preempt_disable();
+	local_irq_disable();
+
+	if (armeabi_execve) {
+		FORCE_VOLATILE(*(void **)&sctable[__ARMEABI_execve]) = armeabi_execve;
+		*(void **)&armeabi_execve = NULL;
+	}
+
+	if (armeabi_faccessat) {
+		FORCE_VOLATILE(*(void **)&sctable[__ARMEABI_faccessat]) = armeabi_faccessat;
+		*(void **)&armeabi_faccessat = NULL;
+	}
+
+	if (armeabi_fstatat64) {
+		FORCE_VOLATILE(*(void **)&sctable[__ARMEABI_fstatat64]) = armeabi_fstatat64;
+		*(void **)&armeabi_fstatat64 = NULL;
+	}
+
+	local_irq_enable();
+	preempt_enable();
+
+	flush_cache_all();
+	smp_mb();
+
+	mutex_unlock(&sucompat_toggle_mutex);
+}
+
 static int patch_sctable_stop_machine(void *data)
 {
 	void **sctable = (void **)sys_call_table;
