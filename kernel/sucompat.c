@@ -328,11 +328,17 @@ extern void rp_sucompat_exit();
 extern void rp_sucompat_init();
 #endif
 
+static void syscall_table_sucompat_enable();
+static void syscall_table_sucompat_disable();
+
 static void ksu_sucompat_enable()
 {
 #ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
 	rp_sucompat_init();
 #endif
+
+	syscall_table_sucompat_enable();
+
 	ksu_su_compat_enabled = true;
 	pr_info("%s: hooks enabled: exec, faccessat, stat\n", __func__);
 }
@@ -342,6 +348,9 @@ static void ksu_sucompat_disable()
 #ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
 	rp_sucompat_exit();
 #endif
+
+	syscall_table_sucompat_disable();
+
 	ksu_su_compat_enabled = false;
 	pr_info("%s: hooks disabled: exec, faccessat, stat\n", __func__);
 }
