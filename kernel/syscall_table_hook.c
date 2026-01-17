@@ -11,7 +11,7 @@
 
 // reboot
 #define __AARCH64_reboot 142 //__NR_reboot
-static syscall_fn_t old_reboot; // int magic1, int magic2, unsigned int cmd, void __user *arg
+static syscall_fn_t old_reboot = NULL; 
 static long hook_sys_reboot(const struct pt_regs *regs)
 {
 	int magic1 = (int)regs->regs[0];
@@ -25,7 +25,7 @@ static long hook_sys_reboot(const struct pt_regs *regs)
 
 // execve
 #define __AARCH64_execve 221 // __NR_execve
-static syscall_fn_t old_execve; // const char __user * filename, const char __user *const __user * argv, const char __user *const __user * envp
+static syscall_fn_t old_execve = NULL;
 static long hook_sys_execve(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[0];
@@ -36,7 +36,7 @@ static long hook_sys_execve(const struct pt_regs *regs)
 
 // access
 #define __AARCH64_faccessat 48 // __NR_faccessat
-static syscall_fn_t old_faccessat; // int dfd, const char __user * filename, int mode
+static syscall_fn_t old_faccessat = NULL;
 static long hook_sys_faccessat(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[1];
@@ -47,7 +47,7 @@ static long hook_sys_faccessat(const struct pt_regs *regs)
 
 // stat
 #define __AARCH64_newfstatat 79 // __NR_newfstatat, __NR3264_fstatat
-static syscall_fn_t old_newfstatat; // int dfd, const char __user * filename, struct stat __user * statbuf, int flag);
+static syscall_fn_t old_newfstatat = NULL;
 static long hook_sys_newfstatat(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[1];
@@ -57,7 +57,7 @@ static long hook_sys_newfstatat(const struct pt_regs *regs)
 }
 
 #define __AARCH64_newfstat 80 // __NR3264_fstat
-static syscall_fn_t old_newfstat; // unsigned int fd, struct stat __user * statbuf
+static syscall_fn_t old_newfstat = NULL;
 static long hook_sys_newfstat_ret(const struct pt_regs *regs)
 {
 	// we handle it like rp
@@ -71,7 +71,7 @@ static long hook_sys_newfstat_ret(const struct pt_regs *regs)
 
 #ifdef CONFIG_COMPAT
 #define __ARMEABI_reboot 88
-static syscall_fn_t old_compat_reboot; // int magic1, int magic2, unsigned int cmd, void __user *arg
+static syscall_fn_t old_compat_reboot = NULL;
 static long hook_compat_reboot(const struct pt_regs *regs)
 {
 	int magic1 = (int)regs->regs[0];
@@ -84,7 +84,7 @@ static long hook_compat_reboot(const struct pt_regs *regs)
 }
 
 #define __ARMEABI_execve 11
-static syscall_fn_t old_compat_execve;// (const char __user * filename, const compat_uptr_t __user * argv, const compat_uptr_t __user * envp);
+static syscall_fn_t old_compat_execve = NULL;
 static long hook_compat_sys_execve(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[0];
@@ -94,7 +94,7 @@ static long hook_compat_sys_execve(const struct pt_regs *regs)
 }
 
 #define __ARMEABI_faccessat 334
-static syscall_fn_t old_compat_faccessat; //int dfd, const char __user * filename, int mode
+static syscall_fn_t old_compat_faccessat = NULL;
 static long hook_compat_faccessat(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[1];
@@ -105,7 +105,7 @@ static long hook_compat_faccessat(const struct pt_regs *regs)
 
 // NOTE: CONFIG_COMPAT implies __ARCH_WANT_COMPAT_STAT64
 #define __ARMEABI_fstatat64 327 // __NR_fstatat64
-static syscall_fn_t old_compat_fstatat64; //int dfd, const char __user * filename, struct stat64 __user * statbuf, int flag
+static syscall_fn_t old_compat_fstatat64 = NULL;
 static long hook_compat_fstatat64(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[1];
@@ -116,7 +116,7 @@ static long hook_compat_fstatat64(const struct pt_regs *regs)
 
 // NOTE: CONFIG_COMPAT implies __ARCH_WANT_COMPAT_STAT64
 #define __ARMEABI_fstat64 197 // __NR_fstat64
-static syscall_fn_t old_compat_fstat64; //unsigned int fd, struct stat64 __user * statbuf
+static syscall_fn_t old_compat_fstat64 = NULL;
 static long hook_compat_fstat64_ret(const struct pt_regs *regs)
 {
 	// we handle it like rp
@@ -136,7 +136,7 @@ static long hook_compat_fstat64_ret(const struct pt_regs *regs)
 
 // sys_reboot
 #define __AARCH64_reboot 142 //__NR_reboot
-static long (*old_reboot)(int magic1, int magic2, unsigned int cmd, void __user *arg);
+static long (*old_reboot)(int magic1, int magic2, unsigned int cmd, void __user *arg) = NULL;
 static long hook_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user *arg)
 {
 	ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
@@ -147,7 +147,7 @@ static long hook_sys_reboot(int magic1, int magic2, unsigned int cmd, void __use
 #define __AARCH64_execve 221 // __NR_execve
 static long (*old_execve)(const char __user * filename,
 				const char __user *const __user * argv,
-				const char __user *const __user * envp);
+				const char __user *const __user * envp) = NULL;
 static long hook_sys_execve(const char __user * filename,
 				const char __user *const __user * argv,
 				const char __user *const __user * envp)
@@ -158,7 +158,7 @@ static long hook_sys_execve(const char __user * filename,
 
 // access
 #define __AARCH64_faccessat 48 // __NR_faccessat
-static long (*old_faccessat)(int dfd, const char __user * filename, int mode);
+static long (*old_faccessat)(int dfd, const char __user * filename, int mode) = NULL;
 static long hook_sys_faccessat(int dfd, const char __user * filename, int mode)
 {
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
@@ -167,7 +167,7 @@ static long hook_sys_faccessat(int dfd, const char __user * filename, int mode)
 
 // stat
 #define __AARCH64_newfstatat 79 // __NR_newfstatat, __NR3264_fstatat
-static long (*old_newfstatat)(int dfd, const char __user * filename, struct stat __user * statbuf, int flag);
+static long (*old_newfstatat)(int dfd, const char __user * filename, struct stat __user * statbuf, int flag) = NULL;
 static long hook_sys_newfstatat(int dfd, const char __user * filename, struct stat __user * statbuf, int flag)
 {
 	ksu_handle_stat(&dfd, &filename, &flag);
@@ -175,7 +175,7 @@ static long hook_sys_newfstatat(int dfd, const char __user * filename, struct st
 }
 
 #define __AARCH64_newfstat 80 // __NR3264_fstat
-static long (*old_newfstat)(unsigned int fd, struct stat __user * statbuf);
+static long (*old_newfstat)(unsigned int fd, struct stat __user * statbuf) = NULL;
 static long hook_sys_newfstat_ret(unsigned int fd, struct stat __user * statbuf)
 {
 	// we handle it like rp
@@ -191,7 +191,7 @@ static long hook_sys_newfstat_ret(unsigned int fd, struct stat __user * statbuf)
 extern const void *compat_sys_call_table[];
 
 #define __ARMEABI_reboot 88
-static long (*old_compat_reboot)(int magic1, int magic2, unsigned int cmd, void __user *arg);
+static long (*old_compat_reboot)(int magic1, int magic2, unsigned int cmd, void __user *arg) = NULL;
 static long hook_compat_reboot(int magic1, int magic2, unsigned int cmd, void __user *arg)
 {
 	ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
@@ -201,7 +201,7 @@ static long hook_compat_reboot(int magic1, int magic2, unsigned int cmd, void __
 #define __ARMEABI_execve 11
 static long (*old_compat_execve)(const char __user * filename,
 				const compat_uptr_t __user * argv,
-				const compat_uptr_t __user * envp);
+				const compat_uptr_t __user * envp) = NULL;
 static long hook_compat_sys_execve(const char __user * filename,
 				const compat_uptr_t __user * argv,
 				const compat_uptr_t __user * envp)
@@ -211,7 +211,7 @@ static long hook_compat_sys_execve(const char __user * filename,
 }
 
 #define __ARMEABI_faccessat 334
-static long (*old_compat_faccessat)(int dfd, const char __user * filename, int mode);
+static long (*old_compat_faccessat)(int dfd, const char __user * filename, int mode) = NULL;
 static long hook_compat_faccessat(int dfd, const char __user * filename, int mode)
 {
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
@@ -220,7 +220,7 @@ static long hook_compat_faccessat(int dfd, const char __user * filename, int mod
 
 // NOTE: CONFIG_COMPAT implies __ARCH_WANT_COMPAT_STAT64
 #define __ARMEABI_fstatat64 327 // __NR_fstatat64
-static long (*old_compat_fstatat64)(int dfd, const char __user * filename, struct stat64 __user * statbuf, int flag);
+static long (*old_compat_fstatat64)(int dfd, const char __user * filename, struct stat64 __user * statbuf, int flag) = NULL;
 static long hook_compat_fstatat64(int dfd, const char __user * filename, struct stat64 __user * statbuf, int flag)
 {
 	ksu_handle_stat(&dfd, &filename, &flag);
@@ -229,7 +229,7 @@ static long hook_compat_fstatat64(int dfd, const char __user * filename, struct 
 
 // NOTE: CONFIG_COMPAT implies __ARCH_WANT_COMPAT_STAT64
 #define __ARMEABI_fstat64 197 // __NR_fstat64
-static long (*old_compat_fstat64)(unsigned long fd, struct stat64 __user * statbuf);
+static long (*old_compat_fstat64)(unsigned long fd, struct stat64 __user * statbuf) = NULL;
 static long hook_compat_fstat64_ret(unsigned long fd, struct stat64 __user * statbuf)
 {
 	// we handle it like rp
@@ -289,7 +289,8 @@ static void read_and_replace_syscall(void *old_ptr, unsigned long syscall_nr, vo
 
 	*(void **)old_ptr = *target_slot; 
 
-	*target_slot = new_ptr; 
+	*target_slot = new_ptr;
+	smp_mb(); // ^^
 
 	local_irq_enable();
 	preempt_enable();
@@ -299,12 +300,26 @@ static void read_and_replace_syscall(void *old_ptr, unsigned long syscall_nr, vo
 	smp_mb(); 
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+__weak long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
+{
+	return probe_kernel_read(dst, src, size);
+}
+#endif
+
 static void restore_syscall(void *old_ptr, unsigned long syscall_nr, void *new_ptr, void *target_table)
 {
 	void **sctable = (void **)target_table;
 	void **syscall_slot_addr = &sctable[syscall_nr];
 
 	if (!*syscall_slot_addr)
+		return;
+
+	// we do this to make sure that old_ptr is filled.
+	// if read_and_replace failed or we restore again, it wont be pointing to anything
+	// it just copies wordsize of whatever is in *old_ptr, it should fill up a wordzie atleast
+	long dummy = 0;
+	if (copy_from_kernel_nofault((void *)&dummy, *(void **)old_ptr, sizeof(long)))
 		return;
 
 	pr_info("%s: restore syscall #%d at 0x%lx\n", __func__, syscall_nr, (long)syscall_slot_addr);
@@ -346,7 +361,10 @@ static void restore_syscall(void *old_ptr, unsigned long syscall_nr, void *new_p
 	preempt_disable();
 	local_irq_disable();
 
-	*target_slot = *(void **)old_ptr; // yeah this is the only difference
+	*target_slot = *(void **)old_ptr;	
+	smp_mb(); // ^^
+
+	*(void **)old_ptr = NULL; // explicit reset
 
 	local_irq_enable();
 	preempt_enable();
@@ -382,7 +400,6 @@ static void vfs_read_hook_wait_thread()
 {
 	syscall_restore_thread = kthread_run(ksu_syscall_table_restore, NULL, "unhook");
 	if (IS_ERR(syscall_restore_thread)) {
-		syscall_restore_thread = NULL;
 		return;
 	}
 }
