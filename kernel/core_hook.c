@@ -341,9 +341,147 @@ static int hook_file_permission(struct file *file, int mask)
 	return orig_file_permission(file, mask);
 }
 
+#if 0
+/*
+ * detach and free the LSM part of a set of credentials
+ */
+static void selinux_cred_free(struct cred *cred)
+{
+	struct task_security_struct *tsec = cred->security;
+
+	/*
+	 * cred->security == NULL if security_cred_alloc_blank() or
+	 * security_prepare_creds() returned an error.
+	 */
+	BUG_ON(cred->security && (unsigned long) cred->security < PAGE_SIZE);
+	cred->security = (void *) 0x7UL;
+	kfree(tsec);
+}
+#endif
+
+static bool verify_selinux_cred_free(void *fn_ptr)
+{
+	bool success = false;
+
+	if (!fn_ptr)
+		return false;
+
+	void (*selinux_cred_free_fn)(struct cred *) = fn_ptr;
+
+	struct cred *dummy_cred = kzalloc(sizeof(struct cred), GFP_KERNEL);
+	if (!dummy_cred)
+		return false;
+
+	// explicitly set it to NULL
+	// #1. it wont trigger BUG_ON
+	// #2. this way it will kfree(NULL), which does nothing
+	dummy_cred->security = NULL;
+
+	selinux_cred_free_fn(dummy_cred);
+
+	// check if selinux_cred_free is successful
+	if ((unsigned long)dummy_cred->security == 0x7UL) {
+		success = true;
+	}
+
+	pr_info("selinux_cred_free: 0x%lx cred->security: 0x%lx success: %d\n", (unsigned long)fn_ptr, (unsigned long)dummy_cred->security, success);
+
+	kfree(dummy_cred);
+
+	return success;
+}
+
+// scan
+static inline void *hunt_for_selinux_ops(void *heuristic_ptr)
+{
+
+#define SCAN_RANGE (10000 * sizeof(void *))
+	uintptr_t anchor = (uintptr_t)heuristic_ptr;
+	uintptr_t start = anchor - SCAN_RANGE;
+	uintptr_t end = anchor + SCAN_RANGE;
+
+	uintptr_t curr = start;
+
+	unsigned long iter_count = 0;
+	pr_info("%s: scanning pointers 0x%lx - 0x%lx around ptr: 0x%lx\n", __func__, (long)start, (long)end, (long)anchor);
+
+scan_start:
+	iter_count++;
+
+	if (curr >= end)
+		goto not_found;
+
+	char char_buf[8];
+
+	if (probe_kernel_read(char_buf, (void *)curr, sizeof("selinux") ))
+		goto next_ptr;
+
+	if (!!strcmp(char_buf, "selinux"))
+		goto next_ptr;
+
+	// candidate found!
+	pr_info("%s: candidate selinux_ops at 0x%lx\n", __func__, (long)curr);
+
+	struct security_operations *candidate = (struct security_operations *)curr;
+
+	uintptr_t cred_free_fn_ptr;
+	if (probe_kernel_read(&cred_free_fn_ptr, &candidate->cred_free , sizeof(long) ))
+		goto next_ptr;
+
+	// now this means selinux_cred_free function exists
+	// we verify it
+	if (!verify_selinux_cred_free(cred_free_fn_ptr))
+		goto next_ptr;
+	
+	pr_info("%s: found selinux_ops at 0x%lx iter_count: %lu \n", __func__, (long)curr, iter_count);
+	return (struct security_operations *)curr;
+
+next_ptr:
+	curr = curr + sizeof(void *);
+	goto scan_start;
+
+not_found:
+	pr_info("%s: selinux_ops not found in range! iter_count: %lu \n", __func__, iter_count);
+	return NULL;
+
+}
+
+static uintptr_t selinux_ops_addr = NULL;
+
+static inline void set_selinux_ops()
+{
+	extern struct key_user root_key_user;
+	extern int selinux_enabled;
+	extern struct security_class_mapping secclass_map[];
+	extern struct list_head crypto_alg_list;
+	
+	struct security_operations *ops = NULL;
+
+#ifdef CONFIG_KALLSYMS
+	ops = (struct security_operations *)kallsyms_lookup_name("selinux_ops");
+#endif
+
+	if (!ops)
+		ops = (struct security_operations *)hunt_for_selinux_ops((void *)&secclass_map);
+
+	if (!ops)
+		ops = (struct security_operations *)hunt_for_selinux_ops((void *)&selinux_enabled);
+
+	if (!ops)
+		ops = (struct security_operations *)hunt_for_selinux_ops((void *)&root_key_user);
+
+	if (!ops)
+		ops = (struct security_operations *)hunt_for_selinux_ops((void *)&crypto_alg_list);
+
+	if (!ops)
+		return;
+
+	selinux_ops_addr = (uintptr_t)ops;	
+}
+
 static void ksu_lsm_hook_restore(void)
 {
-	struct security_operations *ops = (struct security_operations *)&selinux_ops;
+	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
 
 	if (!ops)
 		return;
@@ -400,8 +538,9 @@ static void execveat_hook_wait_thread()
 
 static void ksu_lsm_hook_init(void)
 {
-	struct security_operations *ops = (struct security_operations *)&selinux_ops;
+	set_selinux_ops();
 
+	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
 	if (!ops)
 		return;
 
