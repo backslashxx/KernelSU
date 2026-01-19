@@ -391,6 +391,7 @@ static bool verify_selinux_cred_free(void *fn_ptr)
 	return success;
 }
 
+#if 0
 // scan
 static inline void *hunt_for_selinux_ops(void *heuristic_ptr)
 {
@@ -444,6 +445,77 @@ not_found:
 	pr_info("%s: selinux_ops not found in range! iter_count: %lu \n", __func__, iter_count);
 	return NULL;
 
+}
+#endif
+
+static inline bool check_candidate(uintptr_t addr)
+{
+	struct security_operations *candidate = (struct security_operations *)addr;
+
+	char char_buf[8];
+	if (probe_kernel_read(char_buf, (void *)addr, sizeof("selinux") ))
+		return false;
+
+	if (!!strcmp(char_buf, "selinux"))
+		return false;
+
+	// candidate found!
+	pr_info("%s: candidate selinux_ops at 0x%lx\n", __func__, (long)addr);
+
+	uintptr_t cred_free_fn_ptr;
+	if (probe_kernel_read(&cred_free_fn_ptr, &candidate->cred_free, sizeof(void *)))
+		return false;
+
+	return verify_selinux_cred_free((void *)cred_free_fn_ptr);
+}
+
+static inline void *hunt_for_selinux_ops(void *heuristic_ptr)
+{
+#define MAX_INDEX 10000
+	uintptr_t anchor = (uintptr_t)heuristic_ptr;
+	uintptr_t curr;
+	unsigned long iter_count = 0;
+	long i = 0;
+
+	uintptr_t start = anchor - MAX_INDEX * sizeof(void *);
+	uintptr_t end = anchor + MAX_INDEX * sizeof(void *);
+	pr_info("%s: scanning pointers 0x%lx - 0x%lx around ptr: 0x%lx\n", __func__, (long)start, (long)end, (long)anchor);
+
+scan_up:
+	if (i >= MAX_INDEX) {
+		i = 1;
+		goto scan_down;
+	}
+
+	curr = anchor + (i * sizeof(void *));
+	i++;
+	iter_count++;
+
+	if (check_candidate(curr))
+		goto found;
+
+	goto scan_up;
+
+scan_down:
+	if (i >= MAX_INDEX)
+		goto not_found;
+
+	curr = anchor - (i * sizeof(void *));
+	i++;
+	iter_count++;
+
+	if (check_candidate(curr))
+		goto found;
+
+	goto scan_down;
+
+found:
+	pr_info("%s: found selinux_ops at 0x%lx iter_count: %lu \n", __func__, curr, iter_count);
+	return (void *)curr;
+
+not_found:
+	pr_info("%s: selinux_ops not found in range! iter_count: %lu \n", __func__, iter_count);
+	return NULL;
 }
 
 static uintptr_t selinux_ops_addr = NULL;
