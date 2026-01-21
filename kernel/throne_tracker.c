@@ -56,6 +56,8 @@ struct apk_path_hash {
 	struct list_head list;
 };
 
+static struct list_head apk_path_hash_list = LIST_HEAD_INIT(apk_path_hash_list);
+
 struct my_dir_context {
 	struct dir_context ctx;
 	struct list_head *data_path_list;
@@ -168,6 +170,12 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 	data.depth = depth;
 	list_add_tail(&data.list, &data_path_list);
 
+	// Initialize APK cache list
+	struct apk_path_hash *pos, *n;
+	list_for_each_entry(pos, &apk_path_hash_list, list) {
+		pos->exists = false;
+	}
+
 	// we put the apk path we collected here
 	char candidate_path[DATA_PATH_LEN];
 
@@ -224,8 +232,34 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 			bool is_manager = is_manager_apk(candidate_path);
 			pr_info("Found new base.apk at path: %s, is_manager: %d\n", candidate_path, is_manager);
 
-			if (likely(!is_manager))
+			struct apk_path_hash *pos_hash, *n_hash;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 8, 0)
+			unsigned int hash = full_name_hash(candidate_path, strlen(candidate_path));
+#else
+			unsigned int hash = full_name_hash(NULL, candidate_path, strlen(candidate_path));
+#endif
+			list_for_each_entry(pos_hash, &apk_path_hash_list, list) {
+				if (hash == pos_hash->hash) {
+					pos_hash->exists = true;
+					goto skip_iterate;
+				}
+			}
+
+			// now test if its the manager!
+			if (likely(!is_manager)) {
+				struct apk_path_hash *apk_data = kzalloc(sizeof(struct apk_path_hash), GFP_ATOMIC);
+				apk_data->hash = hash;
+				apk_data->exists = true;
+				list_add_tail(&apk_data->list, &apk_path_hash_list);
+				
 				goto skip_iterate;
+			}
+
+			// Manager found, clear APK cache list
+			list_for_each_entry_safe(pos_hash, n_hash, &apk_path_hash_list, list) {
+				list_del(&pos_hash->list);
+				kfree(pos_hash);
+			}
 
 			crown_manager(candidate_path, uid_data);
 			stop = 1;
@@ -237,6 +271,13 @@ skip_iterate:
 		}
 	}
 
+	// Remove stale cached APK entries
+	list_for_each_entry_safe(pos, n, &apk_path_hash_list, list) {
+		if (!pos->exists) {
+			list_del(&pos->list);
+			kfree(pos);
+		}
+	}
 }
 
 static bool is_uid_exist(uid_t uid, char *package, void *data)
