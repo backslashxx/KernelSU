@@ -284,8 +284,50 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
 #include <linux/lsm_hooks.h>
+
+
+// TEST, needs exported and non ro selinux_hooks
+
+extern struct security_hook_list selinux_hooks[];
+
+static int (*orig_inode_rename) (struct inode *old_dir, struct dentry *old_dentry,
+			     struct inode *new_dir, struct dentry *new_dentry);
+static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
+			    struct inode *new_inode, struct dentry *new_dentry)
+{
+	ksu_inode_rename(old_inode, old_dentry, new_inode, new_dentry);
+	return orig_inode_rename(old_inode, old_dentry, new_inode, new_dentry);
+}
+
+#if 0
+#define LSM_HOOK_INIT(HEAD, HOOK) \
+	{ .head = &security_hook_heads.HEAD, .hook = { .HEAD = HOOK } }
+#endif
+
+static void test_hook()
+{
+	int i;
+	struct security_hook_list *hooks = &selinux_hooks;
+
+	for (i = 0; i < 200; i++) {
+        	hooks = &selinux_hooks[i];
+		if (hooks->head == &security_hook_heads.inode_rename) {
+			pr_info("%s: found inode_rename hook at index %d. swap it!\n", __func__, i);
+
+			orig_inode_rename = hooks->hook.inode_rename;
+			hooks->hook.inode_rename = hook_inode_rename;
+
+		    	break; 
+		}
+	}
+
+	pr_info("test done!\n");
+
+}
+
+
 static struct security_hook_list ksu_hooks[] = {
-	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
+//	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
 	LSM_HOOK_INIT(bprm_check_security, ksu_bprm_check),
 	LSM_HOOK_INIT(file_permission, ksu_file_permission),
@@ -294,6 +336,7 @@ static struct security_hook_list ksu_hooks[] = {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 static void ksu_lsm_hook_init(void)
 {
+	test_hook();
 	security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
 }
 
