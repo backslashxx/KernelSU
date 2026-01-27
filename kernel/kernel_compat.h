@@ -240,4 +240,46 @@ static inline __s64 ksu_sign_extend64(__u64 value, int index)
 #endif
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+// not 1:1, no aligned/per-word optimization
+// https://elixir.bootlin.com/linux/v4.3/source/lib/string.c#L154
+__weak ssize_t strscpy(char *dest, const char *src, size_t count)
+{
+	if (!count)
+		return -E2BIG;
+
+	// look for the first null terminator w/in count
+	// alternatively, strnlen?
+	const char *end = __builtin_memchr(src, '\0', count);
+	if (!end)
+		goto no_null_term;
+
+	size_t copy_len = end - src;
+	__builtin_memcpy(dest, src, copy_len);
+	dest[copy_len] = '\0';
+	return copy_len;
+
+no_null_term:
+	__builtin_memcpy(dest, src, count - 1);
+	dest[count - 1] = '\0';
+	return -E2BIG;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+// https://elixir.bootlin.com/linux/v5.2/source/lib/string.c#L240
+__weak ssize_t strscpy_pad(char *dest, const char *src, size_t count)
+{
+	ssize_t written;
+
+	written = strscpy(dest, src, count);
+	if (written < 0 || written == count - 1)
+		return written;
+
+	memset(dest + written + 1, 0, count - written - 1);
+
+	return written;
+}
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
