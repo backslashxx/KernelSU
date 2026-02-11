@@ -261,7 +261,7 @@ static void ksu_handle_initrc(struct file *file);
 
 LSM_HANDLER_TYPE ksu_file_permission(struct file *file, int mask)
 {
-	if (!ksu_vfs_read_hook)
+	if (likely(!ksu_vfs_read_hook))
 		return 0;
 
 	ksu_handle_initrc(file);
