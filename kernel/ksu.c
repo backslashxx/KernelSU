@@ -1,6 +1,7 @@
 #include <linux/export.h>
 #include <linux/fs.h>
 #include <linux/kobject.h>
+#include <linux/init.h>
 #include <linux/module.h>
 #include <generated/utsrelease.h>
 #include <generated/compile.h>
@@ -169,29 +170,8 @@ int __init kernelsu_init(void)
 	return 0;
 }
 
-void kernelsu_exit(void)
-{
-	ksu_allowlist_exit();
+fs_initcall(kernelsu_init);
 
-	ksu_throne_tracker_exit();
-
-	ksu_feature_exit();
-
-	if (ksu_cred) {
-		put_cred(ksu_cred);
-	}
-}
-
-module_init(kernelsu_init);
-module_exit(kernelsu_exit);
-
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("weishu");
-MODULE_DESCRIPTION("Android KernelSU");
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
-MODULE_IMPORT_NS("VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver");
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
-MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
-#endif
-
+// MODULE_LICENSE("GPL");
+// MODULE_AUTHOR("weishu");
+// MODULE_DESCRIPTION("Android KernelSU");
