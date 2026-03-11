@@ -22,13 +22,13 @@ bool getenforce();
 
 void cache_sid(void);
 
-bool is_task_ksu_domain(const struct cred *cred);
+bool is_task_ksu_domain(const struct cred* cred);
 
 bool is_ksu_domain();
 
-bool is_zygote(const struct cred *cred);
+bool is_zygote(const struct cred* cred);
 
-bool is_init(const struct cred *cred);
+bool is_init(const struct cred* cred);
 
 void apply_kernelsu_rules();
 
