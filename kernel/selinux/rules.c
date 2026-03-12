@@ -44,29 +44,9 @@ static struct policydb *get_policydb(void)
 	return db;
 }
 
-static DEFINE_MUTEX(ksu_rules);
-
-void apply_kernelsu_rules()
+static int apply_kernelsu_rules_fn(void *ptr)
 {
-	struct policydb *db;
-
-	if (!getenforce()) {
-		pr_info("SELinux permissive or disabled, apply rules!\n");
-	}
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	struct selinux_policy *pol, *old_pol = selinux_state.policy;
-	mutex_lock(&selinux_state.policy_mutex);
-	pol = ksu_dup_sepolicy(rcu_dereference_protected(old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
-	if (!pol) {
-		pr_err("failed to dup selinux_policy\n");
-		goto out_unlock;
-	}
-	db = &pol->policydb;
-#else
-	mutex_lock(&ksu_rules);
-	db = get_policydb();
-#endif
+	struct policydb *db = (struct policydb *)ptr;
 
 	ksu_permissive(db, KERNEL_SU_DOMAIN);
 	ksu_typeattribute(db, KERNEL_SU_DOMAIN, "mlstrustedsubject");
@@ -127,7 +107,29 @@ void apply_kernelsu_rules()
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
 
+	return 0;
+}
+
+void apply_kernelsu_rules()
+{
+	struct policydb *db;
+
+	if (!getenforce()) {
+		pr_info("SELinux permissive or disabled, apply rules!\n");
+	}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	struct selinux_policy *pol, *old_pol = selinux_state.policy;
+	mutex_lock(&selinux_state.policy_mutex);
+	pol = ksu_dup_sepolicy(rcu_dereference_protected(old_pol, lockdep_is_held(&selinux_state.policy_mutex)));
+	if (!pol) {
+		pr_err("failed to dup selinux_policy\n");
+		goto out_unlock;
+	}
+	db = &pol->policydb;
+
+	apply_kernelsu_rules_fn((void *)db);
+
 	rcu_assign_pointer(selinux_state.policy, pol);
 	synchronize_rcu();
 	ksu_destroy_sepolicy(old_pol);
@@ -136,8 +138,43 @@ void apply_kernelsu_rules()
 out_unlock:
 	mutex_unlock(&selinux_state.policy_mutex);
 #else
+
+	db = get_policydb();
+
+
+#if defined(KSU_COMPAT_USE_SELINUX_STATE)
+	// HACK: lock is held with preempt enabled!
+
+	pr_info("%s: type: selinux_state.ss->policy_rwlock \n", __func__);
+
+	write_lock(&selinux_state.ss->policy_rwlock);
+	preempt_enable();
+
+	apply_kernelsu_rules_fn((void *)db);
+
+	preempt_disable();
+	write_unlock(&selinux_state.ss->policy_rwlock);
+
+#elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
+
+	pr_info("%s: type: exported policy_rwlock\n", __func__);
+
+	extern rwlock_t policy_rwlock;
+	write_lock(&policy_rwlock);
+	preempt_enable();
+
+	apply_kernelsu_rules_fn((void *)db);
+
+	preempt_disable();
+	write_unlock(&policy_rwlock);	
+#else
+	pr_info("%s: type: stop_machine()\n", __func__);
+
+	stop_machine(apply_kernelsu_rules_fn, (void *)db, NULL);
+#endif
+
+	smp_mb();
 	reset_avc_cache();
-	mutex_unlock(&ksu_rules);
 #endif
 }
 
@@ -434,6 +471,7 @@ static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 int handle_sepolicy(void __user *user_data, u64 data_len)
 {
 	struct selinux_policy *pol, *old_pol;
@@ -536,3 +574,162 @@ out_free:
 
 	return ret;
 }
+#else
+
+struct handle_sepolicy_args {
+	void *ctx_success_cmd_count;
+	void *ctx_payload;
+	u64 ctx_data_len;
+};
+
+static int handle_spolicy_fn(void *data)
+{
+	struct sepol_batch_cursor cursor;
+	int ret = 0;
+	u32 cmd_index = 0;
+	int success_cmd_count = 0;
+
+	struct policydb *db = get_policydb();
+	struct handle_sepolicy_args *ctx = (struct handle_sepolicy_args *)data;
+	u8 *payload = (u8 *)ctx->ctx_payload;
+	u64 data_len = ctx->ctx_data_len;
+
+	cursor.cur = payload;
+	cursor.end = payload + (size_t)data_len;
+
+	while (cursor.cur < cursor.end) {
+		struct sepol_data header;
+		const char *args[KSU_SEPOLICY_MAX_ARGS] = { 0 };
+		int expected_argc;
+		u32 arg_index;
+
+		ret = sepol_read_cmd_header(&cursor, &header);
+		if (ret < 0) {
+			pr_err("sepol: failed to read cmd header #%u.\n", cmd_index);
+			goto out;
+		}
+
+		expected_argc = sepol_expected_argc(header.cmd);
+		if (expected_argc < 0 || expected_argc > KSU_SEPOLICY_MAX_ARGS) {
+			ret = -EINVAL;
+			pr_err("sepol: invalid cmd header #%u.\n", cmd_index);
+			goto out;
+		}
+
+		for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
+			ret = sepol_read_string(&cursor, &args[arg_index]);
+			if (ret < 0) {
+				pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index, arg_index);
+				goto out;
+			}
+		}
+
+		ret = apply_one_sepolicy_cmd(db, &header, args);
+		if (ret < 0)
+			pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
+		else {
+			pr_info("sepol: cmd #%u success, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
+			success_cmd_count++;
+		}
+
+		cmd_index++;
+	}
+
+out:
+	*(int *)(ctx->ctx_success_cmd_count) = success_cmd_count;
+	return ret;
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#define ksu_kvmalloc kvmalloc
+#define ksu_kvfree kvfree
+#else
+static inline void *ksu_kvmalloc(size_t size, gfp_t flags)
+{
+	void *buf = NULL;
+
+	buf = kmalloc(size, flags);
+	if (!buf)
+		buf = vmalloc(size);
+	
+	return buf;
+}
+
+static inline void ksu_kvfree(void *buf)
+{
+	if (is_vmalloc_addr(buf))
+		vfree(buf);
+	else
+		kfree(buf);
+}
+#endif
+
+int handle_sepolicy(void __user *user_data, u64 data_len)
+{
+	u8 *payload;
+	int ret = 0;
+	int success_cmd_count = 0;
+
+	if (!user_data || !data_len)
+    		return -EINVAL;
+
+	if (data_len > KSU_SEPOLICY_MAX_BATCH_SIZE)
+		return -E2BIG;
+
+	payload = ksu_kvmalloc((size_t)data_len, GFP_KERNEL);
+	if (!payload)
+		return -ENOMEM;
+
+	if (copy_from_user(payload, user_data, (size_t)data_len)) {
+		ret = -EFAULT;
+		goto out_free;
+	}
+
+	if (!getenforce()) {
+		pr_info("SELinux permissive or disabled when handle policy!\n");
+	}
+
+	struct handle_sepolicy_args ctx = { 0 };
+	ctx.ctx_success_cmd_count = (void *)&success_cmd_count;
+	ctx.ctx_payload = (void *)payload;
+	ctx.ctx_data_len = (u64)data_len;
+
+#if defined(KSU_COMPAT_USE_SELINUX_STATE)
+	// HACK: lock is held with preempt enabled!
+	write_lock(&selinux_state.ss->policy_rwlock);
+	preempt_enable();
+
+	ret = handle_spolicy_fn((void *)&ctx);
+
+	preempt_disable();
+	write_unlock(&selinux_state.ss->policy_rwlock);
+
+	if (ret)
+		goto out_free;
+
+#elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
+	extern rwlock_t policy_rwlock;
+	write_lock(&policy_rwlock);
+	preempt_enable();
+
+	ret = handle_spolicy_fn((void *)&ctx);
+
+	preempt_disable();
+	write_unlock(&policy_rwlock);	
+
+	if (ret)
+		goto out_free;
+#else
+	stop_machine(handle_spolicy_fn, (void *)&ctx, NULL);
+#endif
+
+	smp_mb();
+	reset_avc_cache();
+	ret = success_cmd_count;
+
+out_free:
+	ksu_kvfree(payload);
+
+	return ret;
+}
+#endif
