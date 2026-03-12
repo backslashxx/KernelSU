@@ -126,17 +126,6 @@ fun HomePagerMiuix(
                     } else if (state.showKernelPrBuildWarning) {
                         WarningCard(stringResource(id = R.string.home_pr_kernel_warning))
                     }
-                    if (state.showVersionMismatchWarning) {
-                        WarningCard(
-                            stringResource(id = R.string.home_version_mismatch).format(
-                                state.currentManagerVersionCode,
-                                state.ksuVersion
-                            )
-                        )
-                    }
-                    if (state.showGkiWarning) {
-                        WarningCard(stringResource(id = R.string.home_gki_warning))
-                    }
                     if (state.showRequireKernelWarning) {
                         WarningCard(
                             stringResource(id = R.string.require_kernel_version)
