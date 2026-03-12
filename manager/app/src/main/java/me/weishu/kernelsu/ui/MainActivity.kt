@@ -13,6 +13,13 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -212,6 +219,21 @@ class MainActivity : ComponentActivity() {
 
                                     else -> navigator.pop()
                                 }
+                            },
+                            transitionSpec = {
+                                val enter = slideInHorizontally(initialOffsetX = { it })
+                                val exit = slideOutHorizontally(targetOffsetX = { -it / 4 }) + fadeOut()
+                                enter togetherWith exit
+                            },
+                            popTransitionSpec = {
+                                val enter = slideInHorizontally(initialOffsetX = { -it / 4 }) + fadeIn()
+                                val exit = scaleOut(targetScale = 0.9f) + fadeOut()
+                                enter togetherWith exit
+                            },
+                            predictivePopTransitionSpec = {
+                                val enter = slideInHorizontally(initialOffsetX = { -it / 4 }) + fadeIn()
+                                val exit = scaleOut(targetScale = 0.9f) + fadeOut()
+                                enter togetherWith exit
                             },
                             entryProvider = entryProvider {
                                 entry<Route.Main> { MainScreen() }

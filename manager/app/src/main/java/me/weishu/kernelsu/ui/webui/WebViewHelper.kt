@@ -44,7 +44,7 @@ internal suspend fun prepareWebView(
             return@withContext
         }
 
-        if (!moduleInfo.hasWebUi || !moduleInfo.enabled || moduleInfo.update || moduleInfo.remove) {
+        if (!moduleInfo.hasWebUi || !moduleInfo.enabled || moduleInfo.remove) {
             withContext(Dispatchers.Main) {
                 webUIState.uiEvent = WebUIEvent.Error(activity.getString(R.string.module_unavailable, moduleInfo.name))
             }

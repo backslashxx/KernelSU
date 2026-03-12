@@ -162,7 +162,7 @@ class ModuleViewModel(
             },
             { if (state.sortEnabledFirst) !it.enabled else 0 },
             { if (state.sortActionFirst) !(it.hasWebUi || it.hasActionScript) else 0 },
-        ).thenBy(Collator.getInstance(Locale.getDefault()), Module::id)
+        ).thenBy(Collator.getInstance(Locale.getDefault()), Module::name)
     }
 
     suspend fun loadModuleList() {

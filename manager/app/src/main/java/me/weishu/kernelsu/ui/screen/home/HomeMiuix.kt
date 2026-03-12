@@ -2,6 +2,7 @@ package me.weishu.kernelsu.ui.screen.home
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -173,9 +174,9 @@ fun HomePagerMiuix(
                             WarningCard(stringResource(id = R.string.home_pr_kernel_warning))
                         }
                     }
-                    if (ksuVersion != null && !Natives.isLkmMode) {
-                        WarningCard(stringResource(id = R.string.home_gki_warning))
-                    }
+//                    if (ksuVersion != null && !Natives.isLkmMode) {
+//                        WarningCard(stringResource(id = R.string.home_gki_warning))
+//                    }
                     if (isManager && Natives.requireNewKernel()) {
                         WarningCard(
                             stringResource(id = R.string.require_kernel_version)
@@ -328,7 +329,7 @@ private fun StatusCard(
                 }
 
                 val workingMode = when (lkmMode) {
-                    null -> ""
+                    null -> if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) "<U-LEGACY>" else "<LEGACY>"
                     true -> " <LKM>"
                     else -> " <GKI>"
                 }

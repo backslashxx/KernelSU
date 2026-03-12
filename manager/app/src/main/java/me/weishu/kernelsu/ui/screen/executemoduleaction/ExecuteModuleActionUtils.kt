@@ -51,7 +51,7 @@ fun ExecuteModuleActionEffect(
             onExit()
             return@LaunchedEffect
         }
-        if (!moduleInfo.enabled || moduleInfo.update || moduleInfo.remove) {
+        if (!moduleInfo.enabled || moduleInfo.remove) {
             Toast.makeText(context, moduleUnavailable.format(moduleInfo.name), Toast.LENGTH_SHORT).show()
             onExit()
             return@LaunchedEffect

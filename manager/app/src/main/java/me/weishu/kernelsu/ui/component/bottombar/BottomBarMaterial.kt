@@ -64,7 +64,8 @@ fun BottomBarMaterial() {
                         stringResource(label)
                     )
                 },
-                label = { Text(stringResource(label)) }
+                label = { Text(stringResource(label)) },
+                alwaysShowLabel = false
             )
         }
     }
