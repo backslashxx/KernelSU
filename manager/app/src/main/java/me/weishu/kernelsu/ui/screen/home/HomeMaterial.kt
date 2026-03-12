@@ -1,5 +1,6 @@
 package me.weishu.kernelsu.ui.screen.home
 
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -88,17 +89,6 @@ fun HomePagerMaterial(
                 WarningCard(stringResource(id = R.string.home_pr_build_warning))
             } else if (state.showKernelPrBuildWarning) {
                 WarningCard(stringResource(id = R.string.home_pr_kernel_warning))
-            }
-            if (state.showVersionMismatchWarning) {
-                WarningCard(
-                    stringResource(id = R.string.home_version_mismatch).format(
-                        state.currentManagerVersionCode,
-                        state.ksuVersion
-                    )
-                )
-            }
-            if (state.showGkiWarning) {
-                WarningCard(stringResource(id = R.string.home_gki_warning))
             }
             if (state.showRequireKernelWarning) {
                 WarningCard(
@@ -195,7 +185,7 @@ private fun StatusCard(
                 when {
                     state.ksuVersion != null -> {
                         val workingMode = when (state.lkmMode) {
-                            null -> ""
+                            null -> if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) "32-BIT" else "LEGACY"
                             true -> "LKM"
                             else -> "GKI"
                         }
