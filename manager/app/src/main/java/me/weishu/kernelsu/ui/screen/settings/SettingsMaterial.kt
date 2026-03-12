@@ -233,6 +233,7 @@ fun SettingPagerMaterial(
                         },
                         {
                             SegmentedSwitchItem(
+                            	enabled = false,
                                 icon = Icons.Filled.ElectricalServices,
                                 title = stringResource(id = R.string.settings_auto_jailbreak),
                                 summary = stringResource(id = R.string.settings_auto_jailbreak_summary),
