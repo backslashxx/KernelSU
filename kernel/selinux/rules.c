@@ -71,8 +71,24 @@ void apply_kernelsu_rules()
 	}
 	db = &pol->policydb;
 #else
+
+	// LOCK HERE!
+	bool got_rwlock = false;
 	mutex_lock(&ksu_rules);
+#if defined(KSU_COMPAT_USE_SELINUX_STATE) && !defined(SELINUX_POLICY_INSTEAD_SELINUX_SS)
+	if (write_trylock(&selinux_state.ss->policy_rwlock))
+		got_rwlock = true;
+#elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
+	extern rwlock_t policy_rwlock;
+	if (write_trylock(&policy_rwlock))
+		got_rwlock = true;
+#endif
+	if (!got_rwlock) {
+		pr_info("%s: failed to grab policy_rwlock\n", __func__);
+	}
+
 	db = get_policydb();
+	smp_mb();
 #endif
 
 	ksu_permissive(db, KERNEL_SU_DOMAIN);
@@ -143,8 +159,18 @@ void apply_kernelsu_rules()
 out_unlock:
 	mutex_unlock(&selinux_state.policy_mutex);
 #else
-	reset_avc_cache();
+
+#if defined(KSU_COMPAT_USE_SELINUX_STATE) && !defined(SELINUX_POLICY_INSTEAD_SELINUX_SS)
+	if (got_rwlock)
+		write_unlock(&selinux_state.ss->policy_rwlock);
+#elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
+	if (got_rwlock)
+		write_unlock(&policy_rwlock);	
+#endif
 	mutex_unlock(&ksu_rules);
+
+	smp_mb();
+	reset_avc_cache();
 #endif
 }
 
@@ -441,6 +467,7 @@ static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 int handle_sepolicy(void __user *user_data, u64 data_len)
 {
 	struct selinux_policy *pol, *old_pol;
@@ -543,3 +570,123 @@ out_free:
 
 	return ret;
 }
+#else
+// NOTE: we dont have rcu protected policydb apply like on 5.10+
+// we don't do old_pol to pol then destroy old_pol here
+// so we use and hotpatch just like how it used to be
+// while theres a global lock via policy_rwlock, this is not exported on ALL
+// if we don't have access to it, as long as we are the only one touching rules
+// theres no need to worry, its going to be fineeee
+// like what, do you want me to apply policydb inside stop_machine?
+int handle_sepolicy(void __user *user_data, u64 data_len)
+{
+	struct policydb *db;
+	struct sepol_batch_cursor cursor;
+	u8 *payload;
+	int ret = 0;
+	int success_cmd_count = 0;
+	u32 cmd_index = 0;
+
+	if (!user_data || !data_len)
+    		return -EINVAL;
+
+	if (data_len > KSU_SEPOLICY_MAX_BATCH_SIZE)
+		return -E2BIG;
+
+	// upstream uses kvmalloc here
+	payload = kmalloc((size_t)data_len, GFP_KERNEL);
+	if (!payload)
+		payload = vmalloc((size_t)data_len);
+	if (!payload)
+		return -ENOMEM;
+
+	if (copy_from_user(payload, user_data, (size_t)data_len)) {
+		ret = -EFAULT;
+		goto out_free;
+	}
+
+	if (!getenforce()) {
+		pr_info("SELinux permissive or disabled when handle policy!\n");
+	}
+
+	// LOCK HERE!
+	bool got_rwlock = false;
+	mutex_lock(&ksu_rules);
+#if defined(KSU_COMPAT_USE_SELINUX_STATE) && !defined(SELINUX_POLICY_INSTEAD_SELINUX_SS)
+	if (write_trylock(&selinux_state.ss->policy_rwlock))
+		got_rwlock = true;
+#elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
+	extern rwlock_t policy_rwlock;
+	if (write_trylock(&policy_rwlock))
+		got_rwlock = true;
+#endif
+	if (!got_rwlock)
+		pr_info("%s: failed to grab policy_rwlock\n", __func__);
+
+	db = get_policydb();
+	smp_mb();
+
+	cursor.cur = payload;
+	cursor.end = payload + (size_t)data_len;
+
+	while (cursor.cur < cursor.end) {
+		struct sepol_data header;
+		const char *args[KSU_SEPOLICY_MAX_ARGS] = { 0 };
+		int expected_argc;
+		u32 arg_index;
+
+		ret = sepol_read_cmd_header(&cursor, &header);
+		if (ret < 0) {
+			pr_err("sepol: failed to read cmd header #%u.\n", cmd_index);
+			goto out_unlock;
+		}
+
+		expected_argc = sepol_expected_argc(header.cmd);
+		if (expected_argc < 0 || expected_argc > KSU_SEPOLICY_MAX_ARGS) {
+			ret = -EINVAL;
+			pr_err("sepol: invalid cmd header #%u.\n", cmd_index);
+			goto out_unlock;
+		}
+
+		for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
+			ret = sepol_read_string(&cursor, &args[arg_index]);
+			if (ret < 0) {
+				pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index, arg_index);
+				goto out_unlock;
+			}
+		}
+
+		ret = apply_one_sepolicy_cmd(db, &header, args);
+		if (ret < 0)
+		    pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
+		else {
+		    success_cmd_count++;
+		}
+
+		cmd_index++;
+	}
+
+out_unlock:
+#if defined(KSU_COMPAT_USE_SELINUX_STATE) && !defined(SELINUX_POLICY_INSTEAD_SELINUX_SS)
+	if (got_rwlock)
+		write_unlock(&selinux_state.ss->policy_rwlock);
+#elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
+	if (got_rwlock)
+		write_unlock(&policy_rwlock);	
+#endif
+	mutex_unlock(&ksu_rules);
+
+	smp_mb();
+	ret = success_cmd_count;
+	reset_avc_cache();
+
+out_free:
+	// kvfree
+	if (is_vmalloc_addr(payload))
+		vfree(payload);
+	else
+		kfree(payload);
+
+	return ret;
+}
+#endif
