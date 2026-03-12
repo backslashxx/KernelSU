@@ -364,7 +364,7 @@ fun SettingPagerMiuix(
                                         tint = if (uiState.isLateLoadMode) colorScheme.onBackground else colorScheme.disabledOnSecondaryVariant
                                     )
                                 },
-                                enabled = uiState.isLateLoadMode,
+                                enabled = false,
                                 checked = uiState.autoJailbreak,
                                 onCheckedChange = actions.onSetAutoJailbreak
                             )
