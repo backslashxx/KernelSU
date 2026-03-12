@@ -441,6 +441,7 @@ static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 int handle_sepolicy(void __user *user_data, u64 data_len)
 {
 	struct selinux_policy *pol, *old_pol;
@@ -543,3 +544,95 @@ out_free:
 
 	return ret;
 }
+#else
+// NOTE: we dont have rcu protected policydb apply like on 5.10+
+// we don't do old_pol to pol then destroy old_pol here
+// so we use and hotpatch just like how it used to be
+// while theres a global lock via policy_rwlock, this is:
+// 	1. not exported on 4.14 and older
+// 	2. seems problematic to hold on our own.
+// as long as we are the only one touching rules, theres no need to worry
+int handle_sepolicy(void __user *user_data, u64 data_len)
+{
+	struct policydb *db;
+	struct sepol_batch_cursor cursor;
+	u8 *payload;
+	int ret = 0;
+	int success_cmd_count = 0;
+	u32 cmd_index = 0;
+
+	if (!user_data || !data_len)
+    		return -EINVAL;
+
+	if (data_len > KSU_SEPOLICY_MAX_BATCH_SIZE)
+		return -E2BIG;
+
+	// upstream uses kvmalloc here which is just kmalloc then vmalloc fallback
+	payload = vmalloc((size_t)data_len);
+	if (!payload)
+		return -ENOMEM;
+
+	if (copy_from_user(payload, user_data, (size_t)data_len)) {
+		vfree(payload);
+		return -EFAULT;
+	}
+
+	if (!getenforce()) {
+		pr_info("SELinux permissive or disabled when handle policy!\n");
+	}
+
+	// LOCK HERE!
+	mutex_lock(&ksu_rules);
+
+	db = get_policydb();
+	smp_mb();
+
+	cursor.cur = payload;
+	cursor.end = payload + (size_t)data_len;
+
+	while (cursor.cur < cursor.end) {
+		struct sepol_data header;
+		const char *args[KSU_SEPOLICY_MAX_ARGS] = { 0 };
+		int expected_argc;
+		u32 arg_index;
+
+		ret = sepol_read_cmd_header(&cursor, &header);
+		if (ret < 0) {
+			pr_err("sepol: failed to read cmd header #%u.\n", cmd_index);
+			goto out_drop_new_policy;
+		}
+
+		expected_argc = sepol_expected_argc(header.cmd);
+		if (expected_argc < 0 || expected_argc > KSU_SEPOLICY_MAX_ARGS) {
+			ret = -EINVAL;
+			pr_err("sepol: invalid cmd header #%u.\n", cmd_index);
+			goto out_drop_new_policy;
+		}
+
+		for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
+			ret = sepol_read_string(&cursor, &args[arg_index]);
+			if (ret < 0) {
+				pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index, arg_index);
+				goto out_drop_new_policy;
+			}
+		}
+
+		ret = apply_one_sepolicy_cmd(db, &header, args);
+		if (ret < 0)
+		    pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
+		else {
+		    success_cmd_count++;
+		}
+
+		cmd_index++;
+    	}
+    	
+	smp_mb();
+	reset_avc_cache();
+
+out_drop_new_policy:
+	mutex_unlock(&ksu_rules); // UNLOCK HERE
+	vfree(payload);
+	return success_cmd_count;
+}
+#endif
