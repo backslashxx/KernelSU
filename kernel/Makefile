@@ -67,6 +67,11 @@ ifeq ($(shell grep -q "struct type_datum \*\*type_val_to_struct_array;" $(srctre
 CFLAGS_ksu.o += -DKSU_TYPE_VAL_TO_STRUCT_ARRAY
 endif
 
+ifeq ($(shell grep -q "^DEFINE_RWLOCK(policy_rwlock);" $(srctree)/security/selinux/ss/services.c; echo $$?),0)
+$(info -- KernelSU/compat: exported policy_rwlock found!)
+CFLAGS_ksu.o += -DKSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK
+endif
+
 CFLAGS_ksu.o += $(call cc-option, -Wno-declaration-after-statement)
 CFLAGS_ksu.o += $(call cc-option, -Wno-implicit-function-declaration)
 CFLAGS_ksu.o += $(call cc-option, -Wno-strict-prototypes)
