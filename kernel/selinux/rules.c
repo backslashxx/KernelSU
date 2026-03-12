@@ -1,6 +1,11 @@
+#include "linux/rcupdate.h"
+#include "security.h"
 #include <linux/uaccess.h>
 #include <linux/types.h>
 #include <linux/version.h>
+#include <linux/lockdep.h>
+#include <linux/slab.h>
+#include <linux/string.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 #define SELINUX_POLICY_INSTEAD_SELINUX_SS
@@ -9,28 +14,32 @@
 #define ALL NULL
 
 
-static struct policydb *get_policydb(void)
+#if ((!defined(KSU_COMPAT_USE_SELINUX_STATE)) || \
+        LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+extern int avc_ss_reset(u32 seqno);
+#else
+extern int avc_ss_reset(struct selinux_avc *avc, u32 seqno);
+#endif
+// reset avc cache table, otherwise the new rules will not take effect if already denied
+static void reset_avc_cache()
 {
-	struct policydb *db;
-// selinux_state does not exists before 4.19
-#ifdef KSU_COMPAT_USE_SELINUX_STATE
-#ifdef SELINUX_POLICY_INSTEAD_SELINUX_SS
-	struct selinux_policy *policy = selinux_state.policy;
-	db = &policy->policydb;
+#if ((!defined(KSU_COMPAT_USE_SELINUX_STATE)) || \
+        LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+	avc_ss_reset(0);
+	selnl_notify_policyload(0);
+	selinux_status_update_policyload(0);
 #else
-	struct selinux_ss *ss = selinux_state.ss;
-	db = &ss->policydb;
+	struct selinux_avc *avc = selinux_state.avc;
+	avc_ss_reset(avc, 0);
+	selnl_notify_policyload(0);
+	selinux_status_update_policyload(&selinux_state, 0);
 #endif
-#else
-	db = &policydb;
-#endif
-	return db;
+	selinux_xfrm_notify_policyload();
 }
-
-static DEFINE_MUTEX(ksu_rules);
 
 void apply_kernelsu_rules()
 {
+	struct selinux_policy *pol, *old_pol = selinux_state.policy;
 	struct policydb *db;
 
 	if (!getenforce()) {
@@ -142,29 +151,6 @@ static int get_object(char *buf, char __user *user_object, size_t buf_sz,
 	*object = buf;
 
 	return 0;
-}
-
-#if ((!defined(KSU_COMPAT_USE_SELINUX_STATE)) || \
-        LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
-extern int avc_ss_reset(u32 seqno);
-#else
-extern int avc_ss_reset(struct selinux_avc *avc, u32 seqno);
-#endif
-// reset avc cache table, otherwise the new rules will not take effect if already denied
-static void reset_avc_cache()
-{
-#if ((!defined(KSU_COMPAT_USE_SELINUX_STATE)) || \
-        LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
-	avc_ss_reset(0);
-	selnl_notify_policyload(0);
-	selinux_status_update_policyload(0);
-#else
-	struct selinux_avc *avc = selinux_state.avc;
-	avc_ss_reset(avc, 0);
-	selnl_notify_policyload(0);
-	selinux_status_update_policyload(&selinux_state, 0);
-#endif
-	selinux_xfrm_notify_policyload();
 }
 
 int handle_sepolicy(unsigned long arg3, void __user *arg4)
