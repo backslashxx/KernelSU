@@ -71,7 +71,18 @@ void apply_kernelsu_rules()
 	}
 	db = &pol->policydb;
 #else
+
+#if defined(KSU_COMPAT_USE_SELINUX_STATE) && !defined(SELINUX_POLICY_INSTEAD_SELINUX_SS)
+	bool got_lock = true;
+	if (!write_trylock(&selinux_state.ss->policy_rwlock)) {
+		pr_info("%s: failed to grab policy_rwlock, fallback\n", __func__);
+		mutex_lock(&ksu_rules); // better than nothing
+		got_lock = false;
+	}
+#else
 	mutex_lock(&ksu_rules);
+#endif // KSU_COMPAT_USE_SELINUX_STATE && !SELINUX_POLICY_INSTEAD_SELINUX_SS
+
 	db = get_policydb();
 #endif
 
@@ -147,8 +158,17 @@ void apply_kernelsu_rules()
 out_unlock:
 	mutex_unlock(&selinux_state.policy_mutex);
 #else
-	reset_avc_cache();
+
+#if defined(KSU_COMPAT_USE_SELINUX_STATE) && !defined(SELINUX_POLICY_INSTEAD_SELINUX_SS)
+	if (got_lock)
+		write_unlock(&selinux_state.ss->policy_rwlock);
+	else
+		mutex_unlock(&ksu_rules);
+#else
 	mutex_unlock(&ksu_rules);
+#endif // KSU_COMPAT_USE_SELINUX_STATE !SELINUX_POLICY_INSTEAD_SELINUX_SS
+
+	reset_avc_cache();
 #endif
 }
 
@@ -552,10 +572,10 @@ out_free:
 // NOTE: we dont have rcu protected policydb apply like on 5.10+
 // we don't do old_pol to pol then destroy old_pol here
 // so we use and hotpatch just like how it used to be
-// while theres a global lock via policy_rwlock, this is:
-// 	1. not exported on 4.14 and older
-// 	2. seems problematic to hold on our own.
-// as long as we are the only one touching rules, theres no need to worry
+// while theres a global lock via policy_rwlock, this is not exported on ALL
+// if we don't have access to it, as long as we are the only one touching rules
+// theres no need to worry, its going to be fineeee
+// like what, do you want me to apply policydb inside stop_machine?
 int handle_sepolicy(void __user *user_data, u64 data_len)
 {
 	struct policydb *db;
@@ -571,14 +591,16 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	if (data_len > KSU_SEPOLICY_MAX_BATCH_SIZE)
 		return -E2BIG;
 
-	// upstream uses kvmalloc here which is just kmalloc then vmalloc fallback
-	payload = vmalloc((size_t)data_len);
+	// upstream uses kvmalloc here
+	payload = kmalloc((size_t)data_len, GFP_KERNEL);
+	if (!payload)
+		payload = vmalloc((size_t)data_len);
 	if (!payload)
 		return -ENOMEM;
 
 	if (copy_from_user(payload, user_data, (size_t)data_len)) {
-		vfree(payload);
-		return -EFAULT;
+		ret = -EFAULT;
+		goto out_free;
 	}
 
 	if (!getenforce()) {
@@ -586,7 +608,16 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	}
 
 	// LOCK HERE!
+#if defined(KSU_COMPAT_USE_SELINUX_STATE) && !defined(SELINUX_POLICY_INSTEAD_SELINUX_SS)
+	bool got_lock = true;
+	if (!write_trylock(&selinux_state.ss->policy_rwlock)) {
+		pr_info("%s: failed to grab policy_rwlock, fallback\n", __func__);
+		mutex_lock(&ksu_rules); // better than nothing
+		got_lock = false;
+	}
+#else
 	mutex_lock(&ksu_rules);
+#endif // KSU_COMPAT_USE_SELINUX_STATE && !SELINUX_POLICY_INSTEAD_SELINUX_SS
 
 	db = get_policydb();
 	smp_mb();
@@ -603,21 +634,21 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 		ret = sepol_read_cmd_header(&cursor, &header);
 		if (ret < 0) {
 			pr_err("sepol: failed to read cmd header #%u.\n", cmd_index);
-			goto out_drop_new_policy;
+			goto out_unlock;
 		}
 
 		expected_argc = sepol_expected_argc(header.cmd);
 		if (expected_argc < 0 || expected_argc > KSU_SEPOLICY_MAX_ARGS) {
 			ret = -EINVAL;
 			pr_err("sepol: invalid cmd header #%u.\n", cmd_index);
-			goto out_drop_new_policy;
+			goto out_unlock;
 		}
 
 		for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
 			ret = sepol_read_string(&cursor, &args[arg_index]);
 			if (ret < 0) {
 				pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index, arg_index);
-				goto out_drop_new_policy;
+				goto out_unlock;
 			}
 		}
 
@@ -630,13 +661,28 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 
 		cmd_index++;
     	}
-    	
+
+out_unlock:
+#if defined(KSU_COMPAT_USE_SELINUX_STATE) && !defined(SELINUX_POLICY_INSTEAD_SELINUX_SS)
+	if (got_lock)
+		write_unlock(&selinux_state.ss->policy_rwlock);
+	else
+		mutex_unlock(&ksu_rules);
+#else
+	mutex_unlock(&ksu_rules);
+#endif // KSU_COMPAT_USE_SELINUX_STATE !SELINUX_POLICY_INSTEAD_SELINUX_SS
+
 	smp_mb();
+	ret = success_cmd_count;
 	reset_avc_cache();
 
-out_drop_new_policy:
-	mutex_unlock(&ksu_rules); // UNLOCK HERE
-	vfree(payload);
-	return success_cmd_count;
+out_free:
+	// kvfree
+	if (is_vmalloc_addr(payload))
+		vfree(payload);
+	else
+		kfree(payload);
+
+	return ret;
 }
 #endif
