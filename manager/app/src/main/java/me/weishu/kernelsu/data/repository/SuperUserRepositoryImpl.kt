@@ -3,6 +3,7 @@ package me.weishu.kernelsu.data.repository
 import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -77,7 +78,7 @@ class SuperUserRepositoryImpl : SuperUserRepository {
                     )
                 }.filter {
                     val ai = it.packageInfo.applicationInfo!!
-                    !ai.isResourceOverlay
+                    if (Build.VERSION.SDK_INT >= 29) !ai.isResourceOverlay else true
                 }
 
                 Log.i(TAG, "load cost: ${SystemClock.elapsedRealtime() - start}")

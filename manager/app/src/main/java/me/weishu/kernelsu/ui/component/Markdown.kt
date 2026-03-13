@@ -1,6 +1,7 @@
 package me.weishu.kernelsu.ui.component
 
 import android.graphics.text.LineBreaker
+import android.os.Build
 import android.text.Layout
 import android.text.method.LinkMovementMethod
 import android.view.ViewGroup
@@ -38,7 +39,9 @@ fun Markdown(content: String) {
                 tag = TEXTVIEW_TAG
                 movementMethod = LinkMovementMethod.getInstance()
                 setSpannableFactory(NoCopySpannableFactory.getInstance())
-                breakStrategy = LineBreaker.BREAK_STRATEGY_SIMPLE
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    breakStrategy = LineBreaker.BREAK_STRATEGY_SIMPLE
+                }
                 hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT

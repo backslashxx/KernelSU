@@ -1,5 +1,6 @@
 package me.weishu.kernelsu.ui.screen.appprofile
 
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.expandVertically
@@ -168,7 +169,12 @@ fun AppProfileScreenMaterial(
             appUid = uid,
             sharedUserId = if (isUidGroup) sharedUserId else "",
             appVersionName = if (isUidGroup) "" else (appInfo.packageInfo.versionName ?: ""),
-            appVersionCode = if (isUidGroup) 0L else appInfo.packageInfo.longVersionCode,
+            appVersionCode = if (isUidGroup) 0L else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                appInfo.packageInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                appInfo.packageInfo.versionCode.toLong()
+            },
             profile = profile,
             isUidGroup = isUidGroup,
             affectedApps = sameUidApps,
