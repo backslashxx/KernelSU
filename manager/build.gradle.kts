@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.compose.compiler) apply false
 }
 
-val androidMinSdkVersion by extra(29)
+val androidMinSdkVersion by extra(26)
 val androidTargetSdkVersion by extra(37)
 val androidCompileSdkVersion by extra(37)
 val androidCompileSdkVersionMinor by extra(0)
