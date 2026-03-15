@@ -213,4 +213,9 @@ static inline void ksu_zeroed_strncpy(char *dest, const char *src, size_t count)
 #define d_is_reg(dentry) S_ISREG((dentry)->d_inode->i_mode)
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
+struct user_struct *ksu_alloc_uid(kuid_t uid) { return alloc_uid(current_user_ns(), uid); }
+#define alloc_uid ksu_alloc_uid
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
