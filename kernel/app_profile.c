@@ -143,7 +143,11 @@ static int escape_to_root(bool is_forced)
 	 * https://github.com/torvalds/linux/blob/v5.14/kernel/sys.c
 	 * https://github.com/torvalds/linux/blob/v5.14/kernel/cred.c
 	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)
 	new_user = alloc_uid(cred->uid);
+#else
+	new_user = alloc_uid(current_user_ns(), cred->uid);
+#endif
 	if (!new_user) {
 		ret = -ENOMEM;
 		goto out_abort_creds;
