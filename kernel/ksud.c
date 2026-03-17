@@ -112,6 +112,8 @@ void on_boot_completed(void)
 	track_throne(true);
 }
 
+static bool init_second_stage_executed = false;
+
 // since _ksud handler only uses argv and envp for comparisons
 // this can probably work
 // adapted from ksu_handle_execveat_ksud
@@ -124,7 +126,6 @@ static int ksu_handle_bprm_ksud(const char *filename, const char *argv1, const c
 	static const char system_bin_init[] = "/system/bin/init";
 	/* This applies to versions between Android 6 ~ 9  */
 	static const char old_system_init[] = "/init";
-	static bool init_second_stage_executed = false;
 
 	// return early when disabled
 	if (!ksu_execveat_hook)
@@ -375,6 +376,15 @@ static void ksu_handle_initrc(struct file *file)
 
 	if (!is_init_rc(file)) {
 		return;
+	}
+
+	// insurance for failed second stage apply
+	if (!init_second_stage_executed) {
+		pr_info("%s: forcing second stage requirements\n", __func__);
+		apply_kernelsu_rules();
+		cache_sid();
+		setup_ksu_cred();
+		init_second_stage_executed = true;	
 	}
 
 	// we only process the first read
