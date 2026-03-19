@@ -83,7 +83,14 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 fun SearchStatus.SearchBox(
     onSearchStatusChange: (SearchStatus) -> Unit,
     collapseBar: @Composable (SearchStatus, Dp, PaddingValues) -> Unit = { searchStatus, topPadding, innerPadding ->
-        SearchBarFake(searchStatus.label, topPadding, innerPadding)
+        SearchBarFake(
+            label = searchStatus.label,
+            searchBarTopPadding = topPadding,
+            innerPadding = innerPadding,
+            onExpand = {
+                onSearchStatusChange(searchStatus.copy(current = SearchStatus.Status.EXPANDING))
+            }
+        )
     },
     searchBarTopPadding: Dp = 12.dp,
     contentPadding: PaddingValues = PaddingValues(0.dp),
@@ -342,7 +349,8 @@ fun SearchBar(
 fun SearchBarFake(
     label: String,
     searchBarTopPadding: Dp = 12.dp,
-    innerPadding: PaddingValues = PaddingValues(0.dp)
+    innerPadding: PaddingValues = PaddingValues(0.dp),
+    onExpand: () -> Unit = {}
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val enableBlur = LocalEnableBlur.current
@@ -372,6 +380,8 @@ fun SearchBarFake(
         onSearch = { },
         enabled = false,
         expanded = false,
-        onExpandedChange = { }
+        onExpandedChange = {
+            if (it) onExpand()
+        }
     )
 }
