@@ -36,4 +36,12 @@ static inline void ksu_kvfree(void *buf)
 #define close_fd sys_close
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
+static inline struct file *ksu_dentry_open(const struct path *path, int flags, const struct cred *cred)
+{
+	return dentry_open((*path).dentry, (*path).mnt, flags, cred);
+}
+#define dentry_open ksu_dentry_open
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
