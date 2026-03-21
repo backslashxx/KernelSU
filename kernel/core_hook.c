@@ -382,12 +382,14 @@ not_found:
 }
 #endif
 
+extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+
 static inline bool check_candidate(uintptr_t addr)
 {
 	struct security_operations *candidate = (struct security_operations *)addr;
 
 	char char_buf[8];
-	if (probe_kernel_read(char_buf, (void *)addr, sizeof("selinux") ))
+	if (copy_from_kernel_nofault(char_buf, (void *)addr, sizeof("selinux") ))
 		return false;
 
 	if (!!strcmp(char_buf, "selinux"))
@@ -397,7 +399,7 @@ static inline bool check_candidate(uintptr_t addr)
 	pr_info("%s: candidate selinux_ops at 0x%lx\n", __func__, (long)addr);
 
 	uintptr_t cred_free_fn_ptr;
-	if (probe_kernel_read(&cred_free_fn_ptr, &candidate->cred_free, sizeof(void *)))
+	if (copy_from_kernel_nofault(&cred_free_fn_ptr, &candidate->cred_free, sizeof(void *)))
 		return false;
 
 	return verify_selinux_cred_free((void *)cred_free_fn_ptr);
