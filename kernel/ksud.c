@@ -141,14 +141,14 @@ static int ksu_handle_bprm_ksud(const char *filename, const char *argv1, const c
 	if (init_second_stage_executed)
 		goto first_app_process;
 
-	// /init without argv1/useless-argv1 but usable envp
+	// init without argv1/useless-argv1 but usable envp
 	// we hunt for "INIT_SECOND_STAGE"
 	const char *envp_n = envp;
 	unsigned int envc = 1;
 	do {
-		if (IS_ENABLED(CONFIG_KSU_DEBUG))
-			pr_info("%s: envp[%d]: %s\n", __func__, envc, envp_n);
-
+#ifdef CONFIG_KSU_DEBUG
+		pr_info("%s: envp[%d]: %s\n", __func__, envc, envp_n);
+#endif
 		if (strstarts(envp_n, "INIT_SECOND_STAGE"))
 			break;
 
