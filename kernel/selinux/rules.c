@@ -708,9 +708,6 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	preempt_disable();
 	write_unlock(&selinux_state.ss->policy_rwlock);
 
-	if (ret)
-		goto out_free;
-
 #elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
 	extern rwlock_t policy_rwlock;
 	write_lock(&policy_rwlock);
@@ -721,11 +718,12 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	preempt_disable();
 	write_unlock(&policy_rwlock);	
 
+#else
+	ret = stop_machine(handle_spolicy_fn, (void *)&ctx, NULL);
+#endif
+
 	if (ret)
 		goto out_free;
-#else
-	stop_machine(handle_spolicy_fn, (void *)&ctx, NULL);
-#endif
 
 	smp_mb();
 	reset_avc_cache();
