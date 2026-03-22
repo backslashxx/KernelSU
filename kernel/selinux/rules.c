@@ -580,81 +580,38 @@ out_free:
 }
 #else
 
-struct handle_sepolicy_args {
-	void *ctx_success_cmd_count;
-	void *ctx_payload;
-	u64 ctx_data_len;
-};
-
-static int handle_spolicy_fn(void *data)
-{
-	struct sepol_batch_cursor cursor;
-	int ret = 0;
-	u32 cmd_index = 0;
-	int success_cmd_count = 0;
-
-	struct policydb *db = get_policydb();
-	struct handle_sepolicy_args *ctx = (struct handle_sepolicy_args *)data;
-	u8 *payload = (u8 *)ctx->ctx_payload;
-	u64 data_len = ctx->ctx_data_len;
-
-	cursor.cur = payload;
-	cursor.end = payload + (size_t)data_len;
-
-	while (cursor.cur < cursor.end) {
-		struct sepol_data header;
-		const char *args[KSU_SEPOLICY_MAX_ARGS] = { 0 };
-		int expected_argc;
-		u32 arg_index;
-
-		ret = sepol_read_cmd_header(&cursor, &header);
-		if (ret < 0) {
-			pr_err("sepol: failed to read cmd header #%u.\n", cmd_index);
-			goto out;
-		}
-
-		expected_argc = sepol_expected_argc(header.cmd);
-		if (expected_argc < 0 || expected_argc > KSU_SEPOLICY_MAX_ARGS) {
-			ret = -EINVAL;
-			pr_err("sepol: invalid cmd header #%u.\n", cmd_index);
-			goto out;
-		}
-
-		for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
-			ret = sepol_read_string(&cursor, &args[arg_index]);
-			if (ret < 0) {
-				pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index, arg_index);
-				goto out;
-			}
-		}
-
-		ret = apply_one_sepolicy_cmd(db, &header, args);
-		if (ret < 0)
-			pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
-		else {
-			pr_info("sepol: cmd #%u success, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
-			success_cmd_count++;
-		}
-
-		cmd_index++;
-	}
-
-out:
-	*(int *)(ctx->ctx_success_cmd_count) = success_cmd_count;
-	return ret;
-}
+/**
+ * 
+ * the thing though is that this duplication method for us has an actual window
+ * 
+ * old_db to file
+ * * file to hot_db
+ * * modify hot_db
+ * * hot_db to hot_file
+ * feed hot_file to load_sepolicy
+ * 
+ * see those asterisks, when those are being done, system can also be modifying policy
+ * so it comes back to teh original problem, we have to hold a write lock.
+ * however it wont result to a crash per se, but say, missed sepolicy changes
+ * lets say sepolicy state is a number
+ * we dumped it to file at 1234
+ * system changed it to 1239
+ * 
+ * once we load a sepolicy of modified 1234, thats a different state
+ * 
+ */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
-#define ksu_kvmalloc kvmalloc
+#define ksu_kvzalloc kvzalloc
 #define ksu_kvfree kvfree
 #else
-static inline void *ksu_kvmalloc(size_t size, gfp_t flags)
+static inline void *ksu_kvzalloc(size_t size, gfp_t flags)
 {
 	void *buf = NULL;
 
-	buf = kmalloc(size, flags);
+	buf = kzalloc(size, flags);
 	if (!buf)
-		buf = vmalloc(size);
+		buf = vzalloc(size);
 	
 	return buf;
 }
@@ -668,9 +625,153 @@ static inline void ksu_kvfree(void *buf)
 }
 #endif
 
+static inline void ksu_kvfree_byref(void *buf)
+{
+	ksu_kvfree(*(void **)buf);
+}
+
+static inline size_t ksu_security_policydb_len(void)
+{
+#ifdef KSU_COMPAT_USE_SELINUX_STATE
+	return security_policydb_len(&selinux_state);
+#else
+	return security_policydb_len();
+#endif
+}
+
+static inline int ksu_security_load_policy(void *data, size_t len)
+{
+#ifdef KSU_COMPAT_USE_SELINUX_STATE
+	return security_load_policy(&selinux_state, data, len);
+#else
+	return security_load_policy(data, len);
+#endif
+}
+
+static int handle_spolicy_fn(int *ctx_success_cmd_count, u8 *payload, u64 data_len)
+{
+	struct sepol_batch_cursor cursor;
+	int ret = 0;
+	u32 cmd_index = 0;
+	int success_cmd_count = 0;
+
+	struct policydb *current_db = get_policydb();
+
+	size_t len = ksu_security_policydb_len(); 
+	void *buf __attribute__((__cleanup__(ksu_kvfree_byref))) = ksu_kvzalloc(len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	struct policy_file file = { 0 };
+	file.data = buf;
+	file.len = len;
+
+#if defined(KSU_COMPAT_USE_SELINUX_STATE)
+	read_lock(&selinux_state.ss->policy_rwlock);
+#elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
+	extern rwlock_t policy_rwlock;
+	read_lock(&policy_rwlock);
+#else
+	preempt_disable();
+#endif
+	// current db to 'file'
+	ret = policydb_write(current_db, &file);
+
+#if defined(KSU_COMPAT_USE_SELINUX_STATE)
+	read_unlock(&selinux_state.ss->policy_rwlock);
+#elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
+	read_unlock(&policy_rwlock);	
+#else
+	preempt_enable();
+#endif
+
+	if (ret)
+		return ret;
+
+	struct policydb *new_db __attribute__((__cleanup__(ksu_kvfree_byref))) = ksu_kvzalloc(sizeof(*new_db), GFP_KERNEL);
+	if (!new_db)
+		return -ENOMEM;
+
+	// reset
+	file.data = buf; 
+	file.len = len;
+
+	// file to a 'new_db'
+	ret = policydb_read(new_db, &file);
+	if (ret) {
+		policydb_destroy(new_db);
+		return ret;
+	}
+
+	cursor.cur = payload;
+	cursor.end = payload + (size_t)data_len;
+
+	while (cursor.cur < cursor.end) {
+		struct sepol_data header;
+		const char *args[KSU_SEPOLICY_MAX_ARGS] = { 0 };
+		int expected_argc;
+		u32 arg_index;
+
+		ret = sepol_read_cmd_header(&cursor, &header);
+		if (ret < 0) {
+			pr_err("sepol: failed to read cmd header #%u.\n", cmd_index);
+			*(int *)ctx_success_cmd_count = success_cmd_count;
+			return ret;
+
+		}
+
+		expected_argc = sepol_expected_argc(header.cmd);
+		if (expected_argc < 0 || expected_argc > KSU_SEPOLICY_MAX_ARGS) {
+			ret = -EINVAL;
+			pr_err("sepol: invalid cmd header #%u.\n", cmd_index);
+			*(int *)ctx_success_cmd_count = success_cmd_count;
+			return ret;
+
+		}
+
+		for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
+			ret = sepol_read_string(&cursor, &args[arg_index]);
+			if (ret < 0) {
+				pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index, arg_index);
+				*(int *)ctx_success_cmd_count = success_cmd_count;
+				return ret;
+			}
+		}
+
+		ret = apply_one_sepolicy_cmd(new_db, &header, args);
+		if (ret < 0)
+			pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
+		else {
+			pr_info("sepol: cmd #%u success, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
+			success_cmd_count++;
+		}
+
+		cmd_index++;
+	}
+
+	// size_t new_bin_len = ksu_security_policydb_len() + 65536; // 64KB is prolly enough
+	size_t new_bin_len = new_db->len;
+	void *new_bin __attribute__((__cleanup__(ksu_kvfree_byref))) = ksu_kvzalloc(new_bin_len, GFP_KERNEL);
+	if (!new_bin)
+		return -ENOMEM;
+
+	struct policy_file out_file = { 0 }; 
+	out_file.data = new_bin; 
+	out_file.len = new_bin_len;
+
+	ret = policydb_write(new_db, &out_file);
+	if (ret)
+		return ret;
+
+	ret = ksu_security_load_policy(new_bin, out_file.len);
+	policydb_destroy(new_db);
+
+	*(int *)ctx_success_cmd_count = success_cmd_count;
+	return ret;
+}
+
 int handle_sepolicy(void __user *user_data, u64 data_len)
 {
-	u8 *payload;
 	int ret = 0;
 	int success_cmd_count = 0;
 
@@ -680,59 +781,24 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	if (data_len > KSU_SEPOLICY_MAX_BATCH_SIZE)
 		return -E2BIG;
 
-	payload = ksu_kvmalloc((size_t)data_len, GFP_KERNEL);
+	u8 *payload __attribute__((__cleanup__(ksu_kvfree_byref))) = ksu_kvzalloc((size_t)data_len, GFP_KERNEL);
 	if (!payload)
 		return -ENOMEM;
 
-	if (copy_from_user(payload, user_data, (size_t)data_len)) {
-		ret = -EFAULT;
-		goto out_free;
-	}
+	if (copy_from_user(payload, user_data, (size_t)data_len))
+		return -EFAULT;
 
 	if (!getenforce()) {
 		pr_info("SELinux permissive or disabled when handle policy!\n");
 	}
 
-	struct handle_sepolicy_args ctx = { 0 };
-	ctx.ctx_success_cmd_count = (void *)&success_cmd_count;
-	ctx.ctx_payload = (void *)payload;
-	ctx.ctx_data_len = (u64)data_len;
-
-#if defined(KSU_COMPAT_USE_SELINUX_STATE)
-	// HACK: lock is held with preempt enabled!
-	write_lock(&selinux_state.ss->policy_rwlock);
-	preempt_enable();
-
-	ret = handle_spolicy_fn((void *)&ctx);
-
-	preempt_disable();
-	write_unlock(&selinux_state.ss->policy_rwlock);
-
+	ret = handle_spolicy_fn((int *)&success_cmd_count, payload, data_len);
 	if (ret)
-		goto out_free;
-
-#elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
-	extern rwlock_t policy_rwlock;
-	write_lock(&policy_rwlock);
-	preempt_enable();
-
-	ret = handle_spolicy_fn((void *)&ctx);
-
-	preempt_disable();
-	write_unlock(&policy_rwlock);	
-
-	if (ret)
-		goto out_free;
-#else
-	stop_machine(handle_spolicy_fn, (void *)&ctx, NULL);
-#endif
+		return ret;
 
 	smp_mb();
 	reset_avc_cache();
 	ret = success_cmd_count;
-
-out_free:
-	ksu_kvfree(payload);
 
 	return ret;
 }
