@@ -574,23 +574,99 @@ out_free:
 }
 #else
 
-struct handle_sepolicy_args {
-	void *ctx_success_cmd_count;
-	void *ctx_payload;
-	u64 ctx_data_len;
-};
+static inline void *ksu_kvzalloc(size_t size, gfp_t flags)
+{
+	void *buf = NULL;
 
-static int handle_sepolicy_fn(void *data)
+	buf = kzalloc(size, flags);
+	if (!buf)
+		buf = vzalloc(size);
+	
+	return buf;
+}
+
+static inline void ksu_kvfree(void *buf)
+{
+	if (is_vmalloc_addr(buf))
+		vfree(buf);
+	else
+		kfree(buf);
+}
+#endif
+
+static inline void ksu_kvfree_byref(void *buf)
+{
+	ksu_kvfree(*(void **)buf);
+}
+
+static inline size_t ksu_security_policydb_len(void)
+{
+#ifdef KSU_COMPAT_USE_SELINUX_STATE
+	return security_policydb_len(&selinux_state);
+#else
+	return security_policydb_len();
+#endif
+}
+
+static inline int ksu_security_load_policy(void *data, size_t len)
+{
+#ifdef KSU_COMPAT_USE_SELINUX_STATE
+	return security_load_policy(&selinux_state, data, len);
+#else
+	return security_load_policy(data, len);
+#endif
+}
+
+static int handle_sepolicy_fn(int *ctx_success_cmd_count, u8 *payload, u64 data_len)
 {
 	struct sepol_batch_cursor cursor;
 	int ret = 0;
 	u32 cmd_index = 0;
 	int success_cmd_count = 0;
 
-	struct policydb *db = get_policydb();
-	struct handle_sepolicy_args *ctx = (struct handle_sepolicy_args *)data;
-	u8 *payload = (u8 *)ctx->ctx_payload;
-	u64 data_len = ctx->ctx_data_len;
+	struct policydb *current_db = get_policydb();
+
+	size_t len = ksu_security_policydb_len(); 
+	void *buf __attribute__((__cleanup__(ksu_kvfree_byref))) = ksu_kvzalloc(len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	struct policy_file file = { 0 };
+	file.data = buf;
+	file.len = len;
+
+	pr_info("%s: dump current_db to file\n", __func__);
+
+
+	read_lock(&selinux_state.ss->policy_rwlock);
+
+	// current db to 'file'
+	ret = policydb_write(current_db, &file);
+
+
+	read_unlock(&selinux_state.ss->policy_rwlock);
+
+	if (ret)
+		return ret;
+
+	struct policydb *new_db __attribute__((__cleanup__(ksu_kvfree_byref))) = ksu_kvzalloc(sizeof(*new_db), GFP_KERNEL);
+	if (!new_db)
+		return -ENOMEM;
+
+	// reset
+	file.data = buf; 
+	file.len = len;
+
+	pr_info("%s: file to new_db\n", __func__);
+
+	// file to a 'new_db'
+	ret = policydb_read(new_db, &file);
+	if (ret) {
+		policydb_destroy(new_db);
+		return ret;
+	}
+	
+	pr_info("%s: len: %zu \n", __func__, len);
 
 	cursor.cur = payload;
 	cursor.end = payload + (size_t)data_len;
@@ -604,25 +680,30 @@ static int handle_sepolicy_fn(void *data)
 		ret = sepol_read_cmd_header(&cursor, &header);
 		if (ret < 0) {
 			pr_err("sepol: failed to read cmd header #%u.\n", cmd_index);
-			goto out;
+			policydb_destroy(new_db);
+			return ret;
+
 		}
 
 		expected_argc = sepol_expected_argc(header.cmd);
 		if (expected_argc < 0 || expected_argc > KSU_SEPOLICY_MAX_ARGS) {
 			ret = -EINVAL;
 			pr_err("sepol: invalid cmd header #%u.\n", cmd_index);
-			goto out;
+			policydb_destroy(new_db);
+			return ret;
+
 		}
 
 		for (arg_index = 0; arg_index < (u32)expected_argc; arg_index++) {
 			ret = sepol_read_string(&cursor, &args[arg_index]);
 			if (ret < 0) {
 				pr_err("sepol: failed to read cmd #%u arg #%u.\n", cmd_index, arg_index);
-				goto out;
+				policydb_destroy(new_db);
+				return ret;
 			}
 		}
 
-		ret = apply_one_sepolicy_cmd(db, &header, args);
+		ret = apply_one_sepolicy_cmd(new_db, &header, args);
 		if (ret < 0)
 			pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
 		else {
@@ -633,17 +714,45 @@ static int handle_sepolicy_fn(void *data)
 		cmd_index++;
 	}
 
-out:
-	*(int *)(ctx->ctx_success_cmd_count) = success_cmd_count;
+	pr_info("%s: new_db modified\n", __func__);
+
+
+	size_t new_bin_len = len + 65535; // 64KB should be big enough
+	void *new_bin __attribute__((__cleanup__(ksu_kvfree_byref))) = ksu_kvzalloc(new_bin_len, GFP_KERNEL);
+	if (!new_bin) {
+		policydb_destroy(new_db);
+		return -ENOMEM;
+	}
+
+	struct policy_file out_file = { 0 }; 
+	out_file.data = new_bin; 
+	out_file.len = new_bin_len;
+
+	pr_info("%s: new_db to out_file\n", __func__);
+
+	ret = policydb_write(new_db, &out_file);
+	if (ret) {
+		policydb_destroy(new_db);
+		return ret;
+	}
+
+	// something is really fucked on load_policy
+	// why the fuck is this getting -22 ??
+
+	pr_info("%s: loading new policy: out_file to new_db\n", __func__);
+	ret = ksu_security_load_policy(new_bin, out_file.len);
+	policydb_destroy(new_db);
+
+	pr_info("%s: len: %zu \n", __func__, ksu_security_policydb_len());
+
+	*(int *)ctx_success_cmd_count = success_cmd_count;
 	return ret;
 }
 
 int handle_sepolicy(void __user *user_data, u64 data_len)
 {
-	u8 *payload;
 	int ret = 0;
 	int success_cmd_count = 0;
-	cpumask_t old_mask;
 
 	if (!user_data || !data_len)
     		return -EINVAL;
@@ -651,75 +760,24 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	if (data_len > KSU_SEPOLICY_MAX_BATCH_SIZE)
 		return -E2BIG;
 
-	payload = kvmalloc((size_t)data_len, GFP_KERNEL);
+	u8 *payload __attribute__((__cleanup__(ksu_kvfree_byref))) = ksu_kvzalloc((size_t)data_len, GFP_KERNEL);
 	if (!payload)
 		return -ENOMEM;
 
-	if (copy_from_user(payload, user_data, (size_t)data_len)) {
-		ret = -EFAULT;
-		goto out_free;
-	}
+	if (copy_from_user(payload, user_data, (size_t)data_len))
+		return -EFAULT;
 
 	if (!getenforce()) {
 		pr_info("SELinux permissive or disabled when handle policy!\n");
 	}
 
-	struct handle_sepolicy_args ctx = { 0 };
-	ctx.ctx_success_cmd_count = (void *)&success_cmd_count;
-	ctx.ctx_payload = (void *)payload;
-	ctx.ctx_data_len = (u64)data_len;
-
-	rwlock_t *lock = ksu_get_policy_rwlock();
-	if (!lock)
-		goto do_stop_machine;
-
-	/*
-	 * HACK: write_lock() is held with preempt enabled. DO NOT let the
-	 * task be migrated to any other CPU than the current CPU. And since
-	 * set_cpus_allowed_ptr() can sleep, use raw_smp_processor_id() to get
-	 * current CPU and bypass preemption checks.
-	 */
-	cpumask_copy(&old_mask, ksu_get_current_cpumask_t());
-	set_cpus_allowed_ptr(current, cpumask_of(raw_smp_processor_id()));
-
-	write_lock(lock);
-	preempt_enable();
-
-	if (likely(current && current->mm))
-		goto has_current_mm;
-
-	ret = handle_sepolicy_fn((void *)&ctx);
-	goto out_unlock;
-
-has_current_mm:
-	;
-	int old_policy = current->policy;
-	struct sched_param old_param = { .sched_priority = current->rt_priority };
-	struct sched_param new_param = { .sched_priority = 50 };
-
-	sched_setscheduler_nocheck(current, 1, &new_param);
-	ret = handle_sepolicy_fn((void *)&ctx);
-	sched_setscheduler_nocheck(current, old_policy, &old_param);
-
-out_unlock:
-	preempt_disable();
-	write_unlock(lock);
-	set_cpus_allowed_ptr(current, &old_mask);
-	goto out_done;
-
-do_stop_machine:
-	ret = stop_machine(handle_sepolicy_fn, (void *)&ctx, NULL);
-
-out_done:
+	ret = handle_sepolicy_fn((int *)&success_cmd_count, payload, data_len);
 	if (ret)
-		goto out_free;
+		return ret;
 
 	smp_mb();
 	reset_avc_cache();
 	ret = success_cmd_count;
-
-out_free:
-	kvfree(payload);
 
 	return ret;
 }
