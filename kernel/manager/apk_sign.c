@@ -78,7 +78,10 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset,
 		*offset += *size4;
 
 #define CERT_MAX_LENGTH 1024
-		char cert[CERT_MAX_LENGTH];
+		char *cert __cleanup(kfree_byref) = kzalloc(CERT_MAX_LENGTH, GFP_KERNEL);
+		if (!cert)
+			return false;
+
 		if (*size4 > CERT_MAX_LENGTH) {
 			pr_info("cert length overlimit\n");
 			return false;
