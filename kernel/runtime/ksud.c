@@ -246,6 +246,92 @@ static noinline void ksu_handle_sys_read_fd(unsigned int fd)
 	fput(file);
 }
 
+#define STAT_NATIVE 0
+#define STAT_STAT64 1
+
+__attribute__((cold))
+static noinline void ksu_common_newfstat_ret(unsigned int fd_int, void **statbuf_ptr, 
+			const int type, const char *syscall_name)
+{
+	if (!is_init(current_cred()))
+		return;
+
+	struct file *file = fget(fd_int);
+	if (!file)
+		return;
+
+	if (!is_init_rc(file)) {
+		fput(file);
+		return;
+	}
+	fput(file);
+
+	pr_info("%s: stat init.rc \n", syscall_name);
+
+	uintptr_t statbuf_ptr_local = (uintptr_t)*(void **)statbuf_ptr;
+	void __user *statbuf = (void __user *)statbuf_ptr_local;
+	if (!statbuf)
+		return;
+
+	void __user *st_size_ptr;
+	long size, new_size;
+	size_t len;
+
+	st_size_ptr = statbuf + offsetof(struct stat, st_size);
+	len = sizeof(long);
+
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+	if (type) {
+		st_size_ptr = statbuf + offsetof(struct stat64, st_size);
+		len = sizeof(long long);
+	}
+#endif
+
+	// we do this for kretprobe's reusability
+	// this is pretty short, so nbd
+	bool got_flipped = false;
+	if (!preemptible()) {
+		preempt_enable();
+		got_flipped = true;
+	}
+	int old_nice = task_nice(current);
+	set_user_nice(current, -20);
+
+	if (ksu_copy_from_user_retry(&size, st_size_ptr, len)) {
+		pr_info("%s: read statbuf 0x%lx failed \n", syscall_name, (unsigned long)st_size_ptr);
+		goto out;
+	}
+
+	new_size = size + ksu_rc_len;
+	pr_info("%s: adding ksu_rc_len: %ld -> %ld \n", syscall_name, size, new_size);
+		
+	if (!copy_to_user(st_size_ptr, &new_size, len))
+		pr_info("%s: added ksu_rc_len \n", syscall_name);
+	else
+		pr_info("%s: add ksu_rc_len failed: statbuf 0x%lx \n", syscall_name, (unsigned long)st_size_ptr);
+	
+out:
+	set_user_nice(current, old_nice);
+	if (got_flipped)
+		preempt_disable();
+
+	return;
+}
+
+void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr)
+{
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_common_newfstat_ret(*fd, (void **)statbuf_ptr, STAT_NATIVE, "sys_newfstat");
+}
+
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr)
+{
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_common_newfstat_ret(*(unsigned int *)fd, (void **)statbuf_ptr, STAT_STAT64, "sys_fstat64"); // WARNING: LE-only!!!
+}
+#endif
+
 static void stop_vfs_read_hook()
 {
 	ksu_vfs_read_hook = false;
