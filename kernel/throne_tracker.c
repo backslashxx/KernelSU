@@ -143,7 +143,7 @@ FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name,
 #define S_MAGIC_COMPAT(x) ((x)->f_path.dentry->d_inode->i_sb->s_magic)
 #endif
 
-void search_manager(const char *path, int depth, struct list_head *uid_data)
+static noinline void search_manager(const char *path, int depth, struct list_head *uid_data)
 {
 	int i, stop = 0;
 	struct list_head data_path_list;
