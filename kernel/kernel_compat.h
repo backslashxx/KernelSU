@@ -202,4 +202,9 @@ static inline struct task_security_struct *selinux_cred(const struct cred *cred)
 __weak void groups_sort(struct group_info *group_info) { } // no-op
 #endif
 
+static inline void ksu_kfree_byref(void *buf)
+{ 
+	kfree(*(void **)buf); 
+}
+
 #endif
