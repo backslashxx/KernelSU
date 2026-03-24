@@ -338,4 +338,6 @@ static noinline ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 #define kernel_write ksu_kernel_write_compat
 #endif // < 4.14
 
+static inline void ksu_kfree_byref(void *buf) { kfree(*(void **)buf); }
+
 #endif // __KSU_H_KERNEL_COMPAT
