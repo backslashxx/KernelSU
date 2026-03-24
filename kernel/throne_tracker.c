@@ -151,10 +151,13 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 	unsigned long data_app_magic = 0;
 
 	// First depth
-	struct data_path data = { };
-	strncpy(data.dirpath, path, DATA_PATH_LEN - 1 );
-	data.depth = depth;
-	list_add_tail(&data.list, &data_path_list);
+	struct data_path *data __attribute__((__cleanup__(ksu_kfree_byref))) = kzalloc(sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return;
+
+	strncpy(data->dirpath, path, DATA_PATH_LEN - 1 );
+	data->depth = depth;
+	list_add_tail(&data->list, &data_path_list);
 
 	// we put the apk path we collected here
 	char candidate_path[DATA_PATH_LEN];
@@ -220,7 +223,7 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 
 skip_iterate:
 			list_del(&pos->list);
-			if (pos != &data)
+			if (pos != data)
 				kfree(pos);
 		}
 	}
