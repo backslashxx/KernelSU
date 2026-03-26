@@ -204,4 +204,17 @@ static inline struct task_security_struct *selinux_cred(const struct cred *cred)
 __weak void groups_sort(struct group_info *group_info) { } // no-op
 #endif
 
+static inline void ksu_kfree_byref(void *buf)
+{
+	pr_info("debug: kfree for 0x%lx\n", *(uintptr_t *)buf );
+	kfree(*(void **)buf);
+}
+
+static inline void *debug_kzalloc(size_t size, gfp_t flags)
+{
+	void *buf = kmalloc(size, flags | __GFP_ZERO);
+	pr_info("debug: kzalloc for 0x%lx\n", (uintptr_t)buf );
+	return buf;
+}
+
 #endif
