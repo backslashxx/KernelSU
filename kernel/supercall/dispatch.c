@@ -18,6 +18,7 @@ static int do_grant_root(void __user *arg)
 }
 
 static uint32_t ksuver_override = 0;
+static uint32_t ksuflags_override = 0;
 
 static int do_get_info(void __user *arg)
 {
@@ -31,6 +32,9 @@ static int do_get_info(void __user *arg)
 
 	if (ksuver_override)
 		cmd.version = ksuver_override;
+
+	if (ksuflags_override)
+		cmd.flags = ksuflags_override;
 
 	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
 		pr_err("get_version: copy_to_user failed\n");
