@@ -42,6 +42,12 @@ static inline rwlock_t *ksu_get_policy_rwlock() { extern rwlock_t policy_rwlock;
 static inline rwlock_t *ksu_get_policy_rwlock() { return NULL; }
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0) || defined(KSU_COMPAT_HAS_BACKPORTED_CPUS_PTR)
+static inline cpumask_t *ksu_get_current_cpumask_t() { return current->cpus_ptr; }
+#else
+static inline cpumask_t *ksu_get_current_cpumask_t() { return &current->cpus_allowed; }
+#endif
+
 #endif // < 5.10
 
 static int apply_kernelsu_rules_fn(void *ptr)
@@ -152,9 +158,17 @@ out_unlock:
 	if (!lock)
 		goto do_stop_machine;
 
-	// HACK: lock is held with preempt enabled!
+	/*
+	 * HACK: write_lock() is held with preempt enabled. DO NOT let the
+	 * task be migrated to any other CPU than the current CPU. And since
+	 * set_cpus_allowed_ptr() can sleep, use raw_smp_processor_id() to get
+	 * current CPU and bypass preemption checks.
+	 */
+	cpumask_t old_mask;
+	cpumask_copy(&old_mask, ksu_get_current_cpumask_t());
+	set_cpus_allowed_ptr(current, cpumask_of(raw_smp_processor_id()));
+
 	pr_info("%s: type: policy_rwlock \n", __func__);
-	lockdep_off();
 	write_lock(lock);
 	preempt_enable();
 
@@ -178,7 +192,7 @@ has_current_mm:
 out_unlock:
 	preempt_disable();
 	write_unlock(lock);
-	lockdep_on();
+	set_cpus_allowed_ptr(current, &old_mask);
 	goto out_flush;
 
 do_stop_machine:
@@ -655,12 +669,14 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	ctx.ctx_payload = (void *)payload;
 	ctx.ctx_data_len = (u64)data_len;
 
-	// HACK: lock is held with preempt enabled!
 	rwlock_t *lock = ksu_get_policy_rwlock();
 	if (!lock)
 		goto do_stop_machine;
 
-	lockdep_off();
+	cpumask_t old_mask;
+	cpumask_copy(&old_mask, ksu_get_current_cpumask_t());
+	set_cpus_allowed_ptr(current, cpumask_of(raw_smp_processor_id()));
+
 	write_lock(lock);
 	preempt_enable();
 
@@ -682,7 +698,7 @@ has_current_mm:
 out_unlock:
 	preempt_disable();
 	write_unlock(lock);
-	lockdep_on();
+	set_cpus_allowed_ptr(current, &old_mask);
 	goto out_done;
 
 do_stop_machine:
