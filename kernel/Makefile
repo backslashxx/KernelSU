@@ -55,6 +55,11 @@ $(info -- KernelSU/compat: exported policy_rwlock found!)
 CFLAGS_ksu.o += -DKSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK
 endif
 
+ifeq ($(shell grep -q "cpus_ptr;" $(srctree)/include/linux/sched.h; echo $$?),0)
+$(info -- KernelSU/compat: backported cpus_ptr found!)
+CFLAGS_ksu.o += -DKSU_COMPAT_HAS_BACKPORTED_CPUS_PTR
+endif
+
 CFLAGS_ksu.o += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-missing-prototypes
 CFLAGS_ksu.o += -Wno-declaration-after-statement -Wno-unused-function -Wno-format -Wno-incompatible-pointer-types
 CFLAGS_ksu.o += -Wno-unused-variable -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast
