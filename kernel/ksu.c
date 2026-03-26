@@ -71,6 +71,8 @@
 #include "sulog/event.c"
 #include "sulog/fd.c"
 
+#include "hook/core_hook.c"	// lsm
+
 #include "selinux/selinux.c"
 #include "selinux/sepolicy.c"
 #include "selinux/rules.c"
