@@ -33,6 +33,12 @@ $(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
 CFLAGS_ksu.o += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 CFLAGS_ksu.o += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
 
+# uncommon, but wont hurt, check for 3-arg security_add_hooks
+ifeq ($(shell grep -A1 "void security_add_hooks" $(srctree)/include/linux/lsm_hooks.h 2>/dev/null | grep -q lsm 2>/dev/null; echo $$?),0)
+$(info -- KernelSU/compat: security_add_hooks v2 found!)
+CFLAGS_ksu.o += -DKSU_COMPAT_SECURITY_ADD_HOOKS_V2
+endif
+
 ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
 CFLAGS_ksu.o += -DKSU_COMPAT_HAS_CURRENT_SID
 endif
