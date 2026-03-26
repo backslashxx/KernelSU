@@ -1,0 +1,19 @@
+menu "KernelSU"
+
+config KSU
+	bool "KernelSU function support"
+	depends on !CPU_BIG_ENDIAN
+	depends on SECURITY_SELINUX
+	select SECCOMP
+	default y
+	help
+	  Enable kernel-level root privileges on Android System.
+
+config KSU_DEBUG
+	bool "KernelSU debug mode"
+	depends on KSU
+	default n
+	help
+	  Enable KernelSU debug mode.
+
+endmenu
