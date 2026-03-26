@@ -1,3 +1,54 @@
+#include "kernel_includes.h"
+#include "kernel_compat.h"
+
+#include "allowlist.h"
+#include "apk_sign.h"
+#include "app_profile.h"
+#include "arch.h"
+#include "core_hook.h"
+#include "feature.h"
+#include "file_wrapper.h"
+#include "klog.h"
+#include "ksud.h"
+#include "ksu.h"
+#include "manager.h"
+#include "sucompat.h"
+#include "supercalls.h"
+#include "throne_tracker.h"
+#include "su_mount_ns.h"
+#include "selinux/selinux.h"
+#include "selinux/sepolicy.h"
+
+// selinux includes
+#include "avc_ss.h"
+#include "objsec.h"
+#include "ss/services.h"
+#include "ss/symtab.h"
+#include "xfrm.h"
+#ifndef KSU_COMPAT_USE_SELINUX_STATE
+#include "avc.h"
+#endif
+
+// unity build
+#include "allowlist.c"
+#include "app_profile.c"
+#include "apk_sign.c"
+#include "sucompat.c"
+#include "throne_tracker.c"
+#include "core_hook.c"
+#include "supercalls.c"
+#include "feature.c"
+#include "su_mount_ns.c"
+#include "ksud.c"
+#include "file_wrapper.c"
+
+#include "selinux/selinux.c"
+#include "selinux/sepolicy.c"
+#include "selinux/rules.c"
+
+// __weak fn's
+#include "kernel_compat.c"
+
 struct cred* ksu_cred;
 
 extern void ksu_supercalls_init();
