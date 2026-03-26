@@ -1,0 +1,4 @@
+#ifndef __KSU_H_KERNEL_COMPAT
+#define __KSU_H_KERNEL_COMPAT
+
+#endif // __KSU_H_KERNEL_COMPAT
