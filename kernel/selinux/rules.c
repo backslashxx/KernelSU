@@ -139,15 +139,27 @@ out_unlock:
 	mutex_unlock(&selinux_state.policy_mutex);
 #else
 
+	cpumask_t old_mask;
 	db = get_policydb();
 
 	rwlock_t *lock = ksu_get_policy_rwlock();
 	if (!lock)
 		goto do_stop_machine;
 
-	// HACK: lock is held with preempt enabled!
+	/*
+	 * HACK: write_lock() is held with preempt enabled. DO NOT let the
+	 * task be migrated to any other CPU than the current CPU. And since
+	 * set_cpus_allowed_ptr() can sleep, use raw_smp_processor_id() to get
+	 * current CPU and bypass preemption checks.
+	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
+	cpumask_copy(&old_mask, current->cpus_ptr);
+#else
+	cpumask_copy(&old_mask, &current->cpus_allowed);
+#endif
+	set_cpus_allowed_ptr(current, cpumask_of(raw_smp_processor_id()));
+
 	pr_info("%s: type: policy_rwlock \n", __func__);
-	lockdep_off();
 	write_lock(lock);
 	preempt_enable();
 
@@ -172,7 +184,7 @@ has_current_mm:
 out_unlock:
 	preempt_disable();
 	write_unlock(lock);
-	lockdep_on();
+	set_cpus_allowed_ptr(current, &old_mask);
 	goto out_flush;
 
 do_stop_machine:
@@ -652,6 +664,7 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	u8 *payload;
 	int ret = 0;
 	int success_cmd_count = 0;
+	cpumask_t old_mask;
 
 	if (!user_data || !data_len)
     		return -EINVAL;
@@ -677,12 +690,23 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	ctx.ctx_payload = (void *)payload;
 	ctx.ctx_data_len = (u64)data_len;
 
-	// HACK: lock is held with preempt enabled!
 	rwlock_t *lock = ksu_get_policy_rwlock();
 	if (!lock)
 		goto do_stop_machine;
 
-	lockdep_off();
+	/*
+	 * HACK: write_lock() is held with preempt enabled. DO NOT let the
+	 * task be migrated to any other CPU than the current CPU. And since
+	 * set_cpus_allowed_ptr() can sleep, use raw_smp_processor_id() to get
+	 * current CPU and bypass preemption checks.
+	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
+	cpumask_copy(&old_mask, current->cpus_ptr);
+#else
+	cpumask_copy(&old_mask, &current->cpus_allowed);
+#endif
+	set_cpus_allowed_ptr(current, cpumask_of(raw_smp_processor_id()));
+
 	write_lock(lock);
 	preempt_enable();
 
@@ -705,7 +729,7 @@ has_current_mm:
 out_unlock:
 	preempt_disable();
 	write_unlock(lock);
-	lockdep_on();
+	set_cpus_allowed_ptr(current, &old_mask);
 	goto out_done;
 
 do_stop_machine:
