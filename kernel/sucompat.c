@@ -148,16 +148,30 @@ static int ksu_sucompat_user_common(const char __user **filename_user,
 
 	write_sulog(sym);
 
-	if (escalate) {
-		pr_info("%s su found\n", syscall_name);
-		*filename_user = ksud_user_path();
-		escape_with_root_profile(); // escalate !!
-	} else {
-		pr_info("%s su->sh!\n", syscall_name);
-		*filename_user = sh_user_path();
-	}
+	if (!escalate)
+		goto no_escalate;
 
+	if (!!escape_with_root_profile())
+		return 0;
+
+	// NOTE: we only check file existence, not exec success!
+	// like what, do we have to verify ELF header? 
+	// actually maybe https://github.com/backslashxx/KernelSU/blob/v1.0.5-61/kernel/core_hook.c#L814
+	struct path kpath;
+	if (!!kern_path("/data/adb/ksud", 0, &kpath))
+		goto no_ksud;
+
+	path_put(&kpath);
+	pr_info("%s su->ksud!\n", syscall_name);
+	*filename_user = ksud_user_path();
 	return 0;
+
+no_ksud:
+no_escalate:
+	pr_info("%s su->sh!\n", syscall_name);
+	*filename_user = sh_user_path();
+	return 0;
+
 }
 
 // sys_faccessat
@@ -201,15 +215,30 @@ static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_n
 
 	write_sulog(sym);
 
-	if (escalate) {
-		pr_info("%s su found\n", function_name);
-		memcpy(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH));
-		escape_with_root_profile();
-	} else {
-		pr_info("%s su->sh\n", function_name);
-		memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
-	}
+	if (!escalate)
+		goto no_escalate;
+
+	if (!!escape_with_root_profile())
+		return 0;
+
+	// NOTE: we only check file existence, not exec success!
+	// like what, do we have to verify ELF header? 
+	// actually maybe https://github.com/backslashxx/KernelSU/blob/v1.0.5-61/kernel/core_hook.c#L814
+	struct path kpath;
+	if (!!kern_path("/data/adb/ksud", 0, &kpath))
+		goto no_ksud;
+
+	path_put(&kpath);
+	pr_info("%s su->ksud!\n", function_name);
+	memcpy(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH));
 	return 0;
+
+no_ksud:
+no_escalate:
+	pr_info("%s su->sh!\n", function_name);
+	memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
+	return 0;
+
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
