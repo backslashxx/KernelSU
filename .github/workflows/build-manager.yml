@@ -142,7 +142,7 @@ jobs:
         uses: android-actions/setup-android@v4
 
       - name: Generate kernel UAPI header
-        run: make -C ../kernel uapi-header
+        run: cd ../kernel; python3 tools/gen_ksu_uapi.py 
 
       - name: Download arm64 ksud
         uses: actions/download-artifact@v8
