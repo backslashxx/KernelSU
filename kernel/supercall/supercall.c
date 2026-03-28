@@ -276,8 +276,10 @@ static struct kprobe reboot_kp = {
 void ksu_supercalls_init(void)
 {
     int rc;
-
+    
     ksu_supercall_dump_commands();
+
+    sulog_init_heap(); // grab heap memory for sulog
 
     rc = register_kprobe(&reboot_kp);
     if (rc) {
