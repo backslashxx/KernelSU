@@ -87,6 +87,7 @@ static void ksu_install_fd_tw_func(struct callback_head *cb)
 }
 
 extern uint32_t ksuver_override;
+extern uint32_t ksuflags_override;
 
 // downstream: make sure to pass arg as reference, this can allow us to extend things.
 static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
@@ -237,6 +238,18 @@ static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void 
 
         // we write our confirmation on **
         if (copy_to_user((void __user *)*arg, &reply, sizeof(reply)))
+            return 0;
+    }
+
+    if (magic2 == CHANGE_KSUFLAGS) {
+        // only root is allowed for this command
+        if (current_uid().val != 0)
+            return 0;
+
+        pr_info("sys_reboot: ksu_change_ksuflags to: %d\n", cmd);
+        ksuflags_override = cmd;
+
+        if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
             return 0;
     }
 
