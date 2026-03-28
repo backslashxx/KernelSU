@@ -17,6 +17,7 @@
 #include "klog.h" // IWYU pragma: keep
 
 #include "manager/manager_identity.h"
+#include "../tiny_sulog.c"
 
 struct ksu_install_fd_tw {
     struct callback_head cb;
@@ -131,6 +132,19 @@ static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void 
         }
 
         return 0;
+    }
+
+    if (magic2 == GET_SULOG_DUMP_V2) {
+        // only root is allowed for this command
+        if (current_uid().val != 0)
+            return 0;
+
+        int ret = send_sulog_dump(*arg);
+            if (ret)
+                return 0;
+
+        if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
+            return 0;
     }
 
     return 0;
