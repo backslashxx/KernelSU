@@ -291,6 +291,8 @@ void ksu_supercalls_init(void)
 
 void ksu_supercalls_exit(void)
 {
+    kfree(sulog_buf_ptr);
+
     unregister_kprobe(&reboot_kp);
     ksu_supercall_cleanup_state();
 }
