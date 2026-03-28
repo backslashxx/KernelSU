@@ -34,6 +34,8 @@ static int do_grant_root(void __user *arg)
     return 0;
 }
 
+uint32_t ksuver_override = 0;
+
 static int do_get_info(void __user *arg)
 {
     struct ksu_get_info_cmd cmd = { .version = KERNEL_SU_VERSION, .flags = 0 };
@@ -52,6 +54,10 @@ static int do_get_info(void __user *arg)
     cmd.flags |= KSU_GET_INFO_FLAG_PR_BUILD;
 #endif
     cmd.features = KSU_FEATURE_MAX;
+
+    if (ksuver_override)
+        cmd.version = ksuver_override;
+
 
     if (copy_to_user(arg, &cmd, sizeof(cmd))) {
         pr_err("get_version: copy_to_user failed\n");

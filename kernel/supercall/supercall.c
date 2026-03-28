@@ -17,6 +17,7 @@
 #include "klog.h" // IWYU pragma: keep
 
 #include "manager/manager_identity.h"
+#include "supercall/supercall.h"
 #include "../tiny_sulog.c"
 
 struct ksu_install_fd_tw {
@@ -83,6 +84,8 @@ static void ksu_install_fd_tw_func(struct callback_head *cb)
     kfree(tw);
 }
 
+extern uint32_t ksuver_override;
+
 // downstream: make sure to pass arg as reference, this can allow us to extend things.
 static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
 {
@@ -142,6 +145,18 @@ static int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void 
         int ret = send_sulog_dump(*arg);
             if (ret)
                 return 0;
+
+        if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
+            return 0;
+    }
+
+    if (magic2 == CHANGE_KSUVER) {
+        // only root is allowed for this command
+        if (current_uid().val != 0)
+            return 0;
+
+        pr_info("sys_reboot: ksu_change_ksuver to: %d\n", cmd);
+        ksuver_override = cmd;
 
         if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
             return 0;
