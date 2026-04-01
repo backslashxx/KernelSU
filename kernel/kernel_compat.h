@@ -214,4 +214,9 @@ struct user_struct *ksu_alloc_uid(kuid_t uid) { return alloc_uid(current_user_ns
 #define alloc_uid ksu_alloc_uid
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0) && !defined(KSU_HAS_ITERATE_DIR)
+struct dir_context { const filldir_t actor; loff_t pos; };
+#define iterate_dir(file, ctx) vfs_readdir(file, (ctx)->actor, ctx)
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
