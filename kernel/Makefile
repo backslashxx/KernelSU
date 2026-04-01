@@ -71,6 +71,12 @@ $(info -- KernelSU/compat: f_op->read_iter found!)
 CFLAGS_ksu.o += -DKSU_HAS_FOP_READ_ITER
 endif
 
+# UL, look for iterate_dir on ‎fs/readdir.c
+ifeq ($(shell grep -q "^int iterate_dir" $(srctree)/fs/readdir.c 2>/dev/null; echo $$?),0)
+$(info -- KernelSU/compat: iterate_dir found!)
+CFLAGS_ksu.o += -DKSU_HAS_ITERATE_DIR
+endif
+
 CFLAGS_ksu.o += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-missing-prototypes
 CFLAGS_ksu.o += -Wno-declaration-after-statement -Wno-unused-function -Wno-format -Wno-incompatible-pointer-types
 CFLAGS_ksu.o += -Wno-unused-variable -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast
