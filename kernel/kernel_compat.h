@@ -264,4 +264,8 @@ __weak char *bin2hex(char *dst, const void *src, size_t count)
 __weak void groups_sort(struct group_info *group_info) { } // no-op
 #endif
 
+#ifndef U16_MAX
+#define	U16_MAX	((u16)(~0U))
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
