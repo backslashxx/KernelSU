@@ -12,6 +12,7 @@ static int sulog_feature_set(u64 value)
 
 	ksu_sulog_enabled = enable;
 	pr_info("sulog: set to %d\n", enable);
+
 	return 0;
 }
 
