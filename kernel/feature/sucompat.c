@@ -185,6 +185,9 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 	if (!!__builtin_strcmp(syscall_name, "sys_execve") && !!__builtin_strcmp(syscall_name, "sys_execveat"))
 		goto no_escalate;
 
+#ifdef CONFIG_KSU_FEATURE_SULOG
+	ksu_sulog_emit(KSU_SULOG_EVENT_SUCOMPAT, NULL, NULL, GFP_KERNEL);
+#endif
 	if (!!escape_with_root_profile())
 		return;
 
@@ -275,6 +278,9 @@ static __always_inline void ksu_sucompat_kernel_common(int *restrict fd, void **
 		return;
 #endif
 
+#ifdef CONFIG_KSU_FEATURE_SULOG
+	ksu_sulog_emit(KSU_SULOG_EVENT_SUCOMPAT, NULL, NULL, GFP_KERNEL);
+#endif
 	if (!!escape_with_root_profile())
 		return;
 
