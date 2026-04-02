@@ -22,6 +22,11 @@ LSM_HANDLER_TYPE ksu_task_fix_setuid(struct cred *new, const struct cred *old, i
 
 LSM_HANDLER_TYPE ksu_bprm_check(struct linux_binprm *bprm)
 {
+
+#ifdef CONFIG_KSU_FEATURE_SULOG
+	ksu_sulog_emit_bprm((const char *)bprm->filename);
+#endif
+
 	return 0;
 }
 
@@ -77,7 +82,9 @@ loop_start:
 static struct security_hook_list ksu_hooks[] = {
 	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
+#ifdef CONFIG_KSU_FEATURE_SULOG
 	LSM_HOOK_INIT(bprm_check_security, ksu_bprm_check),
+#endif
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) || defined(KSU_COMPAT_SECURITY_ADD_HOOKS_V2)
@@ -397,8 +404,10 @@ static int ksu_register_lsm_hook(void *data)
 	orig_task_fix_setuid = ops->task_fix_setuid;
 	ops->task_fix_setuid = hook_task_fix_setuid;
 
+#ifdef CONFIG_KSU_FEATURE_SULOG
 	orig_bprm_check_security = ops->bprm_check_security;
 	ops->bprm_check_security = hook_bprm_check_security;
+#endif
 
 	orig_file_permission = ops->file_permission;
 	ops->file_permission = hook_file_permission;
