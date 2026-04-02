@@ -58,6 +58,13 @@ config KSU_LSM_SECURITY_HOOKS
 	  Disabling this is mostly useful for non-ARM64 with kernel > 6.8.
 	  Make sure to implement manual hooks on security/security.c.
 
+config KSU_FEATURE_SULOG
+	bool "KernelSU SU Logging feature"
+	depends on KSU
+	default y
+	help
+	  Build KernelSU's SU Log.
+
 config KSU_ENABLE_FULL_UID_CHECKS
 	bool "perform full uid checks (reduced performance)"
 	depends on KSU
