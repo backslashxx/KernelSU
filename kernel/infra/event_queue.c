@@ -80,8 +80,7 @@ void ksu_event_queue_destroy(struct ksu_event_queue *queue)
 	wake_up_interruptible_poll(&queue->read_wait, EPOLLHUP | POLLHUP);
 }
 
-int ksu_event_queue_push(struct ksu_event_queue *queue, __u16 type, __u16 flags, const void *payload, __u32 len,
-						 gfp_t gfp)
+int ksu_event_queue_push(struct ksu_event_queue *queue, __u16 type, __u16 flags, const void *payload, __u32 len, gfp_t gfp)
 {
 	struct ksu_event_queue_node *node = NULL;
 	unsigned long irq_flags;
@@ -356,9 +355,9 @@ out_unlock:
 	return copied;
 }
 
-__poll_t ksu_event_queue_poll(struct ksu_event_queue *queue, struct file *file, poll_table *wait)
+unsigned __bitwise ksu_event_queue_poll(struct ksu_event_queue *queue, struct file *file, poll_table *wait)
 {
-	__poll_t mask = 0;
+	unsigned __bitwise mask = 0;
 	unsigned long irq_flags;
 
 	poll_wait(file, &queue->read_wait, wait);
