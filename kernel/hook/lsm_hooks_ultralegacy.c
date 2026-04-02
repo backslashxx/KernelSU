@@ -27,6 +27,9 @@ static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 static int (*orig_bprm_check_security)(struct linux_binprm *bprm) __read_mostly = NULL;
 static int hook_bprm_check_security(struct linux_binprm *bprm)
 {
+#ifdef CONFIG_KSU_FEATURE_SULOG
+	ksu_sulog_emit_bprm((const char *)bprm->filename);
+#endif
 	return orig_bprm_check_security(bprm);
 }
 
@@ -344,8 +347,10 @@ static int ksu_register_lsm_hook(void *data)
 	orig_task_fix_setuid = ops->task_fix_setuid;
 	ops->task_fix_setuid = hook_task_fix_setuid;
 
+#ifdef CONFIG_KSU_FEATURE_SULOG
 	orig_bprm_check_security = ops->bprm_check_security;
 	ops->bprm_check_security = hook_bprm_check_security;
+#endif
 
 #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
 	orig_file_permission = ops->file_permission;

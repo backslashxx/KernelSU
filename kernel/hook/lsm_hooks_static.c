@@ -90,6 +90,9 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old, int fla
 extern int security_bprm_check(struct linux_binprm *bprm);
 static int ksu_bprm_check(struct linux_binprm *bprm)
 {
+#ifdef CONFIG_KSU_FEATURE_SULOG
+	ksu_sulog_emit_bprm((const char *)bprm->filename);
+#endif
 	return security_bprm_check(bprm);
 }
 
@@ -161,6 +164,7 @@ rename_hook_done:
 	ret = arm64_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_task_fix_setuid);
 	pr_info("lsm_hijack: security_task_fix_setuid: ret %d \n", ret);
 
+#ifdef CONFIG_KSU_FEATURE_SULOG
 	symbol_addr = ksu_kallsyms_lookup_name("security_bprm_check");
 	ret = arm64_bl_patch(ksu_kallsyms_lookup_name("bprm_execve"), 256 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_bprm_check);
 	if (ret)
@@ -168,6 +172,7 @@ rename_hook_done:
 	if (ret)
 		ret = arm64_bl_patch(ksu_kallsyms_lookup_name("exec_binprm"), 256 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_bprm_check);
 	pr_info("lsm_hijack: security_bprm_check: ret %d \n", ret);
+#endif
 
 #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
 	symbol_addr = ksu_kallsyms_lookup_name("vfs_read");
