@@ -46,6 +46,13 @@ config KSU_TAMPER_SYSCALL_TABLE
 	  complies with Clang CFI.
 	  Verified on 3.0 ~ 6.12.
 
+config KSU_FEATURE_SULOG
+	bool "KernelSU SU Logging feature"
+	depends on KSU
+	default y
+	help
+	  Build KernelSU's SU Log.
+
 config KSU_DEBUG
 	bool "KernelSU debug mode"
 	depends on KSU
