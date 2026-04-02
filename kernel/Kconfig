@@ -28,6 +28,13 @@ config KSU_TAMPER_SYSCALL_TABLE
 	  sys_faccessat, sys_newfstat_ret manual hooks.
 	  Personally tested on Linux 3.10 ~ 4.14, aarch64.
 
+config KSU_FEATURE_SULOG
+	bool "KernelSU SU Logging feature"
+	depends on KSU
+	default y
+	help
+	  Build KernelSU's SU Log.
+
 config KSU_DEBUG
 	bool "KernelSU debug mode"
 	depends on KSU
