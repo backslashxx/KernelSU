@@ -159,6 +159,10 @@ static int __init kernelsu_init(void)
 
 	ksu_selinux_hide_init(); // so the feature is registered
 
+#ifdef CONFIG_KSU_FEATURE_SULOG	
+	ksu_sulog_init(); // so the feature is registered
+#endif
+
 	ksu_core_init();
 
 #if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
