@@ -166,6 +166,10 @@ static int __init kernelsu_init(void)
 	ksu_selinux_hide_init();
 	ksu_shell_su_adb_only_init();
 
+#ifdef CONFIG_KSU_FEATURE_SULOG	
+	ksu_sulog_init(); // so the feature is registered
+#endif
+
 	ksu_core_init();
 	ksu_supercalls_init();
 
