@@ -210,6 +210,10 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user, void 
 {
 	sys_execve_escape_ksud((void *)filename_user);
 
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_handle_execve((void *)filename_user, (void *)envp);
+#endif
+
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
@@ -220,6 +224,10 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user, void 
 static __always_inline void ksu_sucompat_kernel_common(void **filename_ptr, void *argv, void *envp, const char *function_name)
 {
 	kernel_execve_escape_ksud((void *)filename_ptr);
+
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_handle_execveat((void *)filename_ptr, (void *)envp);
+#endif
 
 	if (!is_su_allowed((const void **)filename_ptr))
 		return;
