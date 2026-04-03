@@ -234,6 +234,9 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 // sys_execve, compat_sys_execve
 int ksu_handle_sys_execve(const char __user **filename_user, void *argv, void *envp)
 {
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_execve_user((void *)filename_user, (void *)envp);
+#endif
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
@@ -244,6 +247,9 @@ int ksu_handle_sys_execve(const char __user **filename_user, void *argv, void *e
 // sys_execveat, compat_sys_execveat
 int ksu_handle_sys_execveat(int *fd, const char __user **filename_user, void *argv, void *envp, int *flags)
 {
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_execve_user((void *)filename_user, (void *)envp);
+#endif
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
@@ -253,6 +259,9 @@ int ksu_handle_sys_execveat(int *fd, const char __user **filename_user, void *ar
 
 static __always_inline void ksu_sucompat_kernel_common(int *restrict fd, void **restrict filename_ptr, void *restrict argv, void *restrict envp, int *restrict flags, const char *function_name)
 {
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_execve_kernel((void *)filename_ptr, (void *)envp);
+#endif
 	if (!is_su_allowed((const void **)filename_ptr))
 		return;
 
