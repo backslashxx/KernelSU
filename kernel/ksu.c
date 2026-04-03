@@ -171,6 +171,9 @@ static int __init kernelsu_init(void)
 #ifdef CONFIG_KSU_FEATURE_SULOG	
 	ksu_sulog_init();
 #endif
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_init();
+#endif
 	ksu_selinux_hide_init();
 	ksu_shell_su_adb_only_init();
 
