@@ -181,6 +181,8 @@ static __always_inline bool is_user_filename_su(const char __user **filename_use
 
 static __always_inline void ksu_sucompat_user_execve(const char __user **filename_user, void *argv, void *envp, const char *syscall_name)
 {
+	ksu_adb_root_execve_user((void *)filename_user, (void *)envp);
+
 	if (!is_su_allowed((const void **)filename_user))
 		return;
 
@@ -254,6 +256,8 @@ int ksu_handle_sys_execveat(int *fd, const char __user **filename_user, void *ar
 
 static __always_inline void ksu_sucompat_kernel_common(int *restrict fd, void **restrict filename_ptr, void *restrict argv, void *restrict envp, int *restrict flags, const char *function_name)
 {
+	ksu_adb_root_execve_kernel((void *)filename_ptr, (void *)envp);
+
 	if (!is_su_allowed((const void **)filename_ptr))
 		return;
 
