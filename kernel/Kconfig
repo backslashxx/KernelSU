@@ -35,6 +35,13 @@ config KSU_FEATURE_SULOG
 	help
 	  Build KernelSU's SU Log.
 
+config KSU_FEATURE_ADBROOT
+	bool "KernelSU ADB Root feature"
+	depends on KSU
+	default y
+	help
+	  Build KernelSU's adb root feature.
+
 config KSU_DEBUG
 	bool "KernelSU debug mode"
 	depends on KSU
