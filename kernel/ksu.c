@@ -127,6 +127,10 @@ int __init kernelsu_init(void)
 	ksu_sulog_init(); // so the feature is registered
 #endif
 
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_init(); // so the feature is registered
+#endif
+
 	ksu_core_init();
 
 	ksu_allowlist_init();
