@@ -68,6 +68,11 @@ install_ksu_fd:
 
 kill_seccomp:
 	disable_seccomp();
+
+	if (IS_ENABLED(CONFIG_KSU_DEBUG))
+		pr_info("%s: tag task with uid: %d pid: %d comm: %s \n", __func__, new_uid, current->pid, current->comm);
+
+	set_thread_flag(TIF_KSU_MANAGED);
 	return 0;
 }
 
@@ -76,6 +81,13 @@ LSM_HANDLER_TYPE ksu_bprm_check(struct linux_binprm *bprm)
 
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	ksu_sulog_emit_bprm((const char *)bprm->filename);
+#endif
+
+#if 0
+	if (unlikely(test_thread_flag(TIF_KSU_MANAGED))) {
+		pr_info("%s: ksu managed task found with pid: %d comm: %s \n", __func__, current->pid, current->comm);
+		// clear_thread_flag(TIF_KSU_MANAGED);
+	}
 #endif
 
 	return 0;

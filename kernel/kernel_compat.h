@@ -349,4 +349,19 @@ static inline ksu_kuid_t current_uid() { return *(ksu_kuid_t *)(&current_cred()-
 static inline ksu_kuid_t current_euid() { return *(ksu_kuid_t *)(&current_cred()->euid); }
 #endif // < 3.14
 
+// its free real estate, this is ulong so wordsize.
+// https://elixir.bootlin.com/linux/v7.0-rc6/source/arch/arm64/include/asm/thread_info.h
+// https://elixir.bootlin.com/linux/v7.0-rc6/source/arch/arm/include/asm/thread_info.h
+#if defined(CONFIG_64BIT)
+#define TIF_KSU_MANAGED		60
+#define TIF_KSU_RESERVED_61	61
+#define TIF_KSU_RESERVED_62	62
+#define TIF_KSU_RESERVED_63	63
+#else
+#define TIF_KSU_MANAGED		28
+#define TIF_KSU_RESERVED_29	29
+#define TIF_KSU_RESERVED_30	30
+#define TIF_KSU_RESERVED_31	31
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT

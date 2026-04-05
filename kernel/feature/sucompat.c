@@ -66,10 +66,14 @@ static __always_inline bool is_su_allowed(const void **ptr_to_check)
 	if (likely(!!current->seccomp.mode))
 		return false;
 
+	if (test_thread_flag(TIF_KSU_MANAGED) && current_uid().val != 2000)
+		goto ptr_check;
+
 	// with seccomp check above, we can make this neutral
 	if (!ksu_is_allow_uid_for_current(current_uid().val))
 		return false;
 
+ptr_check:
 	// first check the pointer-to-pointer
 	if (unlikely(!ptr_to_check))
 		return false;
