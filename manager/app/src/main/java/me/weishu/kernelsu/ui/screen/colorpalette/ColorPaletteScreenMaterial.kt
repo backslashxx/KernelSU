@@ -64,8 +64,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -357,7 +359,12 @@ private fun ThemePreviewCard(
     val dynamicColor = keyColor == 0
 
     val colorScheme = if (dynamicColor) {
-        val baseScheme = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        val baseScheme = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            else ->
+                if (isDark) darkColorScheme() else expressiveLightColorScheme()
+        }
         rememberDynamicColorScheme(
             seedColor = Color.Unspecified,
             isDark = isDark,
@@ -480,6 +487,7 @@ private fun ThemePreviewCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ColorButtonMaterial(
     color: Color,
@@ -492,7 +500,12 @@ private fun ColorButtonMaterial(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val colorScheme = if (color == Color.Unspecified) {
-        val baseScheme = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        val baseScheme = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            else ->
+                if (isDark) darkColorScheme() else expressiveLightColorScheme()
+        }
         rememberDynamicColorScheme(
             seedColor = Color.Unspecified,
             isDark = isDark,
