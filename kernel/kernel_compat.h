@@ -337,4 +337,15 @@ static noinline ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 
 static inline void ksu_kfree_byref(void *buf) { kfree(*(void **)buf); }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION (3, 9, 0)
+// hashtable.h, list.h, rculist.h
+// ref: https://github.com/torvalds/linux/commit/b67bfe0d42cac56c512dd5da4b1b347a23f4b70a
+#include "linux_hashtable.h"
+static inline int __must_check ksu_kref_get_unless_zero(struct kref *kref)
+{ 
+	return atomic_add_unless(&kref->refcount, 1, 0); 
+}
+#define kref_get_unless_zero ksu_kref_get_unless_zero
+#endif // < 3.9
+
 #endif // __KSU_H_KERNEL_COMPAT
