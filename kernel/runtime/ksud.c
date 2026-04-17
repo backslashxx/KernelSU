@@ -497,11 +497,45 @@ static int vol_detector_exit()
 	return 0;
 }
 
+// we do this so that if theres no ksud to call on_post_fs_data/ksu_is_safe_mode,
+// there will be no input handler that stays around
+// 30s is more than enough time from second_stage to decrypt/post_fs_data
+static int unregister_vol_detector_fn(void *data)
+{
+	unsigned int i = 0;
+
+	pr_info("vol_detector: unreg kthread init!\n");
+	set_user_nice(current, 19); // low prio
+
+start:
+	if (!*(volatile bool *)&ksu_input_hook)
+		goto bail;
+
+	msleep(10000);
+
+	i++;
+
+	if (i < 3)
+		goto start;
+
+	stop_input_hook();
+
+bail:
+	pr_info("vol_detector: unreg kthread exit!\n");
+	return 0;
+}
+
+static void unregister_vol_detector_thread()
+{
+	kthread_run(unregister_vol_detector_fn, NULL, "vol_detector");
+}
+
 static void stop_vfs_read_hook()
 {
 	ksu_vfs_read_hook = false;
 	pr_info("stop vfs_read_hook\n");
 	ksu_disable_vfs_read_branch();
+	unregister_vol_detector_thread();
 }
 
 static void stop_input_hook()
