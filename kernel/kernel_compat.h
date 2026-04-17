@@ -215,4 +215,29 @@ static inline void ksu_static_key_disable(struct static_key *key)
 #endif // < 4.3
 #endif // >= 3.4 && CONFIG_JUMP_LABEL
 
+struct user_arg_ptr {
+#ifdef CONFIG_COMPAT
+	bool is_compat;
+#endif
+	union {
+		const char __user *const __user *native;
+#ifdef CONFIG_COMPAT
+		const compat_uptr_t __user *compat;
+#endif
+	} ptr;
+};
+
+#ifndef untagged_addr
+#ifdef CONFIG_ARM64
+static inline __s64 ksu_sign_extend64(__u64 value, int index)
+{
+	__u8 shift = 63 - index;
+	return (__s64)(value << shift) >> shift;
+}
+#define untagged_addr(addr) ksu_sign_extend64(addr, 55)
+#else
+#define untagged_addr(addr) (addr)
+#endif
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
