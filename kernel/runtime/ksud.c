@@ -217,6 +217,13 @@ static noinline void ksu_install_rc_hook(struct file *file)
 	}
 	rc_hooked = true;
 
+	// since we already have domains, selinux is initialized, we can apply rules and shit
+	// https://github.com/LineageOS/android_system_core_old/blob/ecbcdafc3/init/init.cpp#L669
+	pr_info("%s: init.rc second stage, fp: 0x%lx \n", __func__, (uintptr_t)file);
+	apply_kernelsu_rules();
+	cache_sid();
+	setup_ksu_cred();
+
 	// now we can sure that the init process is reading
 	// `/system/etc/init/init.rc`
 
