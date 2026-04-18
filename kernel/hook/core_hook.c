@@ -364,6 +364,9 @@ static int ksu_register_lsm_hook(void *data)
 {
 	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
 
+	orig_bprm_set_creds = ops->bprm_set_creds;
+	ops->bprm_set_creds = hook_bprm_set_creds;
+
 	orig_inode_rename = ops->inode_rename;
 	ops->inode_rename = hook_inode_rename;
 
