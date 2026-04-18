@@ -368,6 +368,9 @@ static void ksu_lsm_hook_init(void)
 	preempt_disable();
 	local_irq_disable();
 
+	orig_bprm_set_creds = ops->bprm_set_creds;
+	ops->bprm_set_creds = hook_bprm_set_creds;
+
 	orig_inode_rename = ops->inode_rename;
 	ops->inode_rename = hook_inode_rename;
 
