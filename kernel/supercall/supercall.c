@@ -46,6 +46,19 @@ int ksu_install_fd(void)
 	return fd;
 }
 
+static inline int ksu_handle_fd_request(void __user *arg4)
+{
+	int fd = ksu_install_fd();
+	pr_info("[%d] install ksu fd: %d\n", current->pid, fd);
+
+	if (copy_to_user(arg4, &fd, sizeof(fd))) {
+		pr_err("install ksu fd reply err\n");
+		close_fd(fd);
+	}
+
+	return 0;
+}
+
 // downstream: make sure to pass arg as reference, this can allow us to extend things.
 int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
 {
@@ -60,14 +73,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 
 	// Check if this is a request to install KSU fd
 	if (magic2 == KSU_INSTALL_MAGIC2) {
-		int fd = ksu_install_fd();
-		pr_info("[%d] install ksu fd: %d\n", current->pid, fd);
-
-		if (copy_to_user((void __user *)arg4, &fd, sizeof(fd))) {
-			pr_err("install ksu fd reply err\n");
-		}
-
-		return 0;
+		return ksu_handle_fd_request(arg4);
 	}
 
 	// grab a copy as we write the pointer on the pointer
