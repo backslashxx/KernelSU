@@ -21,9 +21,13 @@ int ksu_bprm_check(struct linux_binprm *bprm)
 
 int ksu_file_permission(struct file *file, int mask)
 {
+#ifdef KSU_CAN_USE_JUMP_LABEL
+	if (static_branch_likely(&ksud_vfs_read_key))
+		ksu_install_rc_hook(file);
+#else
 	if (unlikely(ksu_vfs_read_hook))
 		ksu_install_rc_hook(file);
-
+#endif
 	return 0;
 }
 
