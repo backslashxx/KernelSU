@@ -55,4 +55,40 @@ static inline struct file *ksu_dentry_open(const struct path *path, int flags, c
 #endif
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0) && defined(CONFIG_JUMP_LABEL)
+#define KSU_CAN_USE_JUMP_LABEL
+
+// https://elixir.bootlin.com/linux/v3.10.108/source/include/linux/jump_label.h#L211
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
+static inline void ksu_static_key_enable(struct static_key *key)
+{
+	int count = atomic_read(&key->enabled);
+	if (!count)
+		static_key_slow_inc(key);
+}
+
+static inline void ksu_static_key_disable(struct static_key *key)
+{
+	int count = atomic_read(&key->enabled);
+	if (count)
+		static_key_slow_dec(key);
+}
+
+#define static_branch_enable(k)		ksu_static_key_enable(k)
+#define static_branch_disable(k)	ksu_static_key_disable(k)
+
+#define static_branch_unlikely(k)	static_key_false(k)
+#define static_branch_likely(k)		static_key_true(k)
+
+#ifndef DEFINE_STATIC_KEY_FALSE
+#define DEFINE_STATIC_KEY_FALSE(k)	struct static_key k = STATIC_KEY_INIT_FALSE
+#endif
+
+#ifndef DEFINE_STATIC_KEY_TRUE
+#define DEFINE_STATIC_KEY_TRUE(k)	struct static_key k = STATIC_KEY_INIT_TRUE
+#endif
+
+#endif // < 4.3
+#endif // >= 3.4 && CONFIG_JUMP_LABEL
+
 #endif // __KSU_H_KERNEL_COMPAT
