@@ -84,8 +84,13 @@ extern ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_
 static ssize_t ksu_vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
 #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+#ifdef KSU_CAN_USE_JUMP_LABEL
+	if (static_branch_likely(&ksud_vfs_read_key))
+		ksu_install_rc_hook(file);
+#else
 	if (unlikely(ksu_vfs_read_hook))
 		ksu_install_rc_hook(file);
+#endif
 #endif
 
 	return vfs_read(file, buf, count, pos);
