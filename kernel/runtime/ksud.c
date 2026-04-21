@@ -29,6 +29,18 @@ static bool ksu_boot_completed __read_mostly = false;
 static bool ksu_vfs_read_hook __read_mostly = true;
 static bool ksu_input_hook __read_mostly = true;
 
+#ifdef KSU_CAN_USE_JUMP_LABEL
+DEFINE_STATIC_KEY_TRUE(ksud_vfs_read_key);
+static inline void ksu_disable_vfs_read_branch()
+{
+	pr_info("vfs_read_hook: remove vfs_read branches\n");
+	static_branch_disable(&ksud_vfs_read_key);
+	smp_mb();
+}
+#else
+static inline void ksu_disable_vfs_read_branch() { } // no-op
+#endif
+
 void on_post_fs_data(void)
 {
 	static bool done = false;
@@ -320,15 +332,25 @@ out:
 
 void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr)
 {
+#ifdef KSU_CAN_USE_JUMP_LABEL
+	if (static_branch_likely(&ksud_vfs_read_key))
+		ksu_common_newfstat_ret(*fd, (void **)statbuf_ptr, STAT_NATIVE, "sys_newfstat");
+#else
 	if (unlikely(ksu_vfs_read_hook))
 		ksu_common_newfstat_ret(*fd, (void **)statbuf_ptr, STAT_NATIVE, "sys_newfstat");
+#endif
 }
 
 #if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
 void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr)
 {
+#ifdef KSU_CAN_USE_JUMP_LABEL
+	if (static_branch_likely(&ksud_vfs_read_key))
+		ksu_common_newfstat_ret(*(unsigned int *)fd, (void **)statbuf_ptr, STAT_STAT64, "sys_fstat64"); // WARNING: LE-only!!!
+#else
 	if (unlikely(ksu_vfs_read_hook))
 		ksu_common_newfstat_ret(*(unsigned int *)fd, (void **)statbuf_ptr, STAT_STAT64, "sys_fstat64"); // WARNING: LE-only!!!
+#endif
 }
 #endif
 
@@ -336,6 +358,7 @@ static void stop_vfs_read_hook()
 {
 	ksu_vfs_read_hook = false;
 	pr_info("stop vfs_read_hook\n");
+	ksu_disable_vfs_read_branch();
 }
 
 static void stop_input_hook()
