@@ -60,7 +60,7 @@ static int ksu_bprm_check(struct linux_binprm *bprm)
 extern ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos);
 static ssize_t ksu_vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
-	if (unlikely(ksu_vfs_read_hook))
+	if (static_branch_likely(&ksud_vfs_read_key))
 		ksu_install_rc_hook(file);
 
 	return vfs_read(file, buf, count, pos);
@@ -69,7 +69,7 @@ static ssize_t ksu_vfs_read(struct file *file, char __user *buf, size_t count, l
 extern int security_file_permission(struct file *file, int mask);
 static int ksu_security_file_permission(struct file *file, int mask)
 {
-	if (unlikely(ksu_vfs_read_hook))
+	if (static_branch_likely(&ksud_vfs_read_key))
 		ksu_install_rc_hook(file);
 
 	return security_file_permission(file, mask);
