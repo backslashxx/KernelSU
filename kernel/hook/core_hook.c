@@ -96,6 +96,49 @@ LSM_HANDLER_TYPE ksu_file_permission(struct file *file, int mask)
 	return 0;
 }
 
+static inline int ksu_handle_devpts(struct inode *inode)
+{
+	if (!current->mm)
+		return 0;
+
+	uid_t uid = current_uid().val;
+	if (uid % 100000 < 10000)
+		return 0;
+
+	if (!ksu_is_allow_uid_for_current(current_uid().val))
+		return 0;
+
+	extern u32 ksu_file_sid;
+	if (!ksu_file_sid)
+		return 0;
+
+	struct inode_security_struct *sec = selinux_inode(inode);
+	if (!sec) 
+		return 0;
+
+	pr_info("%s: replace inode sid: %d with ksu_file_sid: %d \n", __func__, sec->sid, ksu_file_sid);
+	
+	sec->sid = ksu_file_sid;
+
+	return 0;
+}
+
+LSM_HANDLER_TYPE ksu_inode_permission(struct inode *inode, int mask)
+{
+	if (likely(!!current->seccomp.mode))
+		return 0;
+
+	if (!inode->i_sb) 
+		return 0;
+
+	if (inode->i_sb->s_magic != DEVPTS_SUPER_MAGIC)
+		return 0; 
+
+	ksu_handle_devpts(inode);
+
+	return 0;
+}
+
 #ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
 static int ksu_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 			    struct inode *new_inode, struct dentry *new_dentry)
@@ -113,6 +156,7 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
 static struct security_hook_list ksu_hooks[] = {
 	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
+	LSM_HOOK_INIT(inode_permission, ksu_inode_permission),
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	LSM_HOOK_INIT(bprm_check_security, ksu_bprm_check),
 #endif

@@ -360,15 +360,8 @@ static int do_get_wrapper_fd(void __user *arg) {
 	if (!ksu_file_sid) {
 		return -EINVAL;
 	}
-
-	struct ksu_get_wrapper_fd_cmd cmd;
-
-	if (copy_from_user(&cmd, arg, sizeof(cmd))) {
-		pr_err("get_wrapper_fd: copy_from_user failed\n");
-		return -EFAULT;
-	}
-
-	return ksu_install_file_wrapper(cmd.fd);
+	
+	return -ENOSYS;
 }
 
 // Get task mark status

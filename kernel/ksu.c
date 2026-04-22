@@ -34,7 +34,6 @@
 #include "supercall/internal.h"
 #include "supercall/supercall.h"
 #include "infra/su_mount_ns.h"
-#include "infra/file_wrapper.h"
 #include "infra/event_queue.h"
 #include "feature/adb_root.h"
 #include "feature/kernel_umount.h"
@@ -61,7 +60,6 @@
 #include "supercall/supercall.c"
 
 #include "infra/su_mount_ns.c"
-#include "infra/file_wrapper.c"
 #include "infra/event_queue.c"
 
 #include "feature/adb_root.c"
@@ -181,8 +179,6 @@ int __init kernelsu_init(void)
 	ksu_throne_tracker_init();
 
 	ksu_ksud_init();
-
-	ksu_file_wrapper_init();
 
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	ksu_syscall_table_hook_init();
