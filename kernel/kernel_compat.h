@@ -196,6 +196,9 @@ static inline void ksu_static_key_disable(struct static_key *key)
 #endif // < 4.3
 #endif // >= 3.4 && CONFIG_JUMP_LABEL
 
+static atomic64_t success_count = ATOMIC64_INIT(0);
+static atomic64_t fault_count = ATOMIC64_INIT(0);
+
 /**
  * ksu_copy_from_user_retry
  * try nofault copy first, if it fails, try with plain
@@ -206,10 +209,13 @@ extern long copy_from_user_nofault(void *dst, const void __user *src, size_t siz
 static __always_inline long ksu_copy_from_user_retry(void *to, const void __user *from, unsigned long count)
 {
 	long ret = copy_from_user_nofault(to, from, count);
-	if (likely(!ret))
+	if (likely(!ret)) {
+		atomic64_inc(&success_count);
 		return ret;
+	}
 
 	// we faulted! fallback to slow path
+	atomic64_inc(&fault_count);
 	return copy_from_user(to, from, count);
 }
 

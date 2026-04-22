@@ -538,6 +538,19 @@ bail:
 	return 0;
 }
 
+static int print_pagefault_stats(void *data)
+{
+	set_user_nice(current, 19);
+
+start:
+	pr_info("copy_from_user_retry: success: %llu faults: %llu \n", atomic64_read(&success_count), atomic64_read(&fault_count));
+	msleep(300000); // 5m
+	goto start;
+	
+	return 0;
+}
+
+
 static void unregister_vol_detector_thread()
 {
 	kthread_run(unregister_vol_detector_fn, NULL, "vol_detector");
@@ -556,8 +569,10 @@ static void stop_input_hook()
 	if (!ksu_input_hook) { return; }
 	ksu_input_hook = false;
 	pr_info("stop input_hook\n");
-	
+
 	vol_detector_exit();
+	
+	kthread_run(print_pagefault_stats, NULL, "pagefault_ctr");
 }
 
 void __init ksu_ksud_init()
