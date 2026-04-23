@@ -86,21 +86,20 @@ static inline int ksu_handle_devpts(struct inode *inode)
 	if (!current->mm)
 		return 0;
 
-	uid_t uid = current_uid().val;
-	if (uid % 100000 < 10000)
+	if (!ksu_file_sid)
+		return 0;
+
+	if (current_uid().val % 100000 < 10000)
 		return 0;
 
 	struct inode_security_struct *sec = selinux_inode(inode);
 	if (!sec) 
 		return 0;
-	
+
 	if (sec->sid == ksu_file_sid)
 		return 0;
 
 	if (!ksu_is_allow_uid_for_current(current_uid().val))
-		return 0;
-
-	if (!ksu_file_sid)
 		return 0;
 
 	pr_info("%s: replace inode sid: %d with ksu_file_sid: %d \n", __func__, sec->sid, ksu_file_sid);
@@ -126,7 +125,6 @@ LSM_HANDLER_TYPE ksu_file_permission(struct file *file, int mask)
 		return 0;
 
 	struct inode *inode = file_inode(file);
-
 	if (!inode) 
 		return 0;
 
@@ -167,9 +165,9 @@ static struct security_hook_list ksu_hooks[] = {
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	LSM_HOOK_INIT(bprm_check_security, ksu_bprm_check),
 #endif
-#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+// #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
 	LSM_HOOK_INIT(file_permission, ksu_file_permission),
-#endif
+// #endif
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
