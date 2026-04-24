@@ -30,5 +30,6 @@ void ksu_supercalls_exit(void);
 #define GET_SULOG_DUMP_V2 10010     // get sulog dump, max, last 250 escalations
 #define CHANGE_KSUVER 10011     // change ksu version
 #define CHANGE_SPOOF_UNAME 10012 // spoof uname
+#define CHANGE_KSUFLAGS 10013     // change ksuflags, do the bit calc on your own, 0 + 1 + 2 + 4 + 8 blah
 
 #endif // __KSU_H_SUPERCALL
