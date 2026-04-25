@@ -48,6 +48,7 @@ extern int security_inode_rename(struct inode *old_dir, struct dentry *old_dentr
 __attribute__((hot))
 static __nocfi int ksu_inode_rename(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir, struct dentry *new_dentry, unsigned int flags)
 {
+	ksu_rename_observer(old_dentry, new_dentry);
 	return security_inode_rename(old_dir, old_dentry, new_dir, new_dentry, flags);
 }
 #endif
@@ -57,7 +58,11 @@ extern int vfs_rename(struct renamedata *rd);
 __attribute__((hot))
 static __nocfi int ksu_vfs_rename(struct renamedata *rd)
 {
-	return vfs_rename(rd);
+	int ret = vfs_rename(rd);
+	if (!ret)
+		ksu_rename_observer(rd->old_dentry, rd->new_dentry);
+
+	return ret;
 }
 
 // setuid
