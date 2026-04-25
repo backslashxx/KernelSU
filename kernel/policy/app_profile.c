@@ -48,6 +48,7 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 	put_group_info(group_info);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 static void disable_seccomp(void)
 {
 	struct task_struct *fake;
@@ -86,6 +87,24 @@ static void disable_seccomp(void)
 	seccomp_filter_release(fake);
 	kfree(fake);
 }
+#else /* ! LINUX_VERSION_CODE < 5.9 */
+/*
+ * for < 5.9 lets have free_task do it for us (put_seccomp_filter)
+ * we risk a double free / double decrement which isn't safe on old kernels
+ * I'm not even sure if this thing is needed on newer kernels
+ *
+ */
+static void disable_seccomp(void)
+{
+	spin_lock_irq(&current->sighand->siglock);
+
+	clear_thread_flag(TIF_SECCOMP);
+	current->seccomp.mode = 0;
+	current->seccomp.filter = NULL;
+
+	spin_unlock_irq(&current->sighand->siglock);
+}
+#endif // 5.9
 
 int escape_with_root_profile(void)
 {
@@ -162,7 +181,8 @@ int escape_with_root_profile(void)
 
 	commit_creds(cred);
 
-	disable_seccomp();
+	if (!!current->seccomp.mode)
+		disable_seccomp();
 	
 	setup_mount_ns(profile->namespaces);
 	ksu_put_root_profile(profile);
