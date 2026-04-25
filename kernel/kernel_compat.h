@@ -118,4 +118,8 @@ __weak void memzero_explicit(void *s, size_t count) { memset_explicit(s, 0, coun
 #define ksu_is_seccomp_enabled() (!!current->seccomp.mode)
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#define d_inode(dentry) ((dentry)->d_inode)
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
