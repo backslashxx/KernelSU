@@ -109,4 +109,8 @@ static inline void kfree_byref(void *buf) { kfree(*(void **)buf); }
 __weak void memzero_explicit(void *s, size_t count) { memset_explicit(s, 0, count); }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#define d_inode(dentry) ((dentry)->d_inode)
+#endif
+
 #endif // __KSU_H_KERNEL_COMPAT
