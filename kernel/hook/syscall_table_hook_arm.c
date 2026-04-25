@@ -31,7 +31,7 @@ static long hook_armeabi_reboot(const struct pt_regs *regs)
 }
 
 static syscall_fn_t armeabi_execve = NULL;
-__attribute__((hot, flatten))
+__attribute__((hot))
 static long hook_armeabi_execve(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[0];
@@ -42,7 +42,7 @@ static long hook_armeabi_execve(const struct pt_regs *regs)
 }
 
 static syscall_fn_t armeabi_faccessat = NULL;
-__attribute__((hot, flatten))
+__attribute__((hot))
 static long hook_armeabi_faccessat(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[1];
@@ -52,7 +52,7 @@ static long hook_armeabi_faccessat(const struct pt_regs *regs)
 }
 
 static syscall_fn_t armeabi_fstatat64 = NULL;
-__attribute__((hot, flatten))
+__attribute__((hot))
 static long hook_armeabi_fstatat64(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[1];
@@ -94,7 +94,7 @@ static long hook_armeabi_reboot(int magic1, int magic2, unsigned int cmd, void _
 static long (*armeabi_execve)(const char __user * filename,
 				const char __user *const __user * argv,
 				const char __user *const __user * envp) = NULL;
-__attribute__((hot, flatten))
+__attribute__((hot))
 static long hook_armeabi_execve(const char __user * filename,
 				const char __user *const __user * argv,
 				const char __user *const __user * envp)
@@ -104,7 +104,7 @@ static long hook_armeabi_execve(const char __user * filename,
 }
 
 static long (*armeabi_faccessat)(int dfd, const char __user * filename, int mode) = NULL;
-__attribute__((hot, flatten))
+__attribute__((hot))
 static long hook_armeabi_faccessat(int dfd, const char __user * filename, int mode)
 {
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
@@ -112,7 +112,7 @@ static long hook_armeabi_faccessat(int dfd, const char __user * filename, int mo
 }
 
 static long (*armeabi_fstatat64)(int dfd, const char __user * filename, struct stat64 __user * statbuf, int flag) = NULL;
-__attribute__((hot, flatten))
+__attribute__((hot))
 static long hook_armeabi_fstatat64(int dfd, const char __user * filename, struct stat64 __user * statbuf, int flag)
 {
 	ksu_handle_stat(&dfd, &filename, &flag);

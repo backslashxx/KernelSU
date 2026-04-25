@@ -79,7 +79,6 @@ static uintptr_t selinux_ops_addr = NULL;
 
 static int (*orig_inode_rename) (struct inode *old_dir, struct dentry *old_dentry,
 			     struct inode *new_dir, struct dentry *new_dentry) = NULL;
-__attribute__((flatten))
 static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 			    struct inode *new_inode, struct dentry *new_dentry)
 {
@@ -88,7 +87,6 @@ static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 }
 
 static int (*orig_task_fix_setuid) (struct cred *new, const struct cred *old, int flags) = NULL;
-__attribute__((flatten))
 static int hook_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
 {
 	ksu_task_fix_setuid(new, old, flags);
@@ -96,7 +94,6 @@ static int hook_task_fix_setuid(struct cred *new, const struct cred *old, int fl
 }
 
 static int (*orig_bprm_check_security)(struct linux_binprm *bprm) = NULL;
-__attribute__((flatten))
 static int hook_bprm_check_security(struct linux_binprm *bprm)
 {
 	ksu_bprm_check(bprm);
@@ -104,7 +101,6 @@ static int hook_bprm_check_security(struct linux_binprm *bprm)
 }
 
 static int (*orig_file_permission) (struct file *file, int mask) = NULL;
-__attribute__((flatten))
 static int hook_file_permission(struct file *file, int mask)
 {
 
