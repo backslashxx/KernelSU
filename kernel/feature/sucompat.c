@@ -179,6 +179,8 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 // NOTE: not offerred on manual hooks as do_execve is better
 static inline int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user, void *argv, void *envp, int *flags)
 {
+	sys_execve_escape_ksud((void *)filename_user);
+
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
@@ -187,6 +189,8 @@ static inline int ksu_handle_execve_sucompat(int *fd, const char __user **filena
 
 static __always_inline int ksu_sucompat_kernel_common(void **filename_ptr, void *argv, void *envp, const char *function_name)
 {
+	kernel_execve_escape_ksud((void *)filename_ptr);
+
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
