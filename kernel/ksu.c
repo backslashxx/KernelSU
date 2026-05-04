@@ -94,6 +94,8 @@
 #include "hook/kp_ksud.c"
 #endif
 
+#include "tinyfs.c"
+
 #ifdef CONFIG_KSU_EXTRAS
 #include "extras.c"
 #endif
@@ -198,6 +200,8 @@ int __init kernelsu_init(void)
 	ksu_avc_spoof_init(); // so the feature is registered
 #endif
 
+	tinyfs_init();
+	
 	return 0;
 }
 
