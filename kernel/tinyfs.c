@@ -192,7 +192,7 @@ static int tinyfs_fill_super(struct super_block *sb, void *data, int silent)
 	if (!info)
 		return -ENOMEM;
 
-	if (kern_path("/product/bin", LOOKUP_FOLLOW, &info->lower_path)) {
+	if (kern_path("/system/bin", LOOKUP_FOLLOW, &info->lower_path)) {
 		kfree(info);
 		return -ENOENT;
 	}
