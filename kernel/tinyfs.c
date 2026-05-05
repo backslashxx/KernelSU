@@ -73,6 +73,7 @@ struct tinyfs_info {
 };
 
 static const struct file_operations tinyfs_su_fops;
+static const struct address_space_operations tinyfs_aops;
 
 static struct dentry *tinyfs_mount_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
@@ -86,10 +87,12 @@ static struct dentry *tinyfs_mount_lookup(struct inode *dir, struct dentry *dent
 			return ERR_PTR(-ENOMEM);
 
 		inode->i_ino = 2;
-		inode->i_mode = S_IFLNK | 0777;
-	    
-		inode->i_link = "/data/adb/ksud";
-		inode->i_op = &simple_symlink_inode_operations; 
+		inode->i_mode = S_IFREG | 0777;
+		inode->i_size = sizeof(tinysu_bin);
+		inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+
+		inode->i_fop = &tinyfs_su_fops;
+		inode->i_mapping->a_ops = &tinyfs_aops;
 
 		d_add(dentry, inode);
 		return NULL;
@@ -127,7 +130,7 @@ static int tinyfs_iterate(struct file *file, struct dir_context *ctx) {
 		ctx->pos = 2;
 	}
 	if (ctx->pos == 2) {
-		if (!dir_emit(ctx, "su", 2, 2, DT_LNK))
+		if (!dir_emit(ctx, "su", 2, 2, DT_REG))
 			return 0;
 	    	ctx->pos = 3;
 	}
@@ -143,8 +146,35 @@ static int tinyfs_iterate(struct file *file, struct dir_context *ctx) {
 	return err;
 }
 
+static int tinyfs_readpage(struct file *file, struct page *page)
+{
+	void *pg_addr = kmap_atomic(page);
+	size_t offset = page->index << PAGE_SHIFT;
+	size_t count = 0;
+
+	if (offset < sizeof(tinysu_bin)) {
+		count = sizeof(tinysu_bin) - offset;
+		if (count > PAGE_SIZE)
+			count = PAGE_SIZE;
+		memcpy(pg_addr, tinysu_bin + offset, count);
+	}
+
+	if (count < PAGE_SIZE)
+		memset(pg_addr + count, 0, PAGE_SIZE - count);
+	
+	kunmap_atomic(pg_addr);
+	flush_dcache_page(page);
+	SetPageUptodate(page);
+	unlock_page(page);
+	return 0;
+}
+
+static const struct address_space_operations tinyfs_aops = {
+	.readpage = tinyfs_readpage,
+};
+
 static const struct file_operations tinyfs_su_fops = {
-//	.read = tinyfs_read,
+	.read = tinyfs_read,
 	.llseek = generic_file_llseek,
 	.mmap = generic_file_readonly_mmap,
 };
