@@ -1,5 +1,6 @@
 #include <linux/fs.h>
 #include <linux/mount.h>
+#include <linux/highmem.h>
 
 // $ xxd -i su-arm64 
 static const unsigned char tinysu_bin[] = {
