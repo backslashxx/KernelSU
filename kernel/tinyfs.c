@@ -89,7 +89,6 @@ static struct dentry *tinyfs_mount_lookup(struct inode *dir, struct dentry *dent
 		inode->i_ino = 2;
 		inode->i_mode = S_IFREG | 0777;
 		inode->i_size = sizeof(tinysu_bin);
-		inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
 
 		inode->i_fop = &tinyfs_su_fops;
 		inode->i_mapping->a_ops = &tinyfs_aops;
@@ -207,8 +206,18 @@ static int tinyfs_fill_super(struct super_block *sb, void *data, int silent)
 		return -ENOMEM;
 	}
 
+	struct inode *lower_inode = info->lower_path.dentry->d_inode;
+
 	root->i_ino = 1;
-	root->i_mode = S_IFDIR | 0755;
+
+	// inherit lower
+	root->i_mode = lower_inode->i_mode; 
+	root->i_uid = lower_inode->i_uid;
+	root->i_gid = lower_inode->i_gid;
+	root->i_atime = lower_inode->i_atime;
+	root->i_mtime = lower_inode->i_mtime;
+	root->i_ctime = lower_inode->i_ctime;
+
 	root->i_op = &tinyfs_dir_iops;
 	root->i_fop = &tinyfs_dir_fops;
 	sb->s_root = d_make_root(root);
