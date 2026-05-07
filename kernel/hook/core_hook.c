@@ -62,12 +62,16 @@ static struct security_hook_list ksu_hooks[] __ro_after_init = {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
 static void ksu_lsm_hook_init() { } // no-op
 const struct lsm_id ksu_lsmid = { .name = "ksu", .id = 99, };
-static int ksu_lsm_subsys_initcall()
+static __init int ksu_lsm_initcall()
 {
 	security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), &ksu_lsmid);
 	return 0;
 }
-subsys_initcall(ksu_lsm_subsys_initcall);
+DEFINE_LSM(ksu) = {
+	.name = "ksu",
+	.init = ksu_lsm_initcall,
+	.order = LSM_ORDER_LAST,
+};
 
 #else
 
