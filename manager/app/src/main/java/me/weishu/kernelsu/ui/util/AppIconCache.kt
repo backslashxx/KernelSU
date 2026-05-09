@@ -3,6 +3,7 @@ package me.weishu.kernelsu.ui.util
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Process
 import android.util.LruCache
 import kotlinx.coroutines.Dispatchers
@@ -62,11 +63,15 @@ object AppIconCache {
                 val loader = AppIconLoader(size, false, context)
                 val bitmap = loader.loadIcon(applicationInfo.withCurrentUserUid())
 
-                val gpuBitmap = try {
-                    bitmap.copy(Bitmap.Config.HARDWARE, false)?.also {
-                        bitmap.recycle()
-                    } ?: bitmap.also { it.prepareToDraw() }
-                } catch (_: Exception) {
+                val gpuBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    try {
+                        bitmap.copy(Bitmap.Config.HARDWARE, false)?.also {
+                            bitmap.recycle()
+                        } ?: bitmap.also { it.prepareToDraw() }
+                    } catch (_: Exception) {
+                        bitmap.also { it.prepareToDraw() }
+                    }
+                } else {
                     bitmap.also { it.prepareToDraw() }
                 }
 
