@@ -100,40 +100,62 @@ void ksu_slow_avc_audit(u32 *tsid)
 	return;
 }
 
+static bool ksu_should_destroy_context(char *str)
+{
+	if (!str || !strchr(str, ':'))
+		return false;
+
+	if (strstr(str, "u:r:ksu:s0"))
+		return true;
+
+	if (strstr(str, "u:object_r:ksu_file:s0"))
+		return true;
+
+	struct ksu_hidden_node *node;
+
+	read_lock(&ksu_sepolicy_shitlist_lock);
+	list_for_each_entry(node, &ksu_sepolicy_rule_list, list) {
+		if (strstr(str, node->name)) {
+			read_unlock(&ksu_sepolicy_shitlist_lock);
+			return true;
+		}
+	}
+	read_unlock(&ksu_sepolicy_shitlist_lock);
+
+	return false;
+}
+
+// for manual hook
 void ksu_sel_write_context(struct file **file, char **buf, size_t *size)
 {
 	if (!test_thread_flag(TIF_SECCOMP))
+		return;
+
+	if (current_uid().val < 10000)
+		return;
+
+	if (!ksu_uid_should_umount(current_uid().val))
 		return;
 
 	char *mbuf = *buf;
 
 	if (!mbuf)
 		return;
-	
-	if (strstarts(mbuf, "u:r:ksu:s0"))
-		goto mutate_buf;
 
-	if (strstarts(mbuf, "u:object_r:ksu_file:s0"))
-		goto mutate_buf;
+	if (!ksu_should_destroy_context(mbuf))
+		return;
 
-	// some modules add this
-	if (strstarts(mbuf, "u:object_r:magisk_file:s0"))
-		goto mutate_buf;
-
-	return;
-
-mutate_buf:
 	pr_info("sel_write_context: destroy: %s \n", mbuf);
 	mbuf[1] = '1';
 	return;
-}
 
+}
 
 #if defined(CONFIG_KPROBES)
 
 #include <linux/kprobes.h>
 static struct kprobe *slow_avc_audit_kp;
-static struct kprobe *sel_write_context_kp;
+static struct kprobe *selinux_transaction_write_kp;
 
 static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
@@ -149,13 +171,64 @@ static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 	return 0;
 }
 
-static int sel_write_context_pre_handler(struct kprobe *p, struct pt_regs *regs)
+static int selinux_transaction_write_pre_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
-	char **buf = (char **)&PT_REGS_PARM2(regs);
+	
+	bool *should_destroy = (bool *)ri->data;
+	*should_destroy = false;
 
-	ksu_sel_write_context(NULL, buf, NULL);
+	if (!test_thread_flag(TIF_SECCOMP))
+		return 0;
+
+	if (current_uid().val < 10000)
+		return 0;
+
+	if (!ksu_uid_should_umount(current_uid().val))
+		return 0;
+
+	const char __user **buf = (const char __user **)&PT_REGS_PARM2(regs);
+	char __user *uptr = *(char **)buf;
+
+	char kbuf[128] = { 0 };
+
+	if (ksu_copy_from_user_retry(kbuf, uptr, 127))
+		return 0;
+
+	// move ptr to the next one after space
+	char *target = strchr(kbuf, ' ');
+	if (likely(target))
+		target++;
+	else
+		target = kbuf;
+
+	if (!ksu_should_destroy_context(target))
+		return 0;
+
+	pr_info("selinux_transaction_write: destroy: %s \n", kbuf);
+	*should_destroy = true;
+
 	return 0;
 }
+
+static int selinux_transaction_write_ret_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	// if bool is true, mod PT_REGS_RC to ret EINVAL
+	bool *should_destroy = (bool *)ri->data;
+	
+	if (*should_destroy)
+		PT_REGS_RC(regs) = -EINVAL;
+
+	return 0;
+}
+
+static struct kretprobe selinux_transaction_write_rp = {
+	.kp.symbol_name = "selinux_transaction_write",
+	.handler = selinux_transaction_write_ret_handler,
+	.entry_handler = selinux_transaction_write_pre_handler,
+	.data_size = sizeof(bool),
+	.maxactive = 20,
+};
+
 
 // copied from upstream
 static struct kprobe *init_kprobe(const char *name,
@@ -194,8 +267,8 @@ void ksu_avc_spoof_disable(void)
 	pr_info("extras/exit: unregister slow_avc_audit kprobe!\n");
 	destroy_kprobe(&slow_avc_audit_kp);
 
-	pr_info("extras/exit: unregister sel_write_context kprobe!\n");
-	destroy_kprobe(&sel_write_context_kp);
+//	pr_info("extras/exit: unregister selinux_transaction_write kprobe!\n");
+//	destroy_kprobe(&selinux_transaction_write_kp);
 #endif
 
 }
@@ -212,8 +285,8 @@ void ksu_avc_spoof_enable(void)
 	pr_info("extras/init: register slow_avc_audit kprobe!\n");
 	slow_avc_audit_kp = init_kprobe("slow_avc_audit", slow_avc_audit_pre_handler);
 
-	pr_info("extras/init: register sel_write_context kprobe!\n");
-	sel_write_context_kp = init_kprobe("sel_write_context", sel_write_context_pre_handler);
+	int err = register_kretprobe(&selinux_transaction_write_rp);
+	pr_info("extras/init: register rp: selinux_transaction_write ret: %d\n", err);
 #endif
 }
 
@@ -272,4 +345,3 @@ static __init int ksu_extras_init()
 	kthread_run(ksu_extras_init_thread, NULL, "kthread");
 	return 0;
 }
-late_initcall(ksu_extras_init);

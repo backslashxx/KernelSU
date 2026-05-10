@@ -190,6 +190,9 @@ int __init kernelsu_init(void)
 
 	ksu_file_wrapper_init();
 
+#ifdef CONFIG_KSU_EXTRAS
+	ksu_extras_init(); // so the feature is registered
+#endif
 	return 0;
 }
 
