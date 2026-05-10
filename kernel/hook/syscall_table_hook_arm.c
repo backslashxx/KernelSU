@@ -92,6 +92,8 @@ static long hook_armeabi_read(const struct pt_regs *regs)
  *  this is easier and maybe a little bit faster
  *
  */
+ 
+extern void *sys_call_table[];
 
 static uintptr_t armeabi_reboot __read_mostly = NULL;
 static long hook_armeabi_reboot(int magic1, int magic2, unsigned int cmd, void __user *arg)
@@ -101,6 +103,8 @@ static long hook_armeabi_reboot(int magic1, int magic2, unsigned int cmd, void _
 }
 
 static uintptr_t armeabi_execve __read_mostly = NULL;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 __attribute__((hot))
 static long hook_armeabi_execve(const char __user * filename,
 				const char __user *const __user * argv,
@@ -109,6 +113,45 @@ static long hook_armeabi_execve(const char __user * filename,
 	ksu_handle_execve(&filename, (void ***)&argv, (void ***)&envp);
 	return sys_execve(filename, argv, envp);
 }
+
+#else /* sys_execve_oabi */
+
+/**
+ *  on 3.0 / 3.4 ARM, sys_execve sc entry accepts 3 args (r0, r1, r2)
+ *  however, sys_execve on that version, needs 4. the kernel does this small wrapper
+ *  where it puts sp + 8 on r3. without it, hook won't work.
+ *
+ * // arch/arm/kernel/entry-common.S
+ *
+ * sys_execve_wrapper:
+ *		add	r3, sp, #S_OFF
+ *		b	sys_execve
+ * ENDPROC(sys_execve_wrapper)
+ *
+ */
+#include <asm/ptrace.h>
+
+__attribute__((used, noipa))
+static long hook_sys_execve(const char __user *filenamei,
+			  const char __user *const __user *argv,
+			  const char __user *const __user *envp, struct pt_regs *regs)
+{
+	ksu_handle_execve(&filenamei, (void ***)&argv, (void ***)&envp);
+	return sys_execve(filenamei, argv, envp, regs);
+}
+
+#define S_OFF "8"
+__attribute__((naked))
+static noinline void hook_armeabi_execve()
+{
+	asm volatile(
+		"add r3, sp, #" S_OFF "\n"
+		"b   hook_sys_execve\n"
+	);
+}
+
+#endif /* sys_execve_oabi */
+
 
 static uintptr_t armeabi_faccessat __read_mostly = NULL;
 __attribute__((hot))
@@ -337,14 +380,19 @@ static __init int ksu_syscall_table_hook_init()
 
 	read_and_replace_syscall((void *)&armeabi_reboot, __ARMEABI_reboot, (void *)hook_armeabi_reboot, (void *)sys_call_table);
 
-	// will be unregged
+	// theres an issue on fstat64 on oabi, so lets not hook it
+	// this is not that much of a loss since 3.0 / 3.4 devices aren't really running A17
+	// TODO: fix and handle this
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 	read_and_replace_syscall((void *)&armeabi_fstat64, __ARMEABI_fstat64, (void *)hook_armeabi_fstat64_ret, (void *)sys_call_table);
+#endif
+
 	read_and_replace_syscall((void *)&armeabi_read, __ARMEABI_read, (void *)hook_armeabi_read, (void *)sys_call_table);
 
 	// start unreg kthread
 	kthread_run(ksu_syscall_table_restore, NULL, "unhook");
 	return 0;
 }
-late_initcall(ksu_syscall_table_hook_init);
+device_initcall_sync(ksu_syscall_table_hook_init);
 
 // EOF
