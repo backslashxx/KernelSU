@@ -38,6 +38,7 @@
 #include "infra/event_queue.h"
 #include "feature/adb_root.h"
 #include "feature/kernel_umount.h"
+#include "feature/selinux_hide.h"
 #include "feature/sucompat.h"
 #include "feature/sulog.h"
 #include "runtime/ksud.h"
@@ -73,6 +74,7 @@
 
 #include "feature/adb_root.c"
 #include "feature/kernel_umount.c"
+#include "feature/selinux_hide.c"
 #include "feature/sucompat.c"
 #include "feature/sulog.c"
 #include "runtime/ksud.c"
@@ -154,6 +156,8 @@ static int __init kernelsu_init(void)
 #ifdef CONFIG_KSU_FEATURE_ADBROOT
 	ksu_adb_root_init(); // so the feature is registered
 #endif
+
+	ksu_selinux_hide_init(); // so the feature is registered
 
 	ksu_core_init();
 
