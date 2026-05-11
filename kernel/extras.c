@@ -155,7 +155,8 @@ void ksu_sel_write_context(struct file **file, char **buf, size_t *size)
 
 #include <linux/kprobes.h>
 static struct kprobe *slow_avc_audit_kp;
-static struct kprobe *selinux_transaction_write_kp;
+static struct kprobe *sel_write_context_kp;
+static struct kprobe *sel_write_access_kp;
 
 static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
@@ -171,6 +172,17 @@ static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 	return 0;
 }
 
+static int sel_write_context_pre_handler(struct kprobe *p, struct pt_regs *regs)
+{
+	char **buf = (char **)&PT_REGS_PARM2(regs);
+
+	ksu_sel_write_context(NULL, buf, NULL);
+	return 0;
+}
+
+
+// this deals with __user, this is here in case its really needed.
+#if 0
 static int selinux_transaction_write_pre_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	
@@ -228,7 +240,7 @@ static struct kretprobe selinux_transaction_write_rp = {
 	.data_size = sizeof(bool),
 	.maxactive = 20,
 };
-
+#endif
 
 // copied from upstream
 static struct kprobe *init_kprobe(const char *name,
@@ -285,8 +297,8 @@ void ksu_avc_spoof_enable(void)
 	pr_info("extras/init: register slow_avc_audit kprobe!\n");
 	slow_avc_audit_kp = init_kprobe("slow_avc_audit", slow_avc_audit_pre_handler);
 
-	int err = register_kretprobe(&selinux_transaction_write_rp);
-	pr_info("extras/init: register rp: selinux_transaction_write ret: %d\n", err);
+	sel_write_context_kp = init_kprobe("sel_write_context", sel_write_context_pre_handler);
+	sel_write_access_kp = init_kprobe("sel_write_access", sel_write_context_pre_handler);
 #endif
 }
 
