@@ -16,16 +16,12 @@
 static bool ksu_selinux_hide_enabled __read_mostly = true;
 
 // sids for avc spoofing
-static u32 su_sid __read_mostly = 0;
 static u32 ksu_sid __read_mostly = 0;
 static u32 priv_app_sid __read_mostly = 0;
 
 static inline int ksu_selinux_get_sids()
 {
-	// dont load at all if we cant get sids
-	int err = security_secctx_to_secid("u:r:su:s0", strlen("u:r:su:s0"), &su_sid);
-	if (!err)
-		pr_info("selinux_hide: su_sid: %u\n", su_sid);
+	int err;
 
 	err = security_secctx_to_secid("u:r:ksu:s0", strlen("u:r:ksu:s0"), &ksu_sid);
 	if (!err)
@@ -35,7 +31,7 @@ static inline int ksu_selinux_get_sids()
 	if (!err)
 		pr_info("selinux_hide: priv_app_sid: %u\n", priv_app_sid);
 
-	if (!su_sid || !ksu_sid || !priv_app_sid)
+	if (!ksu_sid || !priv_app_sid)
 		return -1;
 
 	return 0;
@@ -47,7 +43,7 @@ int ksu_handle_slow_avc_audit_new(u32 tsid, u16 *tclass)
 	if (!ksu_selinux_hide_enabled)
 		return 0;
 
-	if (tsid != su_sid && tsid != ksu_sid)
+	if (tsid != ksu_sid)
 		return 0;
 
 	pr_info("selinux_hide: prevent log for sid: %u\n", tsid);
@@ -61,12 +57,11 @@ void ksu_slow_avc_audit(u32 *tsid)
 	if (!ksu_selinux_hide_enabled)
 		return;
 
-	// if tsid is su, we just replace it
-	// unsure if its enough, but this is how it is aye?
-	if (*tsid == su_sid || *tsid == ksu_sid) {
-		pr_info("selinux_hide: slow_avc_audit: replace tsid: %u with priv_app_sid: %u\n", *tsid, priv_app_sid);
-		*tsid = priv_app_sid;
-	}
+	if (*tsid != ksu_sid)
+		return;
+
+	pr_info("selinux_hide: slow_avc_audit: replace tsid: %u with priv_app_sid: %u\n", *tsid, priv_app_sid);
+	*tsid = priv_app_sid;
 
 	return;
 }
@@ -149,7 +144,7 @@ int ksu_hide_setprocattr(const char *name, void *value, size_t size)
 	if (!ksu_should_destroy_context(buf))
 		return 0;
 	
-	pr_info("selinux_hide: setprocattr: destory: %s\n", buf);
+	pr_info("selinux_hide: setprocattr: destroy: %s\n", buf);
 	str[1] = '1';
 
 	return 0;
@@ -197,7 +192,7 @@ static struct kprobe *sel_write_access_kp;
 static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
 
-#if defined(KSU_COMPAT_HAS_SELINUX_STATE)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
 	u32 *tsid = (u32 *)&PT_REGS_PARM3(regs);
 #else
 	u32 *tsid = (u32 *)&PT_REGS_PARM2(regs);
