@@ -99,6 +99,14 @@ static __nocfi ssize_t ksu_vfs_read(struct file *file, char __user *buf, size_t 
 	return vfs_read(file, buf, count, pos);
 }
 
+// setprocattr
+extern int security_setprocattr(int lsmid, const char *name, void *value, size_t size);
+static __nocfi int ksu_setprocattr(int lsmid, const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+	return security_setprocattr(lsmid, name, value, size);
+}
+
 static void __init ksu_core_init(void)
 {
 	int ret;
@@ -137,5 +145,10 @@ static void __init ksu_core_init(void)
 	ret = arm64_bl_patch(target_callsite, 64 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_read);
 	pr_info("lsm_hijack: ksys_read: ret %d \n", ret);
 #endif
+
+	target_callsite = kp_cfi_kallsyms_lookup_name("proc_pid_attr_write");
+	symbol_addr = kp_cfi_kallsyms_lookup_name("security_setprocattr");
+	ret = arm64_bl_patch(target_callsite, 64 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_setprocattr);
+	pr_info("lsm_hijack: security_setprocattr: ret %d \n", ret);
 
 }
