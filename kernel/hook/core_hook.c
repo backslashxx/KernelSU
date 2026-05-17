@@ -72,7 +72,7 @@ static __nocfi int ksu_setprocattr_wrapper(const char *name, void *value, size_t
 		return selinux_setprocattr_fn(name, value, size);
 	return 0;
 }
-#define ksu_security_add_hooks(a, b, c) security_add_hooks(a, b, c)
+#define ksu_security_add_hooks security_add_hooks
 #else
 static int (*selinux_setprocattr_fn)(struct task_struct *p, char *name, void *value, size_t size) __read_mostly = NULL;
 static __nocfi int ksu_setprocattr_wrapper(struct task_struct *p, char *name, void *value, size_t size)
