@@ -117,6 +117,76 @@ loop_start:
 }
 #endif // !CONFIG_KSU_TAMPER_SYSCALL_TABLE && !CONFIG_KSU_HACK_ARM64_BRANCH_LINK
 
+#define SETPROCATTR_TYPE_lsmid	int lsmid, const char *name, void *value, size_t size
+__overloaded static int ksu_setprocattr_lsmid(SETPROCATTR_TYPE_lsmid)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+
+	assume(!!&security_setprocattr);
+	return ((typeof(ksu_setprocattr_lsmid) *)security_setprocattr)(lsmid, name, value, size);
+}
+
+#define SETPROCATTR_TYPE_lsm	const char *lsm, const char *name, void *value, size_t size
+__overloaded static int ksu_setprocattr_lsm(SETPROCATTR_TYPE_lsm)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+
+	assume(!!&security_setprocattr);
+	return ((typeof(ksu_setprocattr_lsm) *)security_setprocattr)(lsm, name, value, size);
+}
+
+#define SETPROCATTR_TYPE_name	const char *name, void *value, size_t size
+__overloaded static int ksu_setprocattr_name(SETPROCATTR_TYPE_name)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+
+	assume(!!&security_setprocattr);
+	return ((typeof(ksu_setprocattr_name) *)security_setprocattr)(name, value, size);
+}
+
+#define ksu_setprocattr_overloaded _Generic(			\
+(security_setprocattr),						\
+	int (*)(SETPROCATTR_TYPE_lsmid)	:ksu_setprocattr_lsmid,	\
+	int (*)(SETPROCATTR_TYPE_lsm)	:ksu_setprocattr_lsm,	\
+	int (*)(SETPROCATTR_TYPE_name)	:ksu_setprocattr_name	\
+)
+
+struct mnt_idmap;
+#define INODE_SETXATTR_TYPE_idmap	struct mnt_idmap *idmap, struct dentry *dentry, const char *name, const void *value, size_t size, int flags
+__overloaded static int ksu_inode_setxattr_idmap(INODE_SETXATTR_TYPE_idmap)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+
+	assume(!!&security_inode_setxattr);
+	return ((typeof(ksu_inode_setxattr_idmap) *)security_inode_setxattr)(idmap, dentry, name, value, size, flags);
+}
+
+struct user_namespace;
+#define INODE_SETXATTR_TYPE_userns	struct user_namespace *mnt_userns, struct dentry *dentry, const char *name, const void *value, size_t size, int flags
+__overloaded static int ksu_inode_setxattr_userns(INODE_SETXATTR_TYPE_userns)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+
+	assume(!!&security_inode_setxattr);
+	return ((typeof(ksu_inode_setxattr_userns) *)security_inode_setxattr)(mnt_userns, dentry, name, value, size, flags);
+}
+
+#define INODE_SETXATTR_TYPE_legacy	struct dentry *dentry, const char *name, const void *value, size_t size, int flags
+__overloaded static int ksu_inode_setxattr_legacy(INODE_SETXATTR_TYPE_legacy)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+
+	assume(!!&security_inode_setxattr);
+	return ((typeof(ksu_inode_setxattr_legacy) *)security_inode_setxattr)(dentry, name, value, size, flags);
+}
+
+#define ksu_inode_setxattr_overloaded _Generic(				\
+(security_inode_setxattr),						\
+	int (*)(INODE_SETXATTR_TYPE_idmap)  :ksu_inode_setxattr_idmap,	\
+	int (*)(INODE_SETXATTR_TYPE_userns) :ksu_inode_setxattr_userns,	\
+	int (*)(INODE_SETXATTR_TYPE_legacy) :ksu_inode_setxattr_legacy	\
+)
+
 #define __ksym_size(callsite)	ksu_get_ksym_size(callsite, (256 * sizeof(uint32_t)))
 static void print_branch_targets(uintptr_t callsite, uintptr_t symbol_addr, char *hook_name)
 {
@@ -153,6 +223,16 @@ static void __init ksu_lsm_hook_init(void)
 	pr_info("LSM: security_inode_rename: ret %d \n", ret);
 rename_hook_done:
 
+	target_callsite = kallsyms_lookup_retry("proc_pid_attr_write"); // fn ptr on dispatch table
+	symbol_addr = kallsyms_lookup_retry("security_setprocattr");
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_setprocattr_overloaded);
+	pr_info("LSM: security_setprocattr: ret %d \n", ret);
+
+	target_callsite = kallsyms_lookup_retry("__vfs_setxattr_locked"); // exported symbol
+	symbol_addr = kallsyms_lookup_retry("security_inode_setxattr");
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_inode_setxattr_overloaded);
+	pr_info("LSM: security_inode_setxattr: ret %d \n", ret);
+
 	target_callsite = kallsyms_lookup_retry("__sys_setresuid");
 	if (!target_callsite)
 		target_callsite = kallsyms_lookup_retry("__arm64_sys_setresuid");
@@ -179,3 +259,14 @@ rename_hook_done:
 
 #undef patch_arm64_branches_trampolined
 #undef __ksym_size
+
+#undef INODE_SETXATTR_TYPE_idmap
+#undef INODE_SETXATTR_TYPE_userns
+#undef INODE_SETXATTR_TYPE_idmap
+#undef ksu_inode_setxattr_overloaded
+
+#undef SETPROCATTR_TYPE_lsmid
+#undef SETPROCATTR_TYPE_lsm
+#undef SETPROCATTR_TYPE_name
+#undef ksu_setprocattr_overloaded
+
