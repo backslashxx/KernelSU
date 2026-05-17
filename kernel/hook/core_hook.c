@@ -58,17 +58,271 @@ static struct security_hook_list ksu_hooks[] __ro_after_init = {
 #endif
 };
 
+
+#ifndef __nocfi
+#define __nocfi
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) || defined(KSU_COMPAT_SECURITY_ADD_HOOKS_V2)
+static int (*selinux_setprocattr_fn)(const char *name, void *value, size_t size) __read_mostly = NULL;
+static __nocfi int ksu_setprocattr_wrapper(const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr(name, value, size);
+	if (likely(selinux_setprocattr_fn))
+		return selinux_setprocattr_fn(name, value, size);
+	return 0;
+}
 #define ksu_security_add_hooks security_add_hooks
 #else
+static int (*selinux_setprocattr_fn)(struct task_struct *p, char *name, void *value, size_t size) __read_mostly = NULL;
+static __nocfi int ksu_setprocattr_wrapper(struct task_struct *p, char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr(name, value, size);
+	if (likely(selinux_setprocattr_fn))
+		return selinux_setprocattr_fn(p, name, value, size);
+
+	return 0;
+}
 #define ksu_security_add_hooks(a, b, c) security_add_hooks(a, b)
 #endif
+
+static struct security_hook_list ksu_hooks_setprocattr[];
+
+/*
+ * LSMs are actually unhookable, however, it requires CONFIG_SECURITY_SELINUX_DISABLE
+ * ref: security_delete_hooks(), lsm_hooks.h
+ *
+ * when that is disabled, we get an issue as we will be writing to ro memory.
+ * "Unable to handle kernel write to read-only memory at virtual address fffffffffffuckyou"
+ *
+ * however we can just do vmap-as-rw trick to create another reality where this memory segment is rw.
+ *
+ */
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0) || defined(KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST)
+static void ksu_hlist_del_safe(struct hlist_node *n)
+{
+	struct hlist_node *next = n->next;
+	struct hlist_node **pprev = n->pprev;
+
+	if (!pprev)
+		return;
+
+	// this is here so we don't get lost
+	/**
+	 *	original state
+	 * n			ptr	*ptr
+	 * H	hlist_head	0x1000	0xA000
+	 *
+	 * A	node->next	0xA000	0xB000
+	 *	node->pprev	0xA008	0x1000
+	 *
+	 * B	node->next	0xB000	0xC000
+	 *	node->pprev	0xB008	0xA000
+	 *
+	 * C	node->next	0xC000	0xFFFF
+	 *	node->pprev	0xC008	0xB000
+	 *
+	 */
+
+	// on hlist, pprev is the address of the 'next' pointer in the previous element
+	// so what we do is:
+	// 	write the value 0xC000 (next) into address 0xA000 (A->next)
+	// 	write the value 0xA000 (pprev) into address 0xC008 (C->pprev)
+
+	/**
+	 * 	after this routine
+	 *
+	 * H	hlist_head	0x1000	0xA000
+	 *
+	 * A	node->next	0xA000	0xC000  <-- now points to C
+	 *	node->pprev	0xA008	0x1000
+	 *
+	 * B	node->next	0xB000	0xC000  <-- orphaned
+	 *	node->pprev	0xB008	0xA000  <-- orphaned
+	 *
+	 * C	node->next	0xC000	0xFFFF
+	 *	node->pprev	0xC008	0xA000  <-- now points to A's next
+	 *
+	 */
+
+	// NOTE: pprev is **
+	uintptr_t addr = (uintptr_t)pprev;
+	uintptr_t base = addr & PAGE_MASK;
+	uintptr_t offset = addr & ~PAGE_MASK;
+
+	struct page *page = phys_to_page(__pa(base));
+	if (!page)
+		return;
+
+	// vmap pprev
+	void *writable_addr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
+	if (!writable_addr)
+		return;
+
+	uintptr_t target_slot = (uintptr_t)((uintptr_t)writable_addr + offset);
+
+	preempt_disable();
+
+	WRITE_ONCE(*(struct hlist_node **)target_slot, next);
+
+	preempt_enable();
+
+	vunmap(writable_addr);
+
+	smp_mb();
+
+	if (!next)
+		return;
+
+	// NOTE: pprev is **, taking ref, it becomes ***
+	addr = (uintptr_t)&next->pprev;
+	base = addr & PAGE_MASK;
+	offset = addr & ~PAGE_MASK;
+
+	page = phys_to_page(__pa(base));
+	if (!page)
+		return;
+
+	writable_addr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
+	if (!writable_addr)
+		return;
+
+	target_slot = (uintptr_t)((uintptr_t)writable_addr + offset);
+
+	preempt_disable();
+
+	// use our pprev as the new pprev for the next in chain
+	WRITE_ONCE(*(struct hlist_node ***)target_slot, pprev);
+
+	preempt_enable();
+
+	vunmap(writable_addr);
+
+	smp_mb();
+}
+
+static void ksu_dethrone_selinux_setprocattr()
+{
+	struct hlist_head *head = ksu_hooks_setprocattr[0].head; 
+	struct security_hook_list *pos;
+
+	if (!head)
+		return;
+
+	hlist_for_each_entry(pos, head, list) {
+		if (!strcmp(pos->lsm, "selinux")) {
+			// save fn ptr
+			selinux_setprocattr_fn = pos->hook.setprocattr;
+			pr_info("ksu_setprocattr: selinux_setprocattr: 0x%lx \n", (uintptr_t)selinux_setprocattr_fn);
+
+			ksu_hlist_del_safe(&pos->list);
+
+			pr_info("selinux_setprocattr: evicted and proxied.\n");
+			break;
+		}
+	}
+}
+#else // ! KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST 
+static void ksu_list_del_safe(struct list_head *entry)
+{
+	struct list_head *next = entry->next;
+	struct list_head *prev = entry->prev;
+
+	// on a linked list we have to patch both the before us and the next to us
+	if (!prev || !next)
+		return;
+
+	// smash prev->next, basically we write 'next' into 'prev->next'
+	unsigned long addr_p = (unsigned long)&prev->next;
+	unsigned long base_p = addr_p & PAGE_MASK;
+	unsigned long offset_p = addr_p & ~PAGE_MASK;
+
+	struct page *page_p = phys_to_page(__pa(base_p));
+	if (!page_p)
+		return;
+
+	void *w_page = vmap(&page_p, 1, VM_MAP, PAGE_KERNEL);
+	if (!w_page)
+		return;
+
+	struct list_head **target = (void *)((unsigned long)w_page + offset_p);
+	
+	preempt_disable();
+
+	WRITE_ONCE(*target, next);
+
+	preempt_enable();
+	vunmap(w_page);
+
+	// smash next->prev, basically we need to write 'prev' into 'next->prev'
+	unsigned long addr_n = (unsigned long)&next->prev;
+	unsigned long base_n = addr_n & PAGE_MASK;
+	unsigned long offset_n = addr_n & ~PAGE_MASK;
+
+	struct page *page_n = phys_to_page(__pa(base_n));
+	if (!page_n)
+		return;
+
+	w_page = vmap(&page_n, 1, VM_MAP, PAGE_KERNEL);
+	if (!w_page)
+		return;
+	
+	target = (void *)((unsigned long)w_page + offset_n);
+
+	preempt_disable();
+
+	WRITE_ONCE(*target, prev);
+
+	preempt_enable();
+	vunmap(w_page);
+
+	smp_mb();
+
+}
+
+// NOTE: this just deletes first entry on the list!
+static void ksu_dethrone_selinux_setprocattr()
+{
+	struct list_head *head = (struct list_head *)ksu_hooks_setprocattr[0].head;
+	struct security_hook_list *pos;
+
+	if (!head)
+		return;
+
+	if (list_empty(head))
+		return;
+
+	pos = list_first_entry(head, struct security_hook_list, list);
+
+	if (pos->hook.setprocattr == ksu_setprocattr_wrapper) {
+		if (pos->list.next == head)
+			return; 
+		pos = list_first_entry(&pos->list, struct security_hook_list, list);
+	}
+
+	// save fn ptr
+	selinux_setprocattr_fn = pos->hook.setprocattr;
+	
+	pr_info("ksu_setprocattr: selinux_setprocattr: 0x%lx \n", (uintptr_t)selinux_setprocattr_fn);
+	ksu_list_del_safe(&pos->list);
+
+	pr_info("selinux_setprocattr: evicted and proxied!\n");
+}
+#endif // KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST
+
+static struct security_hook_list ksu_hooks_setprocattr[] __ro_after_init = {
+	LSM_HOOK_INIT(setprocattr, ksu_setprocattr_wrapper),
+};
 
 static __init void ksu_lsm_hook_init(void)
 {
 	ksu_security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
 
 	pr_info("core_hook: initialized %d LSMs \n", ARRAY_SIZE(ksu_hooks));
+
+	ksu_security_add_hooks(ksu_hooks_setprocattr, ARRAY_SIZE(ksu_hooks_setprocattr), "ksu_setprocattr");
+	ksu_dethrone_selinux_setprocattr();
 }
 
 #else /* < 4.2, LSM */
