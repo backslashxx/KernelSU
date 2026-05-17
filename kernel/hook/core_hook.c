@@ -58,17 +58,101 @@ static struct security_hook_list ksu_hooks[] __ro_after_init = {
 #endif
 };
 
+
+#ifndef __nocfi
+#define __nocfi
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) || defined(KSU_COMPAT_SECURITY_ADD_HOOKS_V2)
-#define ksu_security_add_hooks security_add_hooks
+static int (*selinux_setprocattr_fn)(const char *name, void *value, size_t size) __read_mostly = NULL;
+static __nocfi int ksu_setprocattr_wrapper(const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr(name, value, size);
+	if (likely(selinux_setprocattr_fn))
+		return selinux_setprocattr_fn(name, value, size);
+	return 0;
+}
+#define ksu_security_add_hooks(a, b, c) security_add_hooks(a, b, c)
 #else
+static int (*selinux_setprocattr_fn)(struct task_struct *p, char *name, void *value, size_t size) __read_mostly = NULL;
+static __nocfi int ksu_setprocattr_wrapper(struct task_struct *p, char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr(name, value, size);
+	if (likely(selinux_setprocattr_fn))
+		return selinux_setprocattr_fn(p, name, value, size);
+
+	return 0;
+}
 #define ksu_security_add_hooks(a, b, c) security_add_hooks(a, b)
 #endif
+
+static struct security_hook_list ksu_hooks_setprocattr[];
+
+#if defined(KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST)
+static void ksu_dethrone_selinux_setprocattr()
+{
+	struct hlist_head *head = ksu_hooks_setprocattr[0].head; 
+	struct security_hook_list *pos;
+
+	if (!head)
+		return;
+
+	hlist_for_each_entry(pos, head, list) {
+		if (!strcmp(pos->lsm, "selinux")) {
+			// save fn ptr
+			selinux_setprocattr_fn = pos->hook.setprocattr;
+			pr_info("ksu_setprocattr: selinux_setprocattr: 0x%lx \n", (uintptr_t)selinux_setprocattr_fn);
+
+			ksu_hlist_del_safe(&pos->list);
+
+			pr_info("selinux_setprocattr: evicted and proxied.\n");
+			break;
+		}
+	}
+}
+#else // ! KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST 
+// NOTE: this just deletes first entry on the list!
+static void ksu_dethrone_selinux_setprocattr()
+{
+	struct list_head *head = (struct list_head *)ksu_hooks_setprocattr[0].head;
+	struct security_hook_list *pos;
+
+	if (!head)
+		return;
+
+	if (list_empty(head))
+		return;
+
+	pos = list_first_entry(head, struct security_hook_list, list);
+
+	if (pos->hook.setprocattr == ksu_setprocattr_wrapper) {
+		if (pos->list.next == head)
+			return; 
+		pos = list_first_entry(&pos->list, struct security_hook_list, list);
+	}
+
+	// save fn ptr
+	selinux_setprocattr_fn = pos->hook.setprocattr;
+	
+	pr_info("ksu_setprocattr: selinux_setprocattr: 0x%lx \n", (uintptr_t)selinux_setprocattr_fn);
+	ksu_list_del_safe(&pos->list);
+
+	pr_info("selinux_setprocattr: evicted and proxied!\n");
+}
+#endif // KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST
+
+static struct security_hook_list ksu_hooks_setprocattr[] __ro_after_init = {
+	LSM_HOOK_INIT(setprocattr, ksu_setprocattr_wrapper),
+};
 
 static __init void ksu_lsm_hook_init(void)
 {
 	ksu_security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
 
 	pr_info("core_hook: initialized %d LSMs \n", ARRAY_SIZE(ksu_hooks));
+
+	ksu_security_add_hooks(ksu_hooks_setprocattr, ARRAY_SIZE(ksu_hooks_setprocattr), "ksu_setprocattr");
+	ksu_dethrone_selinux_setprocattr();
 }
 
 #else /* < 4.2, LSM */
