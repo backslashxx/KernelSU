@@ -72,6 +72,38 @@ capability_fn:
 }
 #endif
 
+#define SETPROCATTR_TYPE_old	struct task_struct *, char *, void *, size_t
+#define SETPROCATTR_TYPE_new1	const char *, void *, size_t
+#define SETPROCATTR_TYPE_new2	const char *lsm, const char *, void *, size_t
+
+static void *setprocattr_fn __read_mostly = nullptr;
+static __nocfi int ksu_setprocattr_new(const char *name, void *value, size_t size)
+{
+	typeof(ksu_setprocattr_new) *_setprocattr_fn = setprocattr_fn;
+	ksu_hide_setprocattr_inline(name, value, size);
+	return _setprocattr_fn(name, value, size);
+}
+
+static __nocfi int ksu_setprocattr_old(struct task_struct *p, char *name, void *value, size_t size)
+{
+	typeof(ksu_setprocattr_old) *_setprocattr_fn = setprocattr_fn;
+	ksu_hide_setprocattr_inline(name, value, size);
+	return _setprocattr_fn(p, name, value, size);
+}
+
+#define OVERLOAD_SETPROCATTR(fn_p) _Generic((fn_p),			\
+	int (*)(SETPROCATTR_TYPE_old):	(void *)ksu_setprocattr_old,	\
+	int (*)(SETPROCATTR_TYPE_new1):	(void *)ksu_setprocattr_new, 	\
+	int (*)(SETPROCATTR_TYPE_new2):	(void *)ksu_setprocattr_new 	\
+)
+
+// now choose what we have
+static typeof(security_setprocattr) *ksu_setprocattr __read_mostly = OVERLOAD_SETPROCATTR(security_setprocattr);
+#undef SETPROCATTR_TYPE_new2
+#undef SETPROCATTR_TYPE_new1
+#undef SETPROCATTR_TYPE_old
+#undef OVERLOAD_SETPROCATTR
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0) || defined(KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST)
 static void ksu_hack_lsm_slot(struct hlist_head *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr)
 {
@@ -187,6 +219,7 @@ static __init void ksu_lsm_hook_init(void)
 {
 	LSM_HACK_INIT(task_fix_setuid, ksu_task_fix_setuid);
 	LSM_HACK_INIT(inode_rename, ksu_inode_rename);
+	LSM_HACK_INIT(setprocattr, ksu_setprocattr);
 
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	LSM_HACK_INIT(bprm_committing_creds, ksu_bprm_committing_creds);
