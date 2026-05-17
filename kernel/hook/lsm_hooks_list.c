@@ -118,10 +118,37 @@ static struct security_hook_list ksu_hooks_file_permission[] __ro_after_init = {
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) || defined(KSU_COMPAT_SECURITY_ADD_HOOKS_V2)
+static int (*selinux_setprocattr_fn)(const char *name, void *value, size_t size) __read_mostly = NULL;
+static __nocfi int ksu_setprocattr_wrapper(const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+	if (likely(selinux_setprocattr_fn))
+		return selinux_setprocattr_fn(name, value, size);
+	return 0;
+}
 #define ksu_security_add_hooks security_add_hooks
 #else
+static int (*selinux_setprocattr_fn)(struct task_struct *p, char *name, void *value, size_t size) __read_mostly = NULL;
+static __nocfi int ksu_setprocattr_wrapper(struct task_struct *p, char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+	if (likely(selinux_setprocattr_fn))
+		return selinux_setprocattr_fn(p, name, value, size);
+
+	return 0;
+}
 #define ksu_security_add_hooks(a, b, c) security_add_hooks(a, b)
 #endif
+
+/**
+ *  security_setprocattr is a weird LSM on 5.4 and up, and this is normally backported
+ *  down to 4.14 and 4.19. somehow this LSM is a one-shot. only the first on list is called.
+ *
+ */
+#define SETPROCATTR_HOOK_NAME "ksu_setprocattr"
+static struct security_hook_list ksu_hooks_setprocattr[] __ro_after_init = {
+	LSM_HOOK_INIT(setprocattr, ksu_setprocattr_wrapper),
+};
 
 /**
  * LSMs are actually unhookable, however, it requires CONFIG_SECURITY_SELINUX_DISABLE
@@ -302,6 +329,33 @@ static void ksu_grab_cap_bprm_set_creds_slot()
 }
 #endif
 
+static void ksu_dethrone_selinux_setprocattr()
+{
+	struct hlist_head *head = ksu_hooks_setprocattr[0].head; 
+	struct security_hook_list *pos;
+	struct hlist_node *tmp;
+
+	if (!head)
+		return;
+
+	hlist_for_each_entry_safe(pos, tmp, head, list) {
+
+		// grab selinux_setprocattr fn ptr
+		if (!strcmp(pos->lsm, "selinux")) {
+			selinux_setprocattr_fn = pos->hook.setprocattr;
+			pr_info("ksu_setprocattr: selinux_setprocattr found at 0x%lx \n", (uintptr_t)selinux_setprocattr_fn);
+		}
+
+		// remove everything else that aint us.
+		// NOTE: on some kernels BPF_LSM is enabled and it will also register setprocattr
+		// so this has to be done!
+		if (!!strcmp(pos->lsm, SETPROCATTR_HOOK_NAME)) {
+			pr_info("ksu_setprocattr: delete setprocattr LSM: %s\n", pos->lsm);
+			ksu_hlist_del_safe(&pos->list);
+		}
+	}
+}
+
 #else // ! KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST 
 
 static void ksu_list_del_safe(struct list_head *entry)
@@ -435,6 +489,34 @@ static void ksu_grab_cap_bprm_set_creds_slot()
 }
 #endif
 
+static void ksu_dethrone_selinux_setprocattr()
+{
+	struct list_head *head = ksu_hooks_setprocattr[0].head;
+	struct security_hook_list *pos, *tmp;
+
+	if (!head)
+		return;
+
+	if (list_empty(head))
+		return;
+
+	list_for_each_entry_safe(pos, tmp, head, list) {
+		// dont unhook ourself!
+		if (pos->hook.setprocattr == ksu_setprocattr_wrapper)
+			continue;
+
+		// this is likely selinux_setprocattr, we save its address
+		if (!selinux_setprocattr_fn && pos->hook.setprocattr) {
+			selinux_setprocattr_fn = pos->hook.setprocattr;
+			pr_info("ksu_setprocattr: found first setprocattr at 0x%lx\n", (uintptr_t)selinux_setprocattr_fn);
+		}
+
+		// just delete evrything
+		pr_info("ksu_setprocattr: delete setprocattr LSM at 0x%lx\n", (uintptr_t)pos->hook.setprocattr);
+		ksu_list_del_safe(&pos->list);
+	}
+}
+
 #endif // KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST
 
 static int ksu_lsm_hook_restore(void *data)
@@ -470,6 +552,9 @@ static __init void ksu_lsm_hook_init(void)
 	ksu_grab_cap_bprm_set_creds_slot();
 	kthread_run(ksu_restore_bprm_set_creds, NULL, "kthread");
 #endif
+
+	ksu_security_add_hooks(ksu_hooks_setprocattr, ARRAY_SIZE(ksu_hooks_setprocattr), SETPROCATTR_HOOK_NAME);
+	ksu_dethrone_selinux_setprocattr();
 
 }
 
