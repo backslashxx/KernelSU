@@ -100,7 +100,7 @@ static __nocfi ssize_t ksu_selinux_transaction_write(struct file *file, const ch
 	char kbuf[128];
 	size_t len = (size < 128) ? size : 127;
 
-	if (copy_from_user_retry(kbuf, buf, len))
+	if (!!copy_from_user(kbuf, buf, len))
 		goto skip_destroy;
 
 	kbuf[len] = '\0';
