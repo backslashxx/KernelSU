@@ -77,7 +77,6 @@ static __init void ksu_lsm_hook_init(void)
 
 static uintptr_t selinux_ops_addr = NULL;
 
-#ifdef CONFIG_KSU_FEATURE_SELINUX_HIDE
 static int (*orig_setprocattr) (struct task_struct *p, char *name, void *value, size_t size) = NULL;
 static int hook_setprocattr(struct task_struct *p, char *name, void *value, size_t size)
 {
@@ -85,7 +84,6 @@ static int hook_setprocattr(struct task_struct *p, char *name, void *value, size
 	ksu_hide_setprocattr(name, value, size);
 	return orig_setprocattr(p, name, value, size);
 }
-#endif
 
 static int (*orig_inode_rename) (struct inode *old_dir, struct dentry *old_dentry,
 			     struct inode *new_dir, struct dentry *new_dentry) = NULL;
@@ -377,10 +375,8 @@ static int ksu_register_lsm_hook(void *data)
 	orig_inode_rename = ops->inode_rename;
 	ops->inode_rename = hook_inode_rename;
 
-#ifdef CONFIG_KSU_FEATURE_SELINUX_HIDE
 	orig_setprocattr = ops->setprocattr;
 	ops->setprocattr = hook_setprocattr;
-#endif
 
 	orig_task_fix_setuid = ops->task_fix_setuid;
 	ops->task_fix_setuid = hook_task_fix_setuid;
