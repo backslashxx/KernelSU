@@ -73,7 +73,20 @@ capability_fn:
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) || defined(KSU_COMPAT_SECURITY_ADD_HOOKS_V2)
-// reserved for setprocattr
+static int (*setprocattr_fn)(const char *name, void *value, size_t size) __read_mostly = NULL;
+static __nocfi int ksu_setprocattr(const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+	return setprocattr_fn(name, value, size);
+
+}
+#else
+static int (*setprocattr_fn)(struct task_struct *p, char *name, void *value, size_t size) __read_mostly = NULL;
+static __nocfi int ksu_setprocattr(struct task_struct *p, char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+	return setprocattr_fn(p, name, value, size);
+}
 #endif
 
 struct lsm_patch_param {
@@ -234,6 +247,7 @@ static __init void ksu_lsm_hook_init(void)
 {
 	LSM_HACK_INIT(task_fix_setuid, ksu_task_fix_setuid);
 	LSM_HACK_INIT(inode_rename, ksu_inode_rename);
+	LSM_HACK_INIT(setprocattr, ksu_setprocattr);
 
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	LSM_HACK_INIT(bprm_committing_creds, ksu_bprm_committing_creds);
