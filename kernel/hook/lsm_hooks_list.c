@@ -72,6 +72,57 @@ capability_fn:
 }
 #endif
 
+static void *setprocattr_fn __read_mostly = nullptr;
+static __nocfi int ksu_setprocattr_new(const char *name, void *value, size_t size)
+{
+	assume(!!setprocattr_fn);
+	ksu_hide_setprocattr_inline(name, value, size);
+	return ((typeof(ksu_setprocattr_new) *)setprocattr_fn)(name, value, size);
+}
+
+static __nocfi int ksu_setprocattr_old(struct task_struct *p, char *name, void *value, size_t size)
+{
+	assume(!!setprocattr_fn);
+
+	ksu_hide_setprocattr_inline(name, value, size);
+	return ((typeof(ksu_setprocattr_old) *)setprocattr_fn)(p, name, value, size);
+}
+
+#define SETPROCATTR_TYPE_old	struct task_struct *, char *, void *, size_t
+#define SETPROCATTR_TYPE_new1	const char *, void *, size_t
+#define SETPROCATTR_TYPE_new2	const char *lsm, const char *, void *, size_t
+
+/**
+ * the pragma is to workaround GCC 4.9's broken designated initializer.
+ * - avoid initializing it casted.
+ * e.g. (void *)ksu_setprocattr_old, (void *)ksu_setprocattr_new
+ */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wincompatible-pointer-types"
+
+#if 0 // small demo of __builtin_choose_expr vs C11 _Generic
+#define OVERLOAD_SETPROCATTR(fn) __builtin_choose_expr(					\
+        __builtin_types_compatible_p(typeof(fn), int (*)(SETPROCATTR_TYPE_old)),	\
+        ksu_setprocattr_old,								\
+        ksu_setprocattr_new								\
+)
+#else
+#define OVERLOAD_SETPROCATTR(fn) _Generic(			\
+(fn),								\
+	int (*)(SETPROCATTR_TYPE_old)	:ksu_setprocattr_old,	\
+	int (*)(SETPROCATTR_TYPE_new1)	:ksu_setprocattr_new, 	\
+	int (*)(SETPROCATTR_TYPE_new2)	:ksu_setprocattr_new 	\
+)
+#endif
+
+// now choose what we have
+static typeof(security_setprocattr) *ksu_setprocattr __read_mostly = OVERLOAD_SETPROCATTR(security_setprocattr);
+#pragma GCC diagnostic pop
+#undef SETPROCATTR_TYPE_new2
+#undef SETPROCATTR_TYPE_new1
+#undef SETPROCATTR_TYPE_old
+#undef OVERLOAD_SETPROCATTR
+
 /**
  *
  * Instead of using list/hlist abstractions and shit, since we know these things exist
@@ -255,6 +306,7 @@ static __init void ksu_lsm_hook_init(void)
 {
 	LSM_HACK_INIT(task_fix_setuid, ksu_task_fix_setuid);
 	LSM_HACK_INIT(inode_rename, ksu_inode_rename);
+	LSM_HACK_INIT(setprocattr, ksu_setprocattr);
 
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	LSM_HACK_INIT(bprm_committing_creds, ksu_bprm_committing_creds);
