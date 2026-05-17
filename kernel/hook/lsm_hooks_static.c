@@ -97,6 +97,22 @@ static int ksu_security_file_permission(struct file *file, int mask)
 	return security_file_permission(file, mask);
 }
 
+extern int security_setprocattr(int lsmid, const char *name, void *value, size_t size);
+static int ksu_setprocattr(int lsmid, const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+	return security_setprocattr(lsmid, name, value, size);
+}
+
+extern int security_inode_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
+			const char *name, const void *value, size_t size, int flags);
+static int ksu_inode_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
+			const char *name, const void *value, size_t size, int flags)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+	return security_inode_setxattr(idmap, dentry, name, value, size, flags);
+}
+
 static void __init ksu_lsm_hook_init(void)
 {
 	int ret;
@@ -164,5 +180,15 @@ skip_read2:
 read_hook_done:
 	pr_info("LSM: security_file_permission: ret %d \n", ret);
 #endif
+
+	target_callsite = kallsyms_lookup_retry("proc_pid_attr_write"); // fn ptr on dispatch table
+	symbol_addr = kallsyms_lookup_retry("security_setprocattr");
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_setprocattr);
+	pr_info("LSM: security_setprocattr: ret %d \n", ret);
+
+	target_callsite = kallsyms_lookup_retry("__vfs_setxattr_locked"); // exported symbol
+	symbol_addr = kallsyms_lookup_retry("security_inode_setxattr");
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_inode_setxattr);
+	pr_info("LSM: security_inode_setxattr: ret %d \n", ret);
 
 }

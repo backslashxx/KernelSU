@@ -15,6 +15,20 @@
 
 static uintptr_t selinux_ops_addr = 0x0;
 
+static int (*orig_setprocattr) (struct task_struct *p, char *name, void *value, size_t size) __read_mostly = nullptr;
+static int hook_setprocattr(struct task_struct *p, char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+	return orig_setprocattr(p, name, value, size);
+}
+
+static int (*orig_inode_setxattr) (struct dentry *dentry, const char *name, const void *value, size_t size, int flags) __read_mostly = nullptr;
+static int hook_inode_setxattr(struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+	return orig_inode_setxattr(dentry, name, value, size, flags);
+}
+
 static int (*orig_inode_rename) (struct inode *old_dir, struct dentry *old_dentry,
 			     struct inode *new_dir, struct dentry *new_dentry) __read_mostly = nullptr;
 static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
@@ -322,6 +336,12 @@ static int ksu_register_lsm_hook(void *data)
 
 	orig_inode_rename = ops->inode_rename;
 	ops->inode_rename = hook_inode_rename;
+
+	orig_setprocattr = ops->setprocattr;
+	ops->setprocattr = hook_setprocattr;
+
+	orig_inode_setxattr = ops->inode_setxattr;
+	ops->inode_setxattr = hook_inode_setxattr;
 
 	orig_task_fix_setuid = ops->task_fix_setuid;
 	ops->task_fix_setuid = hook_task_fix_setuid;
