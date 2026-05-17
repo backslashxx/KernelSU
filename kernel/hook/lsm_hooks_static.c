@@ -78,6 +78,13 @@ static int ksu_security_file_permission(struct file *file, int mask)
 	return security_file_permission(file, mask);
 }
 
+extern int security_setprocattr(int lsmid, const char *name, void *value, size_t size);
+static int ksu_setprocattr(int lsmid, const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+	return security_setprocattr(lsmid, name, value, size);
+}
+
 static void __init ksu_core_init(void)
 {
 	int ret;
@@ -166,5 +173,10 @@ read_hook_done:
 	pr_info("lsm_hijack: security_file_permission: ret %d \n", ret);
 	;
 #endif
+
+	target_callsite = kallsyms_lookup_retry("proc_pid_attr_write");
+	symbol_addr = kallsyms_lookup_retry("security_setprocattr");
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_setprocattr);
+	pr_info("lsm_hijack: security_setprocattr: ret %d \n", ret);
 
 }
