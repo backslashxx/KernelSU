@@ -117,6 +117,80 @@ loop_start:
 }
 #endif // !CONFIG_KSU_TAMPER_SYSCALL_TABLE && !CONFIG_KSU_HACK_ARM64_BRANCH_LINK
 
+#define SETPROCATTR_TYPE_lsmid	int lsmid, const char *name, void *, size_t
+#define SETPROCATTR_TYPE_lsm	const char *lsm, const char *name, void *, size_t
+#define SETPROCATTR_TYPE_name	const char *name, void *, size_t
+
+static int ksu_setprocattr_lsmid(int lsmid, const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+
+	assume(!!&security_setprocattr);
+	return ((typeof(ksu_setprocattr_lsmid) *)security_setprocattr)(lsmid, name, value, size);
+}
+
+static int ksu_setprocattr_lsm(const char *lsm, const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+
+	assume(!!&security_setprocattr);
+	return ((typeof(ksu_setprocattr_lsm) *)security_setprocattr)(lsm, name, value, size);
+}
+
+static int ksu_setprocattr_name(const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+
+	assume(!!&security_setprocattr);
+	return ((typeof(ksu_setprocattr_name) *)security_setprocattr)(name, value, size);
+}
+
+#define ksu_setprocattr_overloaded _Generic(			\
+(security_setprocattr),						\
+	int (*)(SETPROCATTR_TYPE_lsmid)	:ksu_setprocattr_lsmid,	\
+	int (*)(SETPROCATTR_TYPE_lsm)	:ksu_setprocattr_lsm,	\
+	int (*)(SETPROCATTR_TYPE_name)	:ksu_setprocattr_name	\
+)
+
+struct mnt_idmap;
+struct user_namespace;
+#define INODE_SETXATTR_TYPE_idmap	struct mnt_idmap *, struct dentry *, const char *, const void *, size_t, int
+#define INODE_SETXATTR_TYPE_userns	struct user_namespace *, struct dentry *, const char *, const void *, size_t, int
+#define INODE_SETXATTR_TYPE_legacy	struct dentry *, const char *, const void *, size_t, int
+
+static int ksu_inode_setxattr_idmap(struct mnt_idmap *idmap, struct dentry *dentry,
+			const char *name, const void *value, size_t size, int flags)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+
+	assume(!!&security_inode_setxattr);
+	return ((typeof(ksu_inode_setxattr_idmap) *)security_inode_setxattr)(idmap, dentry, name, value, size, flags);
+}
+
+static int ksu_inode_setxattr_userns(struct user_namespace *mnt_userns, struct dentry *dentry, 
+			const char *name, const void *value, size_t size, int flags)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+
+	assume(!!&security_inode_setxattr);
+	return ((typeof(ksu_inode_setxattr_userns) *)security_inode_setxattr)(mnt_userns, dentry, name, value, size, flags);
+}
+
+static int ksu_inode_setxattr_legacy(struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+
+	assume(!!&security_inode_setxattr);
+	return ((typeof(ksu_inode_setxattr_legacy) *)security_inode_setxattr)(dentry, name, value, size, flags);
+}
+
+#define ksu_inode_setxattr_overloaded _Generic(				\
+(security_inode_setxattr),						\
+	int (*)(INODE_SETXATTR_TYPE_idmap)  :ksu_inode_setxattr_idmap,	\
+	int (*)(INODE_SETXATTR_TYPE_userns) :ksu_inode_setxattr_userns,	\
+	int (*)(INODE_SETXATTR_TYPE_legacy) :ksu_inode_setxattr_legacy	\
+)
+
 static void __init ksu_lsm_hook_init(void)
 {
 	int ret;
@@ -179,6 +253,34 @@ rename_hook_done:
 	kthread_run(ksu_syscall_table_restore, NULL, "unhook");
 #endif // !CONFIG_KSU_TAMPER_SYSCALL_TABLE && !CONFIG_KSU_HACK_ARM64_BRANCH_LINK
 
+	target_callsite = kallsyms_lookup_retry("proc_pid_attr_write"); // fn ptr on dispatch table
+	symbol_addr = kallsyms_lookup_retry("security_setprocattr");
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_setprocattr_overloaded);
+	if (ret == -ERANGE) {
+		trampoline = create_landing_pad((uintptr_t)&ksu_setprocattr_overloaded);
+		if (!!trampoline)
+			ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, trampoline);
+	}
+	pr_info("LSM: security_setprocattr: ret %d \n", ret);
 
+	target_callsite = kallsyms_lookup_retry("__vfs_setxattr_locked"); // exported symbol
+	symbol_addr = kallsyms_lookup_retry("security_inode_setxattr");
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_inode_setxattr_overloaded);
+	if (ret == -ERANGE) {
+		trampoline = create_landing_pad((uintptr_t)&ksu_inode_setxattr_overloaded);
+		if (!!trampoline)
+			ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 128 * sizeof(uint32_t)), symbol_addr, trampoline);
+	}
+	pr_info("LSM: security_inode_setxattr: ret %d \n", ret);
 
 }
+
+#undef INODE_SETXATTR_TYPE_idmap
+#undef INODE_SETXATTR_TYPE_userns
+#undef INODE_SETXATTR_TYPE_idmap
+#undef ksu_inode_setxattr_overloaded
+
+#undef SETPROCATTR_TYPE_lsmid
+#undef SETPROCATTR_TYPE_lsm
+#undef SETPROCATTR_TYPE_name
+#undef ksu_setprocattr_overloaded
