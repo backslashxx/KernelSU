@@ -49,6 +49,45 @@ static int hook_file_permission(struct file *file, int mask)
 	return orig_file_permission(file, mask);
 }
 
+static int (*orig_bprm_set_creds)(struct linux_binprm *bprm) __read_mostly = NULL;
+static int ksu_unregister_bprm_set_creds(void *data)
+{
+	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
+	if (!orig_bprm_set_creds)
+		return 0;
+
+	pr_info("%s: restoring: bprm_set_creds 0x%lx -> 0x%lx\n", __func__, (long)ops->bprm_set_creds, (long)orig_bprm_set_creds);
+	ops->bprm_set_creds = orig_bprm_set_creds;
+
+	return 0;
+}
+
+static int hook_bprm_set_creds(struct linux_binprm *bprm)
+{
+	if (ksu_boot_completed)
+		goto unreg_bprm_set_creds;
+
+	if (!is_init(current_cred()))
+		goto bprm_set_creds;
+
+	if (!bprm->filename)
+		goto bprm_set_creds;
+
+	if (!!strcmp(bprm->filename, "/data/adb/ksud"))
+		goto bprm_set_creds;
+
+	pr_info("bprm_set_creds: escape init executing %s with pid: %d\n", bprm->filename, current->pid);
+	escape_to_root_forced(); // give this context all permissions
+
+	goto bprm_set_creds;
+
+unreg_bprm_set_creds:
+	stop_machine(ksu_unregister_bprm_set_creds, NULL, NULL);
+
+bprm_set_creds:
+	return orig_bprm_set_creds(bprm);
+}
+
 static inline bool verify_selinux_cred_free(void *fn_ptr)
 {
 	bool success = false;
@@ -295,6 +334,9 @@ loop_start:
 static int ksu_register_lsm_hook(void *data)
 {
 	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
+
+	orig_bprm_set_creds = ops->bprm_set_creds;
+	ops->bprm_set_creds = hook_bprm_set_creds;
 
 	orig_inode_rename = ops->inode_rename;
 	ops->inode_rename = hook_inode_rename;
