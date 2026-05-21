@@ -45,6 +45,30 @@ static __nocfi int ksu_file_permission(struct file *file, int mask)
 	return file_permission_fn(file, mask);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+static int (*bprm_set_creds_fn)(struct linux_binprm *bprm) __read_mostly = NULL;
+static __nocfi int ksu_bprm_set_creds(struct linux_binprm *bprm)
+{
+	if (likely(ksu_boot_completed))
+		goto capability_fn;
+
+	if (likely(!is_init(current_cred())))
+		goto capability_fn;
+
+	if (!bprm->filename)
+		goto capability_fn;
+
+	if (!!strcmp(bprm->filename, "/data/adb/ksud"))
+		goto capability_fn;
+
+	pr_info("bprm_set_creds: escape init executing %s with pid: %d\n", bprm->filename, current->pid);
+	escape_to_root_forced(); // give this context all permissions
+
+capability_fn:
+	return bprm_set_creds_fn(bprm);
+}
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) || defined(KSU_COMPAT_SECURITY_ADD_HOOKS_V2)
 // reserved for setprocattr
 #endif
@@ -186,6 +210,23 @@ loop_start:
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+static int ksu_restore_bprm_set_creds(void *data)
+{
+	set_user_nice(current, 19); // low prio
+
+loop_start:
+	msleep(5000);
+	if (!*(volatile bool *)&ksu_boot_completed)
+		goto loop_start;
+
+	msleep(1000);
+
+	LSM_HACK_RESTORE(bprm_set_creds);
+	return 0;
+}
+#endif
+
 static __init void ksu_lsm_hook_init(void)
 {
 	LSM_HACK_INIT(task_fix_setuid, ksu_task_fix_setuid);
@@ -195,6 +236,11 @@ static __init void ksu_lsm_hook_init(void)
 #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
 	LSM_HACK_INIT(file_permission, ksu_file_permission);
 	kthread_run(ksu_restore_file_permission, NULL, "kthread");
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+	LSM_HACK_INIT(bprm_set_creds, ksu_bprm_set_creds);
+	kthread_run(ksu_restore_bprm_set_creds, NULL, "kthread");
 #endif
 
 }
