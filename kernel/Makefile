@@ -66,6 +66,11 @@ $(info -- KernelSU/compat: exported policy_rwlock found!)
 CFLAGS_ksu.o += -DKSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK
 endif
 
+# branch link hook, do_faccessat
+ifeq ($(shell grep "long do_faccessat" $(srctree)/fs/open.c 2>/dev/null | grep -q "flags" 2>/dev/null; echo $$?),0)
+CFLAGS_ksu.o += -DKSU_HAS_FACCESSAT2
+endif
+
 CFLAGS_ksu.o += $(call cc-option, -Wno-declaration-after-statement)
 CFLAGS_ksu.o += $(call cc-option, -Wno-implicit-function-declaration)
 CFLAGS_ksu.o += $(call cc-option, -Wno-missing-prototypes)
