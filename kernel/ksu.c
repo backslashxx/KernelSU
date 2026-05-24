@@ -130,6 +130,13 @@
 #endif
 #endif /* CONFIG_KSU_TAMPER_SYSCALL_TABLE */
 
+#ifdef CONFIG_KSU_HACK_ARM64_BRANCH_LINK
+#undef syscall_table_sucompat_enable
+#undef syscall_table_sucompat_disable
+#include "hook/syscall_table_hook_arm64.c" // included as fallback
+#include "hook/branch_link_hook_arm64.c"
+#endif
+
 #if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
 #include "hook/kp_ksud.c"
 #endif
@@ -178,6 +185,10 @@ static int __init kernelsu_init(void)
 
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	ksu_syscall_table_hook_init();
+#endif
+
+#ifdef CONFIG_KSU_HACK_ARM64_BRANCH_LINK
+	ksu_branch_link_patch_init();
 #endif
 
 	return 0;
