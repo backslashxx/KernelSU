@@ -19,6 +19,20 @@ config KSU_KPROBES_KSUD
 	  on early boot. Hooks are unregistered at boot complete
 	  to reduce overhead.
 
+config KSU_HACK_ARM64_BRANCH_LINK
+	bool "EXPERIMENTAL: inline call-site hijacking (ARM64 bl insn)"
+	depends on KSU
+	depends on ARM64 && KALLSYMS && KSU_KPROBES_KSUD
+	depends on !KSU_TAMPER_SYSCALL_TABLE
+	default n
+	help
+	  EXPERIMENTAL: provides sucompat by patching callsites, scanning kernel text and 
+	  patching bl (branch-with-link) insn. This routes calls into our custom functions
+	  without the need for trampolines. Theory comes from ARM64 optprobes on lkml.
+	  KProbes is required for sys_reboot and sys_newfstat hooks and symbol resolution.
+	  NOT usable for pre-4.17 kernels. For those, please use KSU_TAMPER_SYSCALL_TABLE.
+	  Verified on 4.19/5.4 GKI1, 5.10~6.12 GKI2.
+
 config KSU_TAMPER_SYSCALL_TABLE
 	bool "tamper sys_call_table for sucompat + sys_reboot"
 	depends on KSU
