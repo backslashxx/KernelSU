@@ -26,6 +26,10 @@
 #define __ro_after_init
 #endif
 
+#ifndef __nocfi
+#define __nocfi
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
 __weak long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
 {
