@@ -11,7 +11,94 @@
  *
  */
 
+#if !defined(CONFIG_ARM64)
+#error "automated LSM hooking on 6.8+ is only for ARM64!"
+#endif
+
+#if !defined(CONFIG_KALLSYMS)
+#error "automated LSM hooking on 6.8+ requires kallsyms!"
+#endif
+
+// security.c hijack for 6.8+
+
+extern int vfs_rename(struct renamedata *rd);
+static int ksu_vfs_rename(struct renamedata *rd)
+{
+	return vfs_rename(rd);
+}
+
+extern int security_inode_rename(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir, struct dentry *new_dentry, unsigned int flags);
+static int ksu_inode_rename(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir, struct dentry *new_dentry, unsigned int flags)
+{
+	return security_inode_rename(old_dir, old_dentry, new_dir, new_dentry, flags);
+}
+
+// setuid
+extern int security_task_fix_setuid(struct cred *new, const struct cred *old, int flags);
+static int ksu_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
+{
+	return security_task_fix_setuid(new, old, flags);
+}
+
+// bprm
+extern int security_bprm_check(struct linux_binprm *bprm);
+static int ksu_bprm_check(struct linux_binprm *bprm)
+{
+	return security_bprm_check(bprm);
+}
+
 static void __init ksu_core_init(void)
 {
+	int ret;
+	uintptr_t target_callsite;
+	uintptr_t symbol_addr;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0) 
+	target_callsite = kallsyms_lookup_retry("filename_renameat2");
+#else
+	target_callsite = kallsyms_lookup_retry("do_renameat2");
+#endif
+	symbol_addr = kallsyms_lookup_retry("vfs_rename");
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 256 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_vfs_rename);
+	pr_info("lsm_hijack: vfs_rename: ret %d \n", ret);
+	if (!ret)
+		goto rename_hook_done;
+
+	target_callsite = kallsyms_lookup_retry("vfs_rename");
+	symbol_addr = kallsyms_lookup_retry("security_inode_rename");
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 256 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_inode_rename);
+	pr_info("lsm_hijack: security_inode_rename: ret %d \n", ret);
+
+rename_hook_done:
+	;
+
+	target_callsite = kallsyms_lookup_retry("__sys_setresuid");
+	if (!target_callsite)
+		target_callsite = kallsyms_lookup_retry("__arm64_sys_setresuid");
+	symbol_addr = kallsyms_lookup_retry("security_task_fix_setuid");
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 256 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_task_fix_setuid);
+	pr_info("lsm_hijack: security_task_fix_setuid: ret %d \n", ret);
+
+	symbol_addr = kallsyms_lookup_retry("security_bprm_check");
+	target_callsite = kallsyms_lookup_retry("bprm_execve");
+	if (!target_callsite)
+		goto skip_bprm1;
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 256 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_bprm_check);
+	if (!ret)
+		goto bprm_done;
+skip_bprm1:
+	target_callsite = kallsyms_lookup_retry("search_binary_handler");
+	if (!target_callsite)
+		goto skip_bprm2;
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 256 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_bprm_check);
+	if (!ret)
+		goto bprm_done;
+skip_bprm2:
+	target_callsite = kallsyms_lookup_retry("exec_binprm");
+	if (!target_callsite)
+		goto bprm_done;
+	ret = arm64_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 256 * sizeof(uint32_t)), symbol_addr, (uintptr_t)&ksu_bprm_check);
+bprm_done:
+	pr_info("lsm_hijack: security_bprm_check: ret %d \n", ret);
 
 }
