@@ -47,6 +47,10 @@
 #include "selinux/selinux.h"
 #include "selinux/sepolicy.h"
 
+#ifdef CONFIG_ARM64
+#include "arm64_bl_insn.h"
+#endif
+
 // unity build
 #include "policy/allowlist.c"
 #include "policy/app_profile.c"
