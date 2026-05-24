@@ -14,6 +14,10 @@
 #define __ro_after_init
 #endif
 
+#ifndef __nocfi
+#define __nocfi
+#endif
+
 extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
 
 /**
