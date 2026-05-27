@@ -91,7 +91,7 @@ const size_t ksu_rc_len = sizeof(KERNEL_SU_RC) - 1;
 #define MODULE_RC_PATH_DEFAULT "/metadata/ksu/modules.rc"
 #define MODULE_RC_MAX (1u << 20) /* 1 MiB cap */
 static char *module_rc_buf;
-static size_t module_rc_len;
+static size_t module_rc_len = 0;
 static ssize_t module_rc_pos;
 
 static struct file *open_module_rc(const char **chosen_path)
@@ -173,6 +173,37 @@ static void free_module_rc(void)
 	kvfree(module_rc_buf);
 	module_rc_buf = NULL;
 	module_rc_len = 0;
+}
+
+static inline void set_module_rc_len_vfs()
+{
+	static bool loaded = false;
+	if (loaded)
+		return;
+
+	loaded = true;
+
+	struct path path;
+
+	int err = kern_path(MODULE_RC_PATH_WATCHDOG, LOOKUP_FOLLOW, &path);
+	if (err)
+		err = kern_path(MODULE_RC_PATH_DEFAULT, LOOKUP_FOLLOW, &path);
+
+	if (err)
+		return; 
+
+	struct inode *inode = d_inode(path.dentry);
+	if (inode && S_ISREG(inode->i_mode))
+		module_rc_len = i_size_read(inode);
+
+	path_put(&path);
+
+	if (module_rc_len > MODULE_RC_MAX)
+		module_rc_len = MODULE_RC_MAX;
+
+	pr_info("module_rc_len: %zu\n", module_rc_len);
+
+	return;
 }
 
 // https://cs.android.com/android/platform/superproject/main/+/main:system/core/init/parser.cpp;l=144;drc=61197364367c9e404c7da6900658f1b16c42d0da
@@ -324,6 +355,11 @@ static noinline void ksu_install_rc_hook(struct file *file)
 {
 	if (!is_init(current_cred()))
 		return;
+
+	// if init process is running, always try to grab module_rc length
+	// this is because we are also running newfstat hook on kprobe
+	// and we really cannot kern_path on it
+	set_module_rc_len_vfs();
 
 	if (!is_init_rc(file)) {
 		return;
