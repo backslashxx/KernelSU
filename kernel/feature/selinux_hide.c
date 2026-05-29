@@ -37,7 +37,7 @@ static inline int ksu_selinux_get_sids()
 	return 0;
 }
 
-void ksu_slow_avc_audit(u32 *tsid)
+static inline void ksu_slow_avc_audit_static(u32 *tsid)
 {
 	if (unlikely(!ksu_selinux_hide_enabled))
 		return;
@@ -50,6 +50,14 @@ void ksu_slow_avc_audit(u32 *tsid)
 
 	return;
 }
+#ifdef CONFIG_ARM64 // on arm64 we patch insn instead
+void ksu_slow_avc_audit(u32 *tsid) { } // no-op
+#else
+void ksu_slow_avc_audit(u32 *tsid)
+{
+	ksu_slow_avc_audit_static(tsid);
+}
+#endif
 
 static inline bool ksu_should_destroy_context(char *str)
 {
@@ -184,7 +192,7 @@ void ksu_sel_write_context(struct file **file, char **buf, size_t *size)
 	return;
 }
 
-#if defined(CONFIG_KPROBES)
+#if defined(CONFIG_KPROBES) && !defined(CONFIG_ARM64)
 
 #include <linux/kprobes.h>
 static struct kprobe *slow_avc_audit_kp;
@@ -240,7 +248,7 @@ static void ksu_selinux_hide_enable()
 	if (ret)
 		pr_info("selinux_hide: sid grab fail?\n");
 
-#if defined(CONFIG_KPROBES)
+#if defined(CONFIG_KPROBES) && !defined(CONFIG_ARM64)
 	slow_avc_audit_kp = init_kprobe("slow_avc_audit", slow_avc_audit_pre_handler);
 #endif
 
@@ -249,7 +257,7 @@ static void ksu_selinux_hide_enable()
 
 static void ksu_selinux_hide_disable()
 {
-#if defined(CONFIG_KPROBES)
+#if defined(CONFIG_KPROBES) && !defined(CONFIG_ARM64)
 	pr_info("selinux_hide: unregister slow_avc_audit kprobe!\n");
 	destroy_kprobe(&slow_avc_audit_kp);
 #endif
@@ -356,6 +364,168 @@ static __nocfi int ksu_sel_open_handle_status(struct inode *inode, struct file *
 orig_page:
 	return sel_open_handle_status_fn(inode, filp);
 }
+
+#if defined(CONFIG_AUDIT) && defined(CONFIG_ARM64)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+extern noinline int slow_avc_audit(u32 ssid, u32 tsid, u16 tclass,
+			    u32 requested, u32 audited, u32 denied, int result,
+			    struct common_audit_data *a);
+
+static int (*slow_avc_audit_fn)(u32 ssid, u32 tsid, u16 tclass,
+			    u32 requested, u32 audited, u32 denied, int result,
+			    struct common_audit_data *a) __read_mostly = NULL;
+
+__attribute__((used))
+static int ksu_hook_slow_avc_audit(u32 ssid, u32 tsid, u16 tclass,
+				   u32 requested, u32 audited, u32 denied, int result,
+				   struct common_audit_data *a)
+{
+	ksu_slow_avc_audit_static(&tsid);
+	return slow_avc_audit_fn(ssid, tsid, tclass, requested, audited, denied, result, a);
+}
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+extern noinline int slow_avc_audit(struct selinux_state *state,
+			    u32 ssid, u32 tsid, u16 tclass,
+			    u32 requested, u32 audited, u32 denied, int result,
+			    struct common_audit_data *a);
+
+static int (*slow_avc_audit_fn)(struct selinux_state *state,
+			    u32 ssid, u32 tsid, u16 tclass,
+			    u32 requested, u32 audited, u32 denied, int result,
+			    struct common_audit_data *a) __read_mostly = NULL;
+
+__attribute__((used))
+static int ksu_hook_slow_avc_audit(struct selinux_state *state,
+				   u32 ssid, u32 tsid, u16 tclass,
+				   u32 requested, u32 audited, u32 denied, int result,
+				   struct common_audit_data *a)
+{
+	ksu_slow_avc_audit_static(&tsid);
+	return slow_avc_audit_fn(state, ssid, tsid, tclass, requested, audited, denied, result, a);
+}
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
+extern noinline int slow_avc_audit(struct selinux_state *state,
+			    u32 ssid, u32 tsid, u16 tclass,
+			    u32 requested, u32 audited, u32 denied, int result,
+			    struct common_audit_data *a,
+			    unsigned int flags);
+
+static int (*slow_avc_audit_fn)(struct selinux_state *state,
+			    u32 ssid, u32 tsid, u16 tclass,
+			    u32 requested, u32 audited, u32 denied, int result,
+			    struct common_audit_data *a,
+			    unsigned int flags) __read_mostly = NULL;
+
+__attribute__((used))
+static int ksu_hook_slow_avc_audit(struct selinux_state *state,
+				   u32 ssid, u32 tsid, u16 tclass,
+				   u32 requested, u32 audited, u32 denied, int result,
+				   struct common_audit_data *a,
+				   unsigned int flags)
+{
+	ksu_slow_avc_audit_static(&tsid);
+	return slow_avc_audit_fn(state, ssid, tsid, tclass, requested, audited, denied, result, a, flags);
+}
+#else
+extern noinline int slow_avc_audit(u32 ssid, u32 tsid, u16 tclass,
+			    u32 requested, u32 audited, u32 denied, int result,
+			    struct common_audit_data *a,
+			    unsigned int flags);
+
+static int (*slow_avc_audit_fn)(u32 ssid, u32 tsid, u16 tclass,
+			    u32 requested, u32 audited, u32 denied, int result,
+			    struct common_audit_data *a,
+			    unsigned int flags) __read_mostly = NULL;
+
+__attribute__((used))
+static int ksu_hook_slow_avc_audit(u32 ssid, u32 tsid, u16 tclass,
+				   u32 requested, u32 audited, u32 denied, int result,
+				   struct common_audit_data *a,
+				   unsigned int flags)
+{
+	ksu_slow_avc_audit_static(&tsid);
+	return slow_avc_audit_fn(ssid, tsid, tclass, requested, audited, denied, result, a, flags);
+}
+#endif
+
+/*
+
+https://godbolt.org/z/Eh8vfrdns
+
+__attribute__((noinline)) 
+void target_fn() {
+    volatile int x = 0;
+}
+
+int main() {
+    target_fn();
+    return 0;
+}
+
+target_fn:
+        sub     sp, sp, #16
+        str     wzr, [sp, 12]
+        nop
+        add     sp, sp, 16
+        ret
+main:
+        stp     x29, x30, [sp, -16]!
+        mov     x29, sp
+        bl      target_fn   << hunt for this!
+        mov     w0, 0
+        ldp     x29, x30, [sp], 16
+        ret
+*/
+
+// bl is 94 ~ 97
+
+static void hunt_slow_avc_audit_callsite(uintptr_t target_address)
+{
+	extern char _stext[], _etext[];
+
+	uintptr_t start_addr = (uintptr_t)_stext;
+	uintptr_t end_addr = (uintptr_t)_etext;
+	uintptr_t curr_addr = start_addr;
+	uint32_t raw_instruction; // arm64 wordsize
+
+start_scan:
+	if (curr_addr >= end_addr)
+		goto bail;
+
+	if (copy_from_kernel_nofault(&raw_instruction, (void *)curr_addr, sizeof(uint32_t)))
+		goto step_up;
+
+	// aarch64_insn_is_##abbr
+	if (!aarch64_insn_is_bl(raw_instruction))
+		goto step_up;
+
+	// signed
+	long offset = aarch64_get_branch_offset(raw_instruction);
+	uintptr_t calculated_destination = curr_addr + offset;
+
+	if (calculated_destination != (uintptr_t)&slow_avc_audit)
+		goto step_up;
+
+	pr_info("selinux_hide: found slow_avc_audit call site at 0x%lx\n", curr_addr);
+
+	u32 insn = aarch64_insn_gen_branch_imm(curr_addr, (uintptr_t)&ksu_hook_slow_avc_audit, AARCH64_INSN_BRANCH_LINK);
+	void *arr_addr[] = { (void*)curr_addr };
+	uint32_t arr_insn[] = { insn };
+
+	int res = aarch64_insn_patch_text(arr_addr, arr_insn, 1);
+
+	pr_info("selinux_hide: patched callsite at 0x%lx to hook!\n", curr_addr);
+
+step_up:
+	curr_addr = curr_addr + sizeof(uint32_t);
+	goto start_scan;
+
+bail:
+	pr_info("selinux_hide: callsite scan done!\n");
+	return;
+}
+#endif
 
 #define FORCE_VOLATILE(x) *(volatile typeof(x) *)&(x)
 
@@ -512,6 +682,12 @@ init_hooks:
 
 	ksu_selinux_hide_enable();
 	ksu_init_hook_selinux_transaction_write();
+
+#if defined(CONFIG_AUDIT) && defined(CONFIG_ARM64)
+	slow_avc_audit_fn = slow_avc_audit;
+	pr_info("selinux_hide: slow_avc_audit found at 0x%lx\n", (uintptr_t)slow_avc_audit_fn);
+	hunt_slow_avc_audit_callsite((uintptr_t)slow_avc_audit_fn);
+#endif
 
 	int tries = 0;
 try_again:
