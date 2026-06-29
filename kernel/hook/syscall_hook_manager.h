@@ -7,4 +7,7 @@
 void ksu_syscall_hook_manager_init(void);
 void ksu_syscall_hook_manager_exit(void);
 
+void ksu_avc_spoof_init(void);
+void ksu_avc_spoof_exit(void);
+
 #endif
