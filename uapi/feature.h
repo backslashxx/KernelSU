@@ -8,6 +8,8 @@ enum ksu_feature_id {
     KSU_FEATURE_ADB_ROOT = 3,
     KSU_FEATURE_SELINUX_HIDE = 4,
 
+    KSU_FEATURE_AVC_SPOOF = 10003,
+
     KSU_FEATURE_MAX
 };
 
