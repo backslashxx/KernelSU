@@ -47,6 +47,19 @@
 #include "selinux/selinux.h"
 #include "selinux/sepolicy.h"
 
+#ifdef CONFIG_KPROBES
+#include "downstream/kprobes_common.h"
+#endif
+
+#ifdef CONFIG_KALLSYMS
+#include "external/chibihash64.h"
+#include "downstream/kallsyms_common.h"
+#endif
+
+#ifdef CONFIG_ARM64
+#include "downstream/arm64_bl_insn.h"
+#endif
+
 // unity build
 #include "policy/allowlist.c"
 #include "policy/app_profile.c"
