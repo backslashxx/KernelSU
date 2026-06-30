@@ -88,6 +88,67 @@ static bool is_ksud_exists()
     return true;
 }
 
+static __always_inline bool ksu_is_user_string_su(const char __user **filename_user)
+{
+	uintptr_t buf;
+	const char su[16] = SU_PATH;
+
+	// sugar prep
+	uintptr_t *su_p = (uintptr_t *)su;
+	uintptr_t __user *fn_p = (uintptr_t __user *)untagged_addr(*(char **)filename_user);
+
+	// assert /system/bin/su\0 = 15 bytes.
+	BUILD_BUG_ON(sizeof(SU_PATH) + 1 != 16);
+
+	/*
+	 * it seems this is actually the slowest part, so we peek last word first to speed it up
+	 * NOTE: get_user rets EFAULT on err, so if we are copying a pointer
+	 * that goes to nothing, we also detect that and ret fast
+	 *
+	 * first read overreads, reading 8 bytes, "bin/su\0?" /  4 bytes, "su\0?" when we only need 7/3
+	 * but this is fine as we are guaranteed alignment, hardware provides trailing garbeg
+	 * if it is specially crafted and hits a page guard, we just get EFAULT anyway
+	 *
+	 * on 64-bit we do this in 2 word compare, 4 on 32-bit, little endian only!
+	 *
+	 */
+
+#ifdef CONFIG_64BIT
+	if (get_user(buf, &fn_p[1]))
+		return false;
+
+	if (likely((buf & 0x00FFFFFFFFFFFFFFUL) != (su_p[1] & 0x00FFFFFFFFFFFFFFUL)))
+		return false;
+
+#else
+	if (get_user(buf, &fn_p[3]))
+		return false;
+
+	if (likely((buf & 0x00FFFFFFUL) != (su_p[3] & 0x00FFFFFFUL)))
+		return false;
+
+	if (unlikely(get_user(buf, &fn_p[2])))
+		return false;
+
+	if (buf != su_p[2])
+		return false;
+
+	if (unlikely(get_user(buf, &fn_p[1])))
+		return false;
+
+	if (unlikely(buf != su_p[1]))
+		return false;
+#endif
+	// last word
+	if (unlikely(get_user(buf, &fn_p[0])))
+		return false;
+
+	if (unlikely(buf != su_p[0]))
+		return false;
+	
+	return true;
+}
+
 long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
 {
     const char __user **filename_user, *orig_filename;
@@ -100,11 +161,7 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
 
     filename_user = (const char __user **)&PT_REGS_PARM2(regs);
 
-    char path[sizeof(su_path) + 1];
-    memset(path, 0, sizeof(path));
-    strncpy_from_user_nofault(path, *filename_user, sizeof(path));
-
-    if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
+    if (ksu_is_user_string_su(filename_user)) {
         old_cred = override_creds(ksu_cred);
         if (is_ksud_exists()) {
             write_sulog('a');
@@ -136,11 +193,7 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
 
     filename_user = (const char __user **)&PT_REGS_PARM2(regs);
 
-    char path[sizeof(su_path) + 1];
-    memset(path, 0, sizeof(path));
-    strncpy_from_user_nofault(path, *filename_user, sizeof(path));
-
-    if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
+    if (ksu_is_user_string_su(filename_user)) {
         old_cred = override_creds(ksu_cred);
         if (is_ksud_exists()) {
             pr_info("newfstatat su->ksud!\n");
@@ -178,18 +231,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr, 
     if (!ksu_is_allow_uid_for_current(current_uid().val))
         goto do_orig_execve;
 
-    addr = untagged_addr((unsigned long)*filename_user);
-    fn = (const char __user *)addr;
-    memset(path, 0, sizeof(path));
-
-    ret = strncpy_from_user(path, fn, sizeof(path));
-
-    if (ret < 0) {
-        pr_warn("Access filename when execve failed: %ld", ret);
-        goto do_orig_execve;
-    }
-
-    if (likely(memcmp(path, su_path, sizeof(su_path))))
+    if (!ksu_is_user_string_su(filename_user))
         goto do_orig_execve;
 
     write_sulog('x');
