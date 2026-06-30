@@ -48,6 +48,27 @@
 #include "selinux/selinux.h"
 #include "selinux/sepolicy.h"
 
+#ifdef CONFIG_KPROBES
+#include "downstream/kprobes_common.h"
+#endif
+
+#ifdef CONFIG_KALLSYMS
+#include "external/chibihash64.h"
+#include "downstream/kallsyms_common.h"
+#endif
+
+#ifdef CONFIG_ARM64
+#include "downstream/arm64_branch_insn.h"
+#endif
+
+#include "downstream/slow_avc_audit_defs.h"
+#include "downstream/tiny_sulog.h"
+#include "downstream/vmap_patch.h"
+
+#ifdef CONFIG_KSU_HOSTSREDIRECT
+#include "downstream/ksu_hostsredirect.h"
+#endif
+
 // unity build
 #include "policy/allowlist.c"
 #include "policy/app_profile.c"
