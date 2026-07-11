@@ -68,7 +68,7 @@ jobs:
 
         # Copy with KMI-specific naming
         OUTPUT_NAME="${{ inputs.kmi }}_kernelsu.ko"
-        cp kernelsu.ko "$OUT_DIR/$OUTPUT_NAME"
+        cp ksu.ko "$OUT_DIR/$OUTPUT_NAME"
         
         echo "Copied to: $OUT_DIR/$OUTPUT_NAME"
         ls -la "$OUT_DIR/$OUTPUT_NAME"
