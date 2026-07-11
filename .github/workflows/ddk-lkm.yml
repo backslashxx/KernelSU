@@ -67,7 +67,7 @@ jobs:
 
         # Copy with KMI-specific naming
         OUTPUT_NAME="${{ inputs.kmi }}_kernelsu.ko"
-        cp kernelsu.ko "/github/workspace/out/$OUTPUT_NAME"
+        cp ksu.ko "/github/workspace/out/$OUTPUT_NAME"
         
         echo "Copied to: /github/workspace/out/$OUTPUT_NAME"
         ls -la "/github/workspace/out/$OUTPUT_NAME"
