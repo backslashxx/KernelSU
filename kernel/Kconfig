@@ -1,7 +1,7 @@
 menu "KernelSU"
 
 config KSU
-	bool "KernelSU function support"
+	tristate "KernelSU function support"
 	depends on !CPU_BIG_ENDIAN
 	depends on SECURITY_SELINUX
 	select SECCOMP
@@ -95,5 +95,10 @@ config KSU_LSM_SECURITY_HOOKS
 	help
 	  Disabling this is mostly useful for non-ARM64 with kernel > 6.8.
 	  Make sure to implement manual hooks on security/security.c.
+
+config KSU_HEURISTIC_IN_TREE_BUILD
+	bool "heuristic. do NOT touch"
+	depends on KSU
+	default y
 
 endmenu
