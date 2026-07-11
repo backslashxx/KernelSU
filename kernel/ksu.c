@@ -1,5 +1,30 @@
 #include "kernel_includes.h"
 
+#ifdef MODULE
+#ifndef CONFIG_ARM64
+#error "LKM is only supported on ARM64!"
+#endif
+
+// for OOT builds like on ddk, just enable everything
+#ifndef CONFIG_KSU_HEURISTIC_IN_TREE_BUILD
+	#define CONFIG_KSU_LSM_SECURITY_HOOKS 1
+	#define CONFIG_KSU_KPROBES_KSUD 1
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		#define CONFIG_KSU_HACK_ARM64_BRANCH_LINK 1
+	#else
+		#define CONFIG_KSU_TAMPER_SYSCALL_TABLE 1
+	#endif
+	#define CONFIG_KSU_FEATURE_SULOG 1
+	#define CONFIG_KSU_FEATURE_ADBROOT 1
+	#define CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED 1
+#endif // CONFIG_KSU_HEURISTIC_IN_TREE_BUILD
+
+// for in-tree, this has to be detected
+#ifndef CONFIG_KALLSYMS_ALL
+#error "LKM requires KALLSYMS_ALL!"
+#endif
+#endif // MODULE
+
 // uapi
 #include "include/uapi/app_profile.h"
 #include "include/uapi/feature.h"
@@ -186,7 +211,23 @@ static int __init kernelsu_init(void)
 	return 0;
 }
 
+#if defined(MODULE)
+static void __exit kernelsu_exit(void)
+{
+	__builtin_trap();
+	__builtin_unreachable();
+}
+module_init(kernelsu_init);
+module_exit(kernelsu_exit);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
+MODULE_IMPORT_NS("VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver");
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
+#else
 device_initcall(kernelsu_init);
+#endif
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("weishu");
