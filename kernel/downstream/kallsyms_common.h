@@ -106,15 +106,6 @@ size_is_sufficient:
 __weak int sprint_symbol_no_offset(char *buffer, unsigned long address) { return sprint_symbol(buffer, address); }
 #endif
 
-/**
- * NOTE: stack usage here can go beyond 1024 bytes. (huge KSYM_SYMBOL_LEN on 6.x)
- * however, this is only called inside a kthread.
- * so, at the very least, the chance of stack overflow is low.
- * and if stack overflows, kthread dies, not the whole kernel.
- *
- */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wframe-larger-than="
 static noinline __nocfi void dotted_kallsyms_build_hash_array(void)
 {
 	extern char _stext[], _etext[];
@@ -123,10 +114,14 @@ static noinline __nocfi void dotted_kallsyms_build_hash_array(void)
 	uintptr_t iter_count = 0;
 	uintptr_t curr;
 
-	char symbol_buf[KSYM_SYMBOL_LEN];
-	char symbol_cache[KSYM_SYMBOL_LEN] = { 0 };
-
 	might_sleep();
+
+	char *membuf __zoffstack(KSYM_SYMBOL_LEN * 2);
+	if (!membuf)
+		return;
+
+	char *symbol_buf = membuf;
+	char *symbol_cache = membuf + KSYM_SYMBOL_LEN;
 
 #ifdef MODULE // https://elixir.bootlin.com/linux/v7.2-rc4/source/kernel/kprobes.c#L1506
 	int (*kallsyms_lookup_size_offset_fn)(unsigned long addr, unsigned long *symbolsize, unsigned long *offset) = NULL;
@@ -200,7 +195,6 @@ step_up:
 
 	return;
 }
-#pragma GCC diagnostic pop 
 
 static noinline uintptr_t kallsyms_lookup_hashed_name(const char *name)
 {
