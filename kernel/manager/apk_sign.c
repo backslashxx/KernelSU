@@ -78,7 +78,7 @@ static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset,
 		*offset += *size4;
 
 #define CERT_MAX_LENGTH 1024
-		char *cert __cleanup(kfree_byref) = kzalloc(CERT_MAX_LENGTH, GFP_KERNEL);
+		char *cert __zoffstack(CERT_MAX_LENGTH);
 		if (!cert)
 			return false;
 

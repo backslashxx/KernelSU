@@ -151,7 +151,7 @@ static noinline void search_manager(const char *path, int depth, struct list_hea
 	unsigned long data_app_magic = 0;
 
 	// First depth
-	struct data_path *data __cleanup(kfree_byref) = kzalloc(sizeof(*data), GFP_KERNEL);
+	struct data_path *data __zoffstack(sizeof(*data));
 	if (!data)
 		return;
 
