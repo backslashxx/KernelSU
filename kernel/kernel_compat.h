@@ -184,6 +184,9 @@ static inline void ksu_kvfree(void *buf)
 static inline void kvfree_byref(void *buf) { kvfree(*(void **)buf); }
 static inline void kfree_byref(void *buf) { kfree(*(void **)buf); }
 
+#define __offstack(size) __cleanup(kfree_byref) = kmalloc(size, GFP_KERNEL)
+#define __zoffstack(size) __cleanup(kfree_byref) = kzalloc(size, GFP_KERNEL)
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0)
 __weak void memzero_explicit(void *s, size_t count) { memset_explicit(s, 0, count); }
 #endif
