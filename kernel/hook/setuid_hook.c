@@ -1,11 +1,5 @@
-static __always_inline void ksu_handle_setresuid_cred(struct cred *new, const struct cred *old)
+static __always_inline void ksu_handle_setresuid_3(uid_t new_uid, uid_t old_uid, const struct cred *old)
 {
-	if (!new || !old)
-		return;
-
-	uid_t new_uid = new->uid.val;
-	uid_t old_uid = old->uid.val;
-
 	// old process is not root, ignore it.
 	if (unlikely(!!old_uid))
 		return;
@@ -22,7 +16,7 @@ static __always_inline void ksu_handle_setresuid_cred(struct cred *new, const st
 		goto kill_seccomp;
 
 	// Handle kernel umount
-	ksu_handle_umount(new, old);
+	ksu_handle_umount(new_uid, old_uid, old);
 	return;
 
 install_ksu_fd:
@@ -32,4 +26,20 @@ install_ksu_fd:
 kill_seccomp:
 	disable_seccomp();
 	return;
+}
+
+static __always_inline void ksu_handle_setresuid_cred(struct cred *new, const struct cred *old)
+{
+	if (!new || !old)
+		return;
+
+	uid_t new_uid = new->uid.val;
+	uid_t old_uid = old->uid.val;
+	
+	ksu_handle_setresuid_3(new_uid, old_uid, old);
+}
+
+static __always_inline void ksu_handle_setresuid_current(uid_t new_uid, uid_t old_uid)
+{
+	ksu_handle_setresuid_3(new_uid, old_uid, current_cred());
 }
