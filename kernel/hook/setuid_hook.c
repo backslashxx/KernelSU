@@ -33,8 +33,8 @@ static __always_inline void ksu_handle_setresuid_cred(struct cred *new, const st
 	if (!new || !old)
 		return;
 
-	uid_t new_uid = new->uid.val;
-	uid_t old_uid = old->uid.val;
+	uid_t new_uid = ksu_get_uid_t(new->uid);
+	uid_t old_uid = ksu_get_uid_t(old->uid);
 	
 	ksu_handle_setresuid_3(new_uid, old_uid, old);
 }
