@@ -161,9 +161,9 @@ static __always_inline int ksu_hide_setprocattr_inline(const char *name, void *v
 	if (!str)
 		return 0;
 
-	// to make sure its terminated
-	char buf[64] = { 0 };
-	size_t len = (size < 63) ? size : 63;
+	// two cachelines
+	char buf[128] = { 0 };
+	size_t len = (size < 127) ? size : 127;
 
 	memcpy(buf, str, len);
 
@@ -205,6 +205,7 @@ static __nocfi ssize_t ksu_selinux_transaction_write(struct file *file, const ch
 	if (current_uid().val < 10000)
 		goto skip_destroy;
 
+	// two cachelines
 	char kbuf[128] = { 0 };
 	size_t len = (size < 127) ? size : 127;
 
