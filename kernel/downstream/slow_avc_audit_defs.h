@@ -38,51 +38,43 @@ struct selinux_state { uintptr_t dummy; };
 
 __maybe_unused void ksu_slow_avc_audit(u32 *tsid) { return; } // dummy
 
+#ifndef __overloadable
+#define __overloadable __attribute__((overloadable))
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) && !defined(KSU_COMPAT_HAS_SELINUX_STATE)
+struct selinux_state { uintptr_t dummy; };
+#endif
+
 static void *slow_avc_audit_fn __read_mostly = NULL;
 
-#define SLOW_AVC_AUDIT_TYPE_1 u32, u32, u16, u32, u32, u32, int, struct common_audit_data *
-static int __nocfi ksu_hook_slow_avc_audit_1(u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a)
+static int __nocfi __overloadable ksu_hook_slow_avc_audit(u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a)
 {
-	int (*orig_fn)(SLOW_AVC_AUDIT_TYPE_1) = slow_avc_audit_fn;
-
-	ksu_slow_avc_audit_inline(&tsid);
+	int (*orig_fn)(u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a) = slow_avc_audit_fn;
+	ksu_slow_avc_audit(&tsid);
 	return orig_fn(ssid, tsid, tclass, requested, audited, denied, result, a);
 }
 
-#define SLOW_AVC_AUDIT_TYPE_2 struct selinux_state *, u32, u32, u16, u32, u32, u32, int, struct common_audit_data *
-static int __nocfi ksu_hook_slow_avc_audit_2(struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a)
+static int __nocfi __overloadable ksu_hook_slow_avc_audit(struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a)
 {
-	int (*orig_fn)(SLOW_AVC_AUDIT_TYPE_2) = slow_avc_audit_fn;
-
-	ksu_slow_avc_audit_inline(&tsid);
+	int (*orig_fn)(struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a) = slow_avc_audit_fn;
+	ksu_slow_avc_audit(&tsid);
 	return orig_fn(state, ssid, tsid, tclass, requested, audited, denied, result, a);
 }
 
-#define SLOW_AVC_AUDIT_TYPE_3 struct selinux_state *, u32, u32, u16, u32, u32, u32, int, struct common_audit_data *, unsigned int
-static int __nocfi ksu_hook_slow_avc_audit_3(struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags)
+static int __nocfi __overloadable ksu_hook_slow_avc_audit(struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags)
 {
-	int (*orig_fn)(SLOW_AVC_AUDIT_TYPE_3) = slow_avc_audit_fn;
-
-	ksu_slow_avc_audit_inline(&tsid);
+	int (*orig_fn)(struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags) = slow_avc_audit_fn;
+	ksu_slow_avc_audit(&tsid);
 	return orig_fn(state, ssid, tsid, tclass, requested, audited, denied, result, a, flags);
 }
 
-#define SLOW_AVC_AUDIT_TYPE_4 u32, u32, u16, u32, u32, u32, int, struct common_audit_data *, unsigned int
-static int __nocfi ksu_hook_slow_avc_audit_4(u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags)
+static int __nocfi __overloadable ksu_hook_slow_avc_audit(u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags)
 {
-	int (*orig_fn)(SLOW_AVC_AUDIT_TYPE_4) = slow_avc_audit_fn;
-
-	ksu_slow_avc_audit_inline(&tsid);
+	int (*orig_fn)(u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags) = slow_avc_audit_fn;
+	ksu_slow_avc_audit(&tsid);
 	return orig_fn(ssid, tsid, tclass, requested, audited, denied, result, a, flags);
 }
-
-#define OVERLOAD_SLOW_AVC_AUDIT(fn) _Generic					\
-((fn),										\
-	int (*)(SLOW_AVC_AUDIT_TYPE_1): (void *)ksu_hook_slow_avc_audit_1, 	\
-	int (*)(SLOW_AVC_AUDIT_TYPE_2): (void *)ksu_hook_slow_avc_audit_2, 	\
-	int (*)(SLOW_AVC_AUDIT_TYPE_3): (void *)ksu_hook_slow_avc_audit_3, 	\
-	int (*)(SLOW_AVC_AUDIT_TYPE_4): (void *)ksu_hook_slow_avc_audit_4	\
-)
 
 static void ksu_init_slow_avc_audit_hook(void)
 {
@@ -92,7 +84,7 @@ static void ksu_init_slow_avc_audit_hook(void)
 		goto bail;
 
 	// now select the type we have
-	typeof(slow_avc_audit) *hook_ptr = OVERLOAD_SLOW_AVC_AUDIT(slow_avc_audit);
+	typeof(slow_avc_audit) *hook_ptr = ksu_hook_slow_avc_audit;
 
 //	ret = arm64_bl_patch_everything((uintptr_t)slow_avc_audit_fn, (uintptr_t)hook_ptr);
 //	pr_info("avc_spoof: hook slow_avc_audit ret: %d\n", ret);
