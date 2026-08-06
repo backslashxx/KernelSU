@@ -18,7 +18,7 @@
 #include "avc.h"
 
 static bool ksu_avc_spoof_enabled;
-static u32 cached_su_sid;
+static u32 ksu_sid __read_mostly = 0;
 static u32 priv_app_sid __read_mostly = 0;
 
 static inline int ksu_selinux_get_sids()
@@ -27,7 +27,11 @@ static inline int ksu_selinux_get_sids()
 	if (!err)
 		pr_info("selinux_hide: priv_app_sid: %u\n", priv_app_sid);
 
-	if (!priv_app_sid)
+	err = security_secctx_to_secid("u:r:ksu:s0", strlen("u:r:ksu:s0"), &ksu_sid);
+	if (err)
+		pr_info("selinux_hide: ksu_sid: %u\n", ksu_sid);
+
+	if (!priv_app_sid || !ksu_sid)
 		return -1;
 
 	return 0;
@@ -42,7 +46,7 @@ static __always_inline void ksu_slow_avc_audit_inline(u32 *tsid)
 	//if (unlikely(!priv_app_sid))
 	//	return;
 
-	if (*tsid != cached_su_sid)
+	if (*tsid != ksu_sid)
 		return;
 
 	pr_info("selinux_hide: slow_avc_audit: replace tsid: %u with priv_app_sid: %u\n", *tsid, priv_app_sid);
