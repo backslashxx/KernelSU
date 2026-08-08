@@ -21,16 +21,32 @@ static int ksu_prepare_new_blacklist(uintptr_t blacklist_pptr)
 {
 
 	const char *modules = MODULES_TO_BLOCK;
-	size_t old_len = strlen(*(char **)blacklist_pptr);
-	size_t new_len = old_len + strlen(modules) + 2; // + 2 for extra , and \0
-	char *new_blacklist = kzalloc(new_len, GFP_KERNEL);
+
+	size_t old_len;
+	if (!*(char **)blacklist_pptr)
+		old_len = 0;
+	else
+		old_len = strlen(*(char **)blacklist_pptr);
+
+	// + 2 for extra , and \0
+	size_t new_len = old_len + strlen(modules) + 2;
+	char *new_blacklist = kzalloc(new_len, GFP_KERNEL); // free this sometime
 	if (!new_blacklist)
 		return -ENOMEM;
+
+	if (!old_len)
+		goto write_fresh;
 
 	memcpy(new_blacklist, *(char **)blacklist_pptr, old_len);
 	new_blacklist[old_len] = ',';
 	memcpy(new_blacklist + old_len + 1, modules, strlen(modules));
+	goto write_to_slot;
 
+write_fresh:
+	memcpy(new_blacklist, modules, strlen(modules));
+
+write_to_slot:
+	;
 	uintptr_t addr = (uintptr_t)blacklist_pptr;
 	uintptr_t base = addr & PAGE_MASK;
 	uintptr_t offset = addr & ~PAGE_MASK;
@@ -43,9 +59,15 @@ static int ksu_prepare_new_blacklist(uintptr_t blacklist_pptr)
 	if (!writable_addr)
 		return -ENOMEM;
 
-	void **target_slot = (void **)((unsigned long)writable_addr + offset);
+	void **target_slot = (void **)((uintptr_t)writable_addr + offset);
+
+	preempt_disable();
+	local_irq_disable();
 
 	WRITE_ONCE(*target_slot, new_blacklist);
+
+	local_irq_enable();
+	preempt_enable();
 
 	vunmap(writable_addr);
 	smp_mb();
@@ -76,6 +98,5 @@ static noinline void ksu_extend_module_blacklist()
 	pr_info("module_blackist: 0x%lx extended with %s\n", (uintptr_t)*(void **)blacklist_pptr, *(char **)blacklist_pptr);
 	return;
 }
-
 
 #endif // __KSU_H_MODULE_BLACKLIST
