@@ -14,10 +14,25 @@
 #ifndef __KSU_H_MODULE_BLACKLIST
 #define __KSU_H_MODULE_BLACKLIST
 
-// TODO
+// split with ,
+#define MODULES_TO_BLOCK "ksu,kernelsu"
 
-static uintptr_t ksu_extend_module_blacklist()
+static bool ksu_prepare_new_blacklist(uintptr_t blacklist_pptr)
 {
+
+	const char *modules = MODULES_TO_BLOCK;
+	size_t old_len = strlen(*(char **)blacklist_pptr);
+	size_t new_len = old_len + strlen(modules) + 2; // + 2 for extra , and \0
+	char *new_blacklist = kzalloc(new_len, GFP_KERNEL);
+
+	memcpy(new_blacklist, *(char **)blacklist_pptr, old_len);
+	new_blacklist[old_len] = ',';
+	memcpy(new_blacklist + old_len + 1, modules, strlen(modules));
+	new_blacklist[new_len] = '\0';
+	
+	// debug
+	pr_info("new_module_blackist: 0x%lx with %s\n", (uintptr_t)new_blacklist, new_blacklist);
+
 	return 0x0;
 }
 
@@ -34,12 +49,13 @@ static uintptr_t ksu_read_module_blacklist()
 	return module_blacklist_pptr;
 }
 
-
-static noinline uintptr_t ksu_extend_module_blacklist()
+static noinline int ksu_extend_module_blacklist()
 {
-	ksu_read_module_blacklist();
+	uintptr_t blacklist_pptr = ksu_read_module_blacklist();
+	if (!blacklist_pptr)
+		return 0x0;
 
-	return 0x0;
+	return ksu_prepare_new_blacklist(blacklist_pptr);
 }
 
 
