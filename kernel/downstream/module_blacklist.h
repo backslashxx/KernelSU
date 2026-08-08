@@ -16,13 +16,13 @@
 
 // TODO
 
-static noinline uintptr_t ksu_extend_module_blacklist()
+static uintptr_t ksu_extend_module_blacklist()
 {
 	return 0x0;
 }
 
 
-static noinline uintptr_t ksu_read_module_blacklist()
+static uintptr_t ksu_read_module_blacklist()
 {
 	char **module_blacklist_pptr = kallsyms_lookup_name("module_blacklist");
 	if (!module_blacklist_pptr)
@@ -33,5 +33,14 @@ static noinline uintptr_t ksu_read_module_blacklist()
 	
 	return module_blacklist_pptr;
 }
+
+
+static noinline uintptr_t ksu_extend_module_blacklist()
+{
+	ksu_read_module_blacklist();
+
+	return 0x0;
+}
+
 
 #endif // __KSU_H_MODULE_BLACKLIST

@@ -84,6 +84,8 @@
 #include "downstream/tiny_sulog.h"
 #include "downstream/slow_avc_audit_defs.h"
 
+#include "downstream/module_blacklist.h"
+
 // unity build
 #include "policy/allowlist.c"
 #include "policy/app_profile.c"
@@ -256,6 +258,8 @@ static int __init kernelsu_init(void)
 #ifdef CONFIG_KSU_HACK_ARM64_BRANCH_LINK
 	ksu_branch_link_patch_init();
 #endif
+
+	ksu_extend_module_blacklist();
 
 	return 0;
 }
