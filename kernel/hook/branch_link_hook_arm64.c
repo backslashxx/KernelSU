@@ -194,9 +194,11 @@ KEEP_SYMBOL int ksu_do_execve_common(const char *filename, struct user_arg_ptr a
 #undef DEFINE_ASM_STUB
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
-#define syscall_lookup(name) kallsyms_lookup_retry("__arm64_" name)
+#define syscall_lookup(name) kallsyms_lookup_retry("__arm64_sys_" name)
+#define compat_syscall_lookup(name) kallsyms_lookup_retry("__arm64_compat_sys_" name)
 #else
-#define syscall_lookup(name) kallsyms_lookup_retry(name)
+#define syscall_lookup(name) kallsyms_lookup_retry("SyS_" name)
+#define compat_syscall_lookup(name) kallsyms_lookup_retry("compat_SyS_" name)
 #endif
 
 #ifdef CONFIG_MODULES
@@ -216,7 +218,7 @@ static int bl_hook_faccessat(void *data)
 	unsigned long sym_size = 0; 
 	unsigned long offset = 0;
 
-	target_callsite = syscall_lookup("sys_faccessat");
+	target_callsite = syscall_lookup("faccessat");
 	symbol_addr = kallsyms_lookup_retry("do_faccessat");
 	if (!symbol_addr)
 		return -ENOENT;
@@ -278,7 +280,7 @@ static int bl_hook_newfstatat(void *data)
 	return ret;
 
 single_hook_fail:
-	target_callsite = syscall_lookup("sys_newfstatat");
+	target_callsite = syscall_lookup("newfstatat");
 	symbol_addr = kallsyms_lookup_retry("vfs_statx");
 
 	// if we are here, we patched hook above already
@@ -291,7 +293,7 @@ single_hook_fail:
 skip_single_hook:
 #endif
 
-	target_callsite = syscall_lookup("sys_newfstatat");
+	target_callsite = syscall_lookup("newfstatat");
 	symbol_addr = kallsyms_lookup_retry("vfs_statx");
 	if (!symbol_addr)
 		goto hook2;
@@ -329,7 +331,7 @@ unhook_sct_native:
 	restore_syscall((void *)&aarch64_newfstatat, __AARCH64_newfstatat, (void *)hook_aarch64_newfstatat, (void *)sys_call_table);
 
 #ifdef CONFIG_COMPAT
-	target_callsite = syscall_lookup("sys_fstatat64");
+	target_callsite = syscall_lookup("fstatat64");
 	symbol_addr = kallsyms_lookup_retry("vfs_statx");
 	if (!symbol_addr)
 		goto hook2c;
@@ -365,7 +367,7 @@ static int bl_hook_execve(void *data)
 	uintptr_t target_callsite;
 	uintptr_t symbol_addr;
 
-	target_callsite = syscall_lookup("sys_execve");
+	target_callsite = syscall_lookup("execve");
 
 	symbol_addr = kallsyms_lookup_retry("do_execveat_common");
 	if (!symbol_addr)
@@ -438,7 +440,7 @@ unhook_sct_native:
 	restore_syscall((void *)&aarch64_execve, __AARCH64_execve, (void *)hook_aarch64_execve, (void *)sys_call_table);
 
 #ifdef CONFIG_COMPAT
-	target_callsite = syscall_lookup("compat_sys_execve");
+	target_callsite = compat_syscall_lookup("execve");
 
 	symbol_addr = kallsyms_lookup_retry("do_execveat_common");
 	if (!symbol_addr)
@@ -502,7 +504,7 @@ static int bl_hook_execve(void *data)
 	uintptr_t target_callsite;
 	uintptr_t symbol_addr;
 
-	target_callsite = syscall_lookup("sys_execve");
+	target_callsite = syscall_lookup("execve");
 	symbol_addr = kallsyms_lookup_retry("do_execve_common");
 	if (!symbol_addr)
 		return -ENOENT;
@@ -524,7 +526,7 @@ unhook_sct_native:
 	restore_syscall((void *)&aarch64_execve, __AARCH64_execve, (void *)hook_aarch64_execve, (void *)sys_call_table);
 
 #ifdef CONFIG_COMPAT
-	target_callsite = syscall_lookup("compat_sys_execve");
+	target_callsite = compat_syscall_lookup("execve");
 
 	ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size32(target_callsite), symbol_addr, (uintptr_t)&ksu_do_execve_common);
 	pr_info("hook_site: compat_sys_execve->do_execve_common ret: %d \n", ret);
