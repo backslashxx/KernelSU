@@ -82,10 +82,6 @@ DEFINE_ASM_STUB(ksu_vfs_statx_fn);
 KEEP_SYMBOL int ksu_vfs_statx_fn(int dfd, struct filename *filename, int flags, struct kstat *stat, u32 request_mask);
 KEEP_SYMBOL int ksu_vfs_statx(int dfd, struct filename *filename, int flags, struct kstat *stat, u32 request_mask)
 {
-#if 0	// only calls from fstatat64 / newfstatat is accepted
-	if (request_mask != STATX_BASIC_STATS)
-		goto orig_fn;
-#endif
 	if (IS_ERR(filename))
 		goto orig_fn;
 
@@ -252,7 +248,8 @@ static int bl_hook_newfstatat(void *data)
 	uintptr_t target_callsite;
 	uintptr_t symbol_addr;
 
-#if 0 // LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0) // worth since we skip usercopy
+// scope too huge. whole stat subsystem.
+#if 0 // LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
 	target_callsite = kallsyms_lookup_retry("vfs_fstatat");
 	if (!target_callsite)
 		goto skip_single_hook;
