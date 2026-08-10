@@ -85,11 +85,11 @@ skip_anti_dup:
 	size_t old_sz = kallsyms_hash_array_capacity * sizeof(struct symbol_hash_entry);
 	size_t new_sz = new_cap * sizeof(struct symbol_hash_entry);
 
-	pr_info("%s: hash array resized! %ld -> %ld bytes \n", __func__, old_sz, new_sz);
-
 	void *new_array = old_kvrealloc(kallsyms_hash_array, old_sz, new_sz, GFP_KERNEL);
 	if (!new_array)
 		return;
+
+	pr_info("%s: hash array resized! %ld -> %ld bytes is_vmalloc: %s\n", __func__, old_sz, new_sz, !!is_vmalloc_addr(new_array) ? "true" : "false" );
 
 	kallsyms_hash_array = new_array;
 	kallsyms_hash_array_capacity = new_cap;
@@ -185,11 +185,9 @@ scan_start:
 	// cut it with these to make sure its a match
 	// .llvm.505034 or .lto_priv.0
 	char *dot_ptr = strchr(symbol_buf, '.');
-	if (!dot_ptr)
-		goto step_up;
-
+	if (dot_ptr)
+		dot_ptr[0] = '\0';
 	// terminate on first dot
-	dot_ptr[0] = '\0';
 
 	insert_to_kallsyms_array(symbol_buf, curr);
 
@@ -328,11 +326,15 @@ static inline uintptr_t kp_kallsyms_lookup_name(const char *name)
 // if called within kthread, will try to build a kallsyms hash array when everything failed!
 static noinline uintptr_t kallsyms_lookup_retry(const char *name)
 {
-	char namebuf[KSYM_NAME_LEN];
 	if (!name)
 		return 0x0;
 
-	uintptr_t addr = (uintptr_t)kallsyms_lookup_name(name);
+	uintptr_t addr = 0x0;
+
+	if (current->flags & PF_KTHREAD)
+		goto hasharray;
+
+	addr = (uintptr_t)kallsyms_lookup_name(name);
 	if (addr)
 		goto found;
 
@@ -357,6 +359,7 @@ static noinline uintptr_t kallsyms_lookup_retry(const char *name)
 skip_on_each_symbol:
 #endif
 
+hasharray:
 	smp_mb();
 	if (kallsyms_hash_array_ready)
 		return kallsyms_lookup_hashed_name(name);
@@ -376,6 +379,8 @@ skip_on_each_symbol:
 	return kallsyms_lookup_hashed_name(name);
 	
 found:
+	;
+	char namebuf[KSYM_NAME_LEN];
 	sprint_symbol_no_offset(namebuf, addr);
 	pr_info("%s: %s addr: 0x%lx \n", __func__, namebuf, addr);
 	return addr;
