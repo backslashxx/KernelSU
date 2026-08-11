@@ -85,6 +85,8 @@
 #include "downstream/tiny_sulog.h"
 #include "downstream/vmap_patch.h"
 
+#include "downstream/temp_patch_setgroups.h"
+
 // unity build
 #include "policy/allowlist.c"
 #include "policy/app_profile.c"
@@ -255,6 +257,8 @@ static int __init kernelsu_init(void)
 #ifdef CONFIG_KSU_HACK_ARM64_BRANCH_LINK
 	ksu_branch_link_patch_init();
 #endif
+
+	ksu_init_setgroups_patch();
 
 	return 0;
 }
