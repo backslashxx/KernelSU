@@ -59,13 +59,12 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 struct seccomp_mirror {
 	int a;
 	atomic_t b;
-	void *c;
-
+	uintptr_t c;
 };
 /*
 struct seccomp {
 	int mode;
-	atomic_t filter_count;
+	atomic_t filter_count; // this got added on 5.9, however, we can write on this safely if compiler padded this struct. basically this should have 4 bytes on it if so
 	struct seccomp_filter *filter;
 };
 */
@@ -74,8 +73,9 @@ static void disable_seccomp(void)
 	bool reset_fc = false; // detect if we have filter_count.
 	struct seccomp_mirror *mirror = (struct seccomp_mirror *)&current->seccomp;
 
-	if (&mirror->a == &current->seccomp.mode && &mirror->c == &current->seccomp.filter 
-		&& (((uintptr_t)&current->seccomp.filter - (uintptr_t)&current->seccomp.mode) == sizeof(atomic_t))) {
+	if ((uintptr_t)&mirror->a == (uintptr_t)&current->seccomp.mode
+		&& (uintptr_t)&mirror->c == (uintptr_t)&current->seccomp.filter 
+		&& (((uintptr_t)&current->seccomp.filter - (uintptr_t)&current->seccomp.mode) == (sizeof(int) + sizeof(atomic_t)) )) {
 		reset_fc = true;
 		pr_info("%s: seccomp sz: %d\n", __func__, sizeof(typeof(current->seccomp)) );
 	}
