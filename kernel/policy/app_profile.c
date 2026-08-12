@@ -61,29 +61,31 @@ struct seccomp_mirror {
 	atomic_t b;
 	uintptr_t c;
 };
-/*
-struct seccomp {
-	int mode;
-	atomic_t filter_count; // this got added on 5.9, however, we can write on this safely if compiler padded this struct. basically this should have 4 bytes on it if so
-	struct seccomp_filter *filter;
-};
-*/
+
+// should be safe, as long as theres a space tehre, doesnt matter if atomic_t or padding
+static inline bool should_zero_fc(typeof(current->seccomp) *current_seccomp)
+{
+	if (sizeof(typeof(current->seccomp)) != sizeof(struct seccomp_mirror))
+		return false;
+
+	struct seccomp_mirror *mirror_seccomp = (struct seccomp_mirror *)current_seccomp;
+	if ((uintptr_t)&mirror_seccomp->a != (uintptr_t)&current->seccomp.mode)
+		return false;
+
+	if ((uintptr_t)&mirror->c != (uintptr_t)&current->seccomp.filter)
+		return false;
+
+	if (((uintptr_t)&current->seccomp.filter - (uintptr_t)&current->seccomp.mode) != (sizeof(int) + sizeof(atomic_t)))
+		return false;
+	
+	return true;
+}
 static void disable_seccomp(void)
 {
-	bool reset_fc = false; // detect if we have filter_count.
-	struct seccomp_mirror *mirror = (struct seccomp_mirror *)&current->seccomp;
-
-	if ((uintptr_t)&mirror->a == (uintptr_t)&current->seccomp.mode
-		&& (uintptr_t)&mirror->c == (uintptr_t)&current->seccomp.filter 
-		&& (((uintptr_t)&current->seccomp.filter - (uintptr_t)&current->seccomp.mode) == (sizeof(int) + sizeof(atomic_t)) )) {
-		reset_fc = true;
-		pr_info("%s: seccomp sz: %d\n", __func__, sizeof(typeof(current->seccomp)) );
-	}
-
+	bool reset_fc = should_zero_fc(&current->seccomp); // detect if we have filter_count.
 	spin_lock_irq(&current->sighand->siglock);
 
-	// should be safe, as long as theres a space tehre, doesnt matter if atomic_t or padding
-	if (reset_fc && *(int *)((char *)&current->seccomp.mode + sizeof(int)) == 1)
+	if (reset_fc)
 		atomic_set((atomic_t *)((char *)&current->seccomp.mode + sizeof(int)), 0);
 
 	current->seccomp.mode = 0;
