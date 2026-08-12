@@ -58,7 +58,17 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
  */
 static void disable_seccomp(void)
 {
+	bool reset_fc = false; // detect if we have filter_count.
+	if (sizeof(typeof(current->seccomp)) > sizeof(int) + sizeof(uintptr_t)) {
+		reset_fc = true;
+		pr_info("%s: seccomp sz: %d\n", __func__, sizeof(typeof(current->seccomp)) );
+	}
+
 	spin_lock_irq(&current->sighand->siglock);
+
+	// should be safe, as long as theres a space tehre, doesnt matter if atomic_t or padding
+	if (reset_fc && *(int *)((char *)&current->seccomp.mode + sizeof(int)) == 1)
+		atomic_set((atomic_t *)((char *)&current->seccomp.mode + sizeof(int)), 0);
 
 	current->seccomp.mode = 0;
 	smp_mb();
