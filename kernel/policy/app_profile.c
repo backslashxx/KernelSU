@@ -56,10 +56,26 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
  * see: seccomp_assign_mode();
  * - if this has repercussions, then we can just restore all those refcounting shit
  */
+struct seccomp_mirror {
+	int a;
+	atomic_t b;
+	void *c;
+
+};
+/*
+struct seccomp {
+	int mode;
+	atomic_t filter_count;
+	struct seccomp_filter *filter;
+};
+*/
 static void disable_seccomp(void)
 {
 	bool reset_fc = false; // detect if we have filter_count.
-	if (sizeof(typeof(current->seccomp)) > sizeof(int) + sizeof(uintptr_t)) {
+	struct seccomp_mirror *mirror = (struct seccomp_mirror *)&current->seccomp;
+
+	if (&mirror->a == &current->seccomp.mode && &mirror->c == &current->seccomp.filter 
+		&& (((uintptr_t)&current->seccomp.filter - (uintptr_t)&current->seccomp.mode) == sizeof(atomic_t))) {
 		reset_fc = true;
 		pr_info("%s: seccomp sz: %d\n", __func__, sizeof(typeof(current->seccomp)) );
 	}
