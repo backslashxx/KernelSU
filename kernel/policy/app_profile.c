@@ -58,7 +58,7 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
  */
 struct seccomp_mirror {
 	int a;
-	atomic_t b;
+	atomic_t b; // likely padding on old 64-bit kernels
 	uintptr_t c;
 };
 
@@ -72,7 +72,7 @@ static inline bool should_zero_fc(typeof(current->seccomp) *current_seccomp)
 	if ((uintptr_t)&mirror_seccomp->a != (uintptr_t)&current->seccomp.mode)
 		return false;
 
-	if ((uintptr_t)&mirror->c != (uintptr_t)&current->seccomp.filter)
+	if ((uintptr_t)&mirror_seccomp->c != (uintptr_t)&current->seccomp.filter)
 		return false;
 
 	if (((uintptr_t)&current->seccomp.filter - (uintptr_t)&current->seccomp.mode) != (sizeof(int) + sizeof(atomic_t)))
@@ -83,8 +83,10 @@ static inline bool should_zero_fc(typeof(current->seccomp) *current_seccomp)
 static void disable_seccomp(void)
 {
 	bool reset_fc = should_zero_fc(&current->seccomp); // detect if we have filter_count.
-	spin_lock_irq(&current->sighand->siglock);
+	if (reset_fc)
+		pr_info("%s: will zero fc\n", __func__);
 
+	spin_lock_irq(&current->sighand->siglock);
 	if (reset_fc)
 		atomic_set((atomic_t *)((char *)&current->seccomp.mode + sizeof(int)), 0);
 
