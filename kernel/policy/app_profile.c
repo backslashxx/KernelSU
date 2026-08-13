@@ -83,8 +83,6 @@ static inline bool should_zero_fc(typeof(current->seccomp) *current_seccomp)
 static void disable_seccomp(void)
 {
 	bool reset_fc = should_zero_fc(&current->seccomp); // detect if we have filter_count.
-	if (reset_fc)
-		pr_info("%s: will zero fc\n", __func__);
 
 	spin_lock_irq(&current->sighand->siglock);
 	if (reset_fc)
