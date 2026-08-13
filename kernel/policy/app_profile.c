@@ -56,13 +56,14 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
  * see: seccomp_assign_mode();
  * - if this has repercussions, then we can just restore all those refcounting shit
  */
+#ifdef CONFIG_SECCOMP_FILTER
 struct seccomp_mirror {
 	int a;
 	atomic_t b; // likely padding on old 64-bit kernels
 	uintptr_t c;
 };
-
 // should be safe, as long as theres a space tehre, doesnt matter if atomic_t or padding
+// however this thing is only a visual thing so its more of a demo of some memory hax
 static inline bool should_zero_fc(typeof(current->seccomp) *current_seccomp)
 {
 	if (sizeof(typeof(current->seccomp)) != sizeof(struct seccomp_mirror))
@@ -80,6 +81,9 @@ static inline bool should_zero_fc(typeof(current->seccomp) *current_seccomp)
 	
 	return true;
 }
+#else
+static inline bool should_zero_fc(typeof(current->seccomp) *current_seccomp) { return false; }
+#endif
 static void disable_seccomp(void)
 {
 	bool reset_fc = should_zero_fc(&current->seccomp); // detect if we have filter_count.
