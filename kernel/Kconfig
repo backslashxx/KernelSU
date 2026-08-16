@@ -48,6 +48,20 @@ config KSU_TAMPER_SYSCALL_TABLE
 	  complies with Clang CFI.
 	  Verified on 3.0 ~ 7.1. Recommended for 3.0 ~ 4.14.
 
+config KSU_TINYFS_SUCOMPAT
+	bool "filesystem ops hijacking based sucompat"
+	depends on !KSU_TAMPER_SYSCALL_TABLE
+	depends on !KSU_HACK_ARM64_BRANCH_LINK
+	depends on !KSU_FEATURE_ADBROOT
+	depends on KSU
+	default n
+	help
+	  Chicken, chicken, chicken, chicken, chicken, chicken, chicken, chicken, chicken.
+	  Chicken, chicken, chicken, chicken, chicken, chicken, chicken, chicken, chicken.
+	  Chicken, chicken, chicken, chicken, chicken, chicken, chicken, chicken, chicken.
+	  Chicken, chicken, chicken, chicken, chicken, chicken, chicken, chicken, chicken.
+	  Placeholder.
+
 config KSU_LSM_SECURITY_HOOKS
 	bool "Use LSM security hooks"
 	depends on KSU

@@ -146,6 +146,13 @@
 #include "hook/branch_link_hook_arm64.c"
 #endif
 
+#ifdef CONFIG_KSU_TINYFS_SUCOMPAT
+#undef syscall_table_sucompat_enable
+#undef syscall_table_sucompat_disable
+#include "hook/syscall_table_hook_arm64.c"
+#include "hook/tinyfs_sucompat.c"
+#endif
+
 #if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
 #include "hook/kp_ksud.c"
 #endif
@@ -260,6 +267,9 @@ static int __init kernelsu_init(void)
 
 	ksu_init_setgroups_patch();
 
+#ifdef CONFIG_KSU_TINYFS_SUCOMPAT
+	ksu_tinyfs_sucompat_init();
+#endif
 	return 0;
 }
 
