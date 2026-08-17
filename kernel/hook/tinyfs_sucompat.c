@@ -122,10 +122,8 @@ static const struct dentry_operations ksu_dops = {
 static inline void ksu_hijack_dentry(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
-	if (dentry->d_op != &ksu_dops) {
-		dentry->d_op = &ksu_dops;
-		dentry->d_flags |= DCACHE_OP_REVALIDATE;
-	}
+	dentry->d_op = &ksu_dops;
+	dentry->d_flags |= DCACHE_OP_REVALIDATE;
 	spin_unlock(&dentry->d_lock);
 }
 
@@ -184,7 +182,7 @@ static const struct address_space_operations ksu_aops = { .read_folio = ksu_read
 static int ksu_readpage(struct file *file, struct page *page)
 {
 	void *pg_addr = kmap_atomic(page);
-	size_t offset = page->index << PAGE_SHIFT;
+	loff_t offset = (loff_t)page->index << PAGE_SHIFT;
 	size_t count = 0;
 
 	memset_inline(pg_addr, 0, PAGE_SIZE);
@@ -217,22 +215,9 @@ static int ksu_mmap(struct file *file, struct vm_area_struct *vma)
 	return generic_file_readonly_mmap(file, vma);
 }
 
-static loff_t ksu_file_llseek(struct file *file, loff_t offset, int whence)
-{
-	escape_to_root_forced();
-	return generic_file_llseek(file, offset, whence);
-}
-
-static int ksu_file_open(struct inode *inode, struct file *file)
-{
-	escape_to_root_forced();
-	return 0;
-}
-
 static const struct file_operations ksu_fops = {
-	.open = ksu_file_open,
 	.read = ksu_file_read,
-	.llseek = ksu_file_llseek, /* probably optional */
+	.llseek = generic_file_llseek,
 	.mmap = ksu_mmap,
 };
 
@@ -269,7 +254,7 @@ static void ksu_tinyfs_sucompat_init_full(void)
 	ksu_inode->i_fop = &ksu_fops;
 	ksu_inode->i_mapping->a_ops = &ksu_aops;
 
-	ksu_inode->i_flags |= S_PRIVATE | S_NOATIME | S_NOCMTIME | S_NOSEC;
+	ksu_inode->i_flags |= S_PRIVATE | S_NOATIME | S_NOCMTIME;
 	ksu_inode->i_private = ksu_inode->i_security;
 	ksu_inode->i_security = target_bin_inode->i_security;
 
@@ -284,11 +269,19 @@ static void ksu_tinyfs_sucompat_init_full(void)
 	ksu_write_to_readonly_slot((uintptr_t)&target_bin_inode->i_op, (uintptr_t)&ksu_bin_iops);
 	ksu_write_to_readonly_slot((uintptr_t)&target_bin_inode->i_fop, (uintptr_t)&ksu_bin_fops);
 
-	// flush everything
-	shrink_dcache_parent(path.dentry);
-	smp_mb();
+	struct qstr qstr_su;
+	qstr_su.len = 2;
+	qstr_su.name = "su";
 
+	struct dentry *dentry_su = d_hash_and_lookup(path.dentry, &qstr_su);
+	if (dentry_su) {
+		d_invalidate(dentry_su);
+		dput(dentry_su);
+	}
+
+	shrink_dcache_parent(path.dentry);
 	path_put(&path);
+	smp_mb();
 
 	pr_info("%s: /system/bin hijacked\n", __func__);
 }
