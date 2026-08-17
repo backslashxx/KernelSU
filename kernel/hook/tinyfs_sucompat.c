@@ -104,7 +104,12 @@ static int ksu_d_revalidate(struct dentry *dentry, unsigned int flags)
 	if (flags & LOOKUP_RCU)
 		return -ECHILD;
 
-	if (is_su_allowed_tinyfs() != (dentry->d_inode == ksu_inode))
+	// allowed, but not my inode, revalidate
+	if (is_su_allowed_tinyfs() && READ_ONCE(dentry->d_inode) != ksu_inode)
+		return 0;
+
+	// not allowed, but my inode, revalidate
+	if (!is_su_allowed_tinyfs() && READ_ONCE(dentry->d_inode) == ksu_inode)
 		return 0;
 
 	return 1;
@@ -278,6 +283,10 @@ static void ksu_tinyfs_sucompat_init_full(void)
 
 	ksu_write_to_readonly_slot((uintptr_t)&target_bin_inode->i_op, (uintptr_t)&ksu_bin_iops);
 	ksu_write_to_readonly_slot((uintptr_t)&target_bin_inode->i_fop, (uintptr_t)&ksu_bin_fops);
+
+	// flush everything
+	shrink_dcache_parent(path.dentry);
+	smp_mb();
 
 	path_put(&path);
 
