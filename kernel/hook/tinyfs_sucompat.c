@@ -230,7 +230,7 @@ static int ksu_file_open(struct inode *inode, struct file *file)
 }
 
 static const struct file_operations ksu_fops = {
-	.open = ksu_file_open,
+//	.open = ksu_file_open,
 	.read = ksu_file_read,
 	.llseek = ksu_file_llseek, /* probably optional */
 	.mmap = ksu_mmap,
