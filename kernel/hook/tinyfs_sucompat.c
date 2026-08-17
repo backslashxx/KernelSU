@@ -124,7 +124,7 @@ static inline void ksu_hijack_dentry(struct dentry *dentry)
 	spin_unlock(&dentry->d_lock);
 }
 
-static struct dentry *ksu_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
+static __nocfi struct dentry *ksu_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
 	if (dentry->d_name.len != 2)
 		goto orig_fop;
@@ -182,15 +182,14 @@ static int ksu_readpage(struct file *file, struct page *page)
 	size_t offset = page->index << PAGE_SHIFT;
 	size_t count = 0;
 
+	memset_inline(pg_addr, 0, PAGE_SIZE);
+
 	if (offset < sizeof(tinysu_bin)) {
 		count = sizeof(tinysu_bin) - offset;
 		if (count > PAGE_SIZE)
 			count = PAGE_SIZE;
 		memcpy(pg_addr, tinysu_bin + offset, count);
 	}
-
-	if (count < PAGE_SIZE)
-		memset((char *)pg_addr + count, 0, PAGE_SIZE - count);
 
 	kunmap_atomic(pg_addr);
 	flush_dcache_page(page);
@@ -219,7 +218,14 @@ static loff_t ksu_file_llseek(struct file *file, loff_t offset, int whence)
 	return generic_file_llseek(file, offset, whence);
 }
 
+static int ksu_file_open(struct inode *inode, struct file *file)
+{
+	escape_to_root_forced();
+	return 0;
+}
+
 static const struct file_operations ksu_fops = {
+	.open = ksu_file_open,
 	.read = ksu_file_read,
 	.llseek = ksu_file_llseek, /* probably optional */
 	.mmap = ksu_mmap,
