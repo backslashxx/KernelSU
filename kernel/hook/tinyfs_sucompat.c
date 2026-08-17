@@ -147,7 +147,8 @@ orig_fop:
 
 allowed:
 	igrab(ksu_inode);
-	return d_splice_alias(ksu_inode, dentry);
+	d_add(dentry, ksu_inode);
+	return NULL;
 }
 
 // untested read folio
@@ -209,16 +210,10 @@ static ssize_t ksu_file_read(struct file *f, char __user *buf, size_t len, loff_
 	return simple_read_from_buffer(buf, len, ppos, tinysu_bin, sizeof(tinysu_bin));
 }
 
-static int ksu_mmap(struct file *file, struct vm_area_struct *vma)
-{
-	escape_to_root_forced();
-	return generic_file_readonly_mmap(file, vma);
-}
-
 static const struct file_operations ksu_fops = {
 	.read = ksu_file_read,
 	.llseek = generic_file_llseek,
-	.mmap = ksu_mmap,
+	.mmap = generic_file_readonly_mmap,
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
