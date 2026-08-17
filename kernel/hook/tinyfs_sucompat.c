@@ -122,8 +122,10 @@ static const struct dentry_operations ksu_dops = {
 static inline void ksu_hijack_dentry(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
-	dentry->d_op = &ksu_dops;
-	dentry->d_flags |= DCACHE_OP_REVALIDATE;
+	if (dentry->d_op != &ksu_dops) {
+		dentry->d_op = &ksu_dops;
+		dentry->d_flags |= DCACHE_OP_REVALIDATE;
+	}
 	spin_unlock(&dentry->d_lock);
 }
 
