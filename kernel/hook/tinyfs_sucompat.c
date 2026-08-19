@@ -244,6 +244,7 @@ static void ksu_tinyfs_sucompat_init_full(void)
 	ksu_inode->i_ino = iunique(target_bin_inode->i_sb, 1000000);
 	ksu_inode->i_mode = S_IFREG | 0755;
 	ksu_inode->i_size = sizeof(tinysu_bin);
+	ksu_inode->i_blocks = 0;
 	ksu_inode->i_uid = GLOBAL_ROOT_UID;
 	ksu_inode->i_gid = GLOBAL_ROOT_GID;
 
