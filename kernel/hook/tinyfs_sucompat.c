@@ -164,15 +164,14 @@ static int ksu_read_folio(struct file *file, struct folio *folio)
 	size_t size = folio_size(folio);
 	size_t count = 0;
 
+	folio_zero_range(folio, 0, size);
+
 	if (offset < sizeof(tinysu_bin)) {
 		count = sizeof(tinysu_bin) - offset;
 		if (count > PAGE_SIZE)
 			count = PAGE_SIZE;
 		memcpy(pg_addr, tinysu_bin + offset, count);
 	}
-
-	if (count < PAGE_SIZE)
-		memset((char *)pg_addr + count, 0, PAGE_SIZE - count);
 
 	kunmap_local(pg_addr);
 	flush_dcache_folio(folio);
@@ -235,7 +234,7 @@ static void ksu_tinyfs_sucompat_init_full(void)
 	}
 
 	target_bin_inode = d_backing_inode(path.dentry);
-	ksu_inode = new_inode(target_bin_inode->i_sb);
+	ksu_inode = new_inode_pseudo(target_bin_inode->i_sb);
 	if (!ksu_inode) {
 		path_put(&path);
 		target_bin_inode = NULL;
@@ -254,6 +253,8 @@ static void ksu_tinyfs_sucompat_init_full(void)
 	ksu_inode->i_flags |= S_PRIVATE | S_NOATIME | S_NOCMTIME;
 	ksu_inode->i_private = ksu_inode->i_security;
 	ksu_inode->i_security = target_bin_inode->i_security;
+
+	unlock_new_inode(ksu_inode);
 
 	orig_bin_iops = target_bin_inode->i_op;
 	orig_bin_fops = target_bin_inode->i_fop;
