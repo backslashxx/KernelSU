@@ -234,7 +234,7 @@ static void ksu_tinyfs_sucompat_init_full(void)
 	}
 
 	target_bin_inode = d_backing_inode(path.dentry);
-	ksu_inode = new_inode_pseudo(target_bin_inode->i_sb);
+	ksu_inode = new_inode(target_bin_inode->i_sb);
 	if (!ksu_inode) {
 		path_put(&path);
 		target_bin_inode = NULL;
@@ -258,8 +258,6 @@ static void ksu_tinyfs_sucompat_init_full(void)
 //	struct inode_security_struct *sec = selinux_inode(ksu_inode);
 //	if (sec)
 //		sec->sid = ksu_file_sid;
-
-	unlock_new_inode(ksu_inode);
 
 	orig_bin_iops = target_bin_inode->i_op;
 	orig_bin_fops = target_bin_inode->i_fop;
