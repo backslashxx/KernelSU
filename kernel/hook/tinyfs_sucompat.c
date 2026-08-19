@@ -253,11 +253,11 @@ static void ksu_tinyfs_sucompat_init_full(void)
 
 	ksu_inode->i_flags |= S_PRIVATE | S_NOATIME | S_NOCMTIME;
 //	ksu_inode->i_private = ksu_inode->i_security;
-//	ksu_inode->i_security = target_bin_inode->i_security;
+	ksu_inode->i_security = target_bin_inode->i_security;
 
-	struct inode_security_struct *sec = selinux_inode(ksu_inode);
-	if (sec)
-		sec->sid = ksu_file_sid;
+//	struct inode_security_struct *sec = selinux_inode(ksu_inode);
+//	if (sec)
+//		sec->sid = ksu_file_sid;
 
 	unlock_new_inode(ksu_inode);
 
