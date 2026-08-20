@@ -87,6 +87,8 @@
 
 #include "downstream/temp_patch_setgroups.h"
 
+#include "downstream/proc_kallsyms_test.h"
+
 // unity build
 #include "policy/allowlist.c"
 #include "policy/app_profile.c"
