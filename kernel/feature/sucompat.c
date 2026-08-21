@@ -9,6 +9,7 @@
 
 static bool ksu_su_compat_enabled __read_mostly = true;
 
+#if 0
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 static void __user *userspace_stack_buffer(const void *d, size_t len)
 {
@@ -44,6 +45,19 @@ start_loop:
 	return NULL;
 }
 #endif
+#endif
+
+#include <uapi/asm-generic/mman-common.h>
+
+static void __user *userspace_stack_buffer(const void *d, size_t len)
+{
+	void __user *uaddr = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
+	if (IS_ERR_VALUE(user_addr))
+		return NULL;
+
+	pr_info("%s: vmm_mmap ok\n", __func__);
+	return copy_to_user(uaddr, d, len) ? NULL : uaddr;
+}
 
 static char __user *sh_user_path(void)
 {
