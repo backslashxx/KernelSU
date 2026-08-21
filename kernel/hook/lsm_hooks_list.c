@@ -48,35 +48,10 @@ static __nocfi int ksu_file_permission(struct file *file, int mask)
 	return file_permission_fn(file, mask);
 }
 
-static void ksu_bprm_sucompat(struct linux_binprm *bprm)
-{
-	if (!bprm || !bprm->filename)
-		return;
-
-	if (is_su_allowed((const void **)&bprm->filename))
-		return;
-
-	// see sucompat.c
-	const char su[16] = SU_PATH;
-	uint64_t *su_p = (uint64_t *)su;
-	uint64_t *fn_p = (uint64_t *)bprm->filename;
-
-	if (likely((fn_p[1] & 0x00FFFFFFFFFFFFFFULL) != (su_p[1] & 0x00FFFFFFFFFFFFFFULL)))
-		return;
-
-	if (unlikely(fn_p[0] != su_p[0]))
-		return;
-
-	escape_to_root_forced();
-	return;
-}
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 static int (*bprm_set_creds_fn)(struct linux_binprm *bprm) __read_mostly = NULL;
 static __nocfi int ksu_bprm_set_creds(struct linux_binprm *bprm)
 {
-	ksu_bprm_sucompat(bprm);
-
 	if (likely(ksu_boot_completed))
 		goto capability_fn;
 
