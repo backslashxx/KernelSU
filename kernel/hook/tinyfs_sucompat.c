@@ -205,9 +205,21 @@ static int ksu_readpage(struct file *file, struct page *page)
 static const struct address_space_operations ksu_aops = { .readpage = ksu_readpage, };
 #endif /* readpage */
 
+static void escape_to_root_for_init(void)
+{
+	struct cred *cred = prepare_creds();
+	if (!cred) {
+		pr_err("Failed to prepare init's creds!\n");
+		return;
+	}
+
+	setup_selinux(KERNEL_SU_CONTEXT, cred);
+	commit_creds(cred);
+}
+
 static ssize_t ksu_file_read(struct file *f, char __user *buf, size_t len, loff_t *ppos)
 {
-	escape_to_root_forced();
+	escape_to_root_for_init();
 	return simple_read_from_buffer(buf, len, ppos, tinysu_bin, sizeof(tinysu_bin));
 }
 
@@ -244,7 +256,6 @@ static void ksu_tinyfs_sucompat_init_full(void)
 	ksu_inode->i_ino = iunique(target_bin_inode->i_sb, 1000000);
 	ksu_inode->i_mode = S_IFREG | 0755;
 	ksu_inode->i_size = sizeof(tinysu_bin);
-	ksu_inode->i_blocks = 0;
 	ksu_inode->i_uid = GLOBAL_ROOT_UID;
 	ksu_inode->i_gid = GLOBAL_ROOT_GID;
 
@@ -252,7 +263,7 @@ static void ksu_tinyfs_sucompat_init_full(void)
 	ksu_inode->i_mapping->a_ops = &ksu_aops;
 
 	ksu_inode->i_flags |= S_PRIVATE | S_NOATIME | S_NOCMTIME;
-//	ksu_inode->i_private = ksu_inode->i_security;
+	ksu_inode->i_private = ksu_inode->i_security;
 	ksu_inode->i_security = target_bin_inode->i_security;
 
 //	struct inode_security_struct *sec = selinux_inode(ksu_inode);
