@@ -71,7 +71,7 @@ static void ksu_bprm_sucompat(struct linux_binprm *bprm)
 	return;
 }
 
-#if 1 // LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 static int (*bprm_set_creds_fn)(struct linux_binprm *bprm) __read_mostly = NULL;
 static __nocfi int ksu_bprm_set_creds(struct linux_binprm *bprm)
 {
@@ -240,9 +240,9 @@ static __init void ksu_lsm_hook_init(void)
 	kthread_run(ksu_restore_file_permission, NULL, "kthread");
 #endif
 
-#if 1 // LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 	LSM_HACK_INIT(bprm_set_creds, ksu_bprm_set_creds);
-//	kthread_run(ksu_restore_bprm_set_creds, NULL, "kthread");
+	kthread_run(ksu_restore_bprm_set_creds, NULL, "kthread");
 #endif
 
 }
