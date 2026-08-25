@@ -266,6 +266,9 @@ static int __init kernelsu_init(void)
 #if !defined(MODULE)
 device_initcall(kernelsu_init);
 #else
+
+char ksu_block_modules[256];
+module_param_string(block_modules, ksu_block_modules, sizeof(ksu_block_modules), 0);
 #include "downstream/module_blacklist.h"
 
 #ifndef CONFIG_KSU_SHELL_HAS_SU_ALWAYS
