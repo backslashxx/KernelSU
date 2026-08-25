@@ -19,7 +19,22 @@
 
 static int ksu_prepare_new_blacklist(uintptr_t blacklist_pptr)
 {
-	const char *modules = MODULES_TO_BLOCK;
+	static_assert(sizeof(MODULES_TO_BLOCK) != 0);
+	char *hardcoded = MODULES_TO_BLOCK;
+
+	// + 2 for , and \0
+	char *memory __zoffstack(strlen(hardcoded) + strlen(ksu_block_modules) + 2);
+	if (!memory)
+		return -ENOMEM;
+
+	memcpy(memory, hardcoded, strlen(hardcoded));
+
+	if (!!ksu_block_modules[0]) {
+		memory[strlen(hardcoded)] = ',';
+		memcpy(memory + strlen(hardcoded) + 1, ksu_block_modules, strlen(ksu_block_modules));
+	}
+
+	const char *modules = memory;
 	size_t old_len;
 	if (!*(char **)blacklist_pptr)
 		old_len = 0;
@@ -62,7 +77,6 @@ static uintptr_t ksu_read_module_blacklist()
 	return module_blacklist_pptr;
 }
 
-#if 0
 #define __AARCH64_init_module 105
 static syscall_fn_t aarch64_init_module __read_mostly = NULL;
 asmlinkage long hook_aarch64_init_module_ret(const struct pt_regs *regs)
@@ -114,7 +128,6 @@ static inline void ksu_hook_syscall_init_module(void)
 
 	kthread_run(ksu_unhook_syscall_init_module, NULL, "kthread");
 }
-#endif
 
 static noinline void ksu_extend_module_blacklist()
 {
@@ -128,9 +141,7 @@ static noinline void ksu_extend_module_blacklist()
 	else
 		pr_info("module_blackist: operation failed! ret: %d \n", ret);
 
-#if 0
 	ksu_hook_syscall_init_module();
-#endif
 	return;
 }
 
