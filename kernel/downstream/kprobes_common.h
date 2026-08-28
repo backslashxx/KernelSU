@@ -14,7 +14,7 @@ static struct kprobe *init_kprobe(const char *name, kprobe_pre_handler_t handler
 	pr_info("%s: register %s kprobe: %d\n", __func__, name, ret);
 	if (ret) {
 		kfree(kp);
-		return NULL;
+		return nullptr;
 	}
 
 	return kp;
@@ -29,7 +29,7 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
 	unregister_kprobe(kp);
 	synchronize_rcu();
 	kfree(kp);
-	*kp_ptr = NULL;
+	*kp_ptr = nullptr;
 }
 
 #endif // __KSU_H_KPROBES_COMMON
