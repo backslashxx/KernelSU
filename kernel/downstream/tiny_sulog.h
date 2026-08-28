@@ -70,7 +70,7 @@ static inline uint32_t boottime_s_get()
  *	__ATOMIC_RELAXED non-barrier'd atomic op
  *	__ATOMIC_RELEASE writer publish, barrier'd
  *	__ATOMIC_ACQUIRE reader consume, barrier'd
- *	__ATOMIC_SEQ_CST full barrier, atomic op
+ *	__ATOMIC_SEQ_CST sequential consitency, full barrier, atomic op
  *
  */
 static noinline void write_sulog(uint8_t sym)
