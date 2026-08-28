@@ -41,7 +41,7 @@ start_loop:
 	if (step <= 2048)
 		goto start_loop;
 
-	return NULL;
+	return nullptr;
 }
 #endif
 
