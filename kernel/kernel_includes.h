@@ -239,7 +239,7 @@ static inline void mutex_unlock_byref(struct mutex **m) { mutex_unlock(*m); }
 // scoped lock, spinlock
 static inline void spin_unlock_byref(spinlock_t **lock) { spin_unlock(*lock); }
 #define deferred_spin_unlock(lock) spinlock_t *__ksu_dummy_var __cleanup(spin_unlock_byref) = (lock)
-#define guarded_spin_lock(lock) do { spin_lock(lock); deferred_spin_unlock(lock); } while (0)
+#define guarded_spin_lock(lock) ({ spin_lock(lock); deferred_spin_unlock(lock); 1; })
 
 // basic stack offload.
 static inline void kfree_byref(void *buf) { kfree(*(void **)buf); }
