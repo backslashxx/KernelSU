@@ -204,6 +204,15 @@
 #endif
 
 /**
+ * nullptr / nullptr_t is C23
+ * we emulate on C11 this way
+ */
+#ifndef nullptr
+#define nullptr ((void *)0)
+typedef typeof(nullptr) nullptr_t;
+#endif
+
+/**
  * we do NOT have memset_explicit on the linux kernel
  *
  * from: OPENSSL_cleanse, volatile function pointer prevents memset optimization
