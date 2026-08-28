@@ -262,7 +262,7 @@ found:
 
 not_found:
 	pr_info("%s: selinux_ops not found in range! iter_count: %lu \n", __func__, iter_count);
-	return NULL;
+	return nullptr;
 }
 
 static inline void set_selinux_ops()
