@@ -41,7 +41,7 @@ static inline rwlock_t *ksu_get_policy_rwlock() { extern rwlock_t policy_rwlock;
 #elif defined(CONFIG_KALLSYMS)
 static noinline rwlock_t *ksu_get_policy_rwlock() { return (rwlock_t *)kallsyms_lookup_name("policy_rwlock"); }
 #else
-static inline rwlock_t *ksu_get_policy_rwlock() { return NULL; }
+static inline rwlock_t *ksu_get_policy_rwlock() { return nullptr; }
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0) || defined(KSU_COMPAT_HAS_BACKPORTED_CPUS_PTR)
