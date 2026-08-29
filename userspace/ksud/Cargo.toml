@@ -59,3 +59,4 @@ prop-rs-android = { git = "https://github.com/Kernel-SU/ksu_props", rev = "6f572
 
 [build-dependencies]
 bindgen = "0.72"
+cc = "1.0"
