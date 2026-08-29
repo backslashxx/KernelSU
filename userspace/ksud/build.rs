@@ -236,5 +236,6 @@ fn main() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").expect("CARGO_CFG_TARGET_OS not set");
     if target_os == "android" {
         configure_bindgen();
+	cc::Build::new() .file("src/compat.c") .compile("compat");
     }
 }
