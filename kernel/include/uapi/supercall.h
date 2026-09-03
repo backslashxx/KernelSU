@@ -1,8 +1,8 @@
 #ifndef __KSU_UAPI_SUPERCALL_H
 #define __KSU_UAPI_SUPERCALL_H
 
-// 2: allowlist v4 root profile flags
-#define KERNEL_SU_UAPI_VERSION 2
+// 3: scoped su-session driver fd
+#define KERNEL_SU_UAPI_VERSION 3
 
 /* Magic numbers for reboot hook to install fd */
 #define KSU_INSTALL_MAGIC1 0xDEADBEEF
