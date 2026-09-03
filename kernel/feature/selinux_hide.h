@@ -19,13 +19,14 @@ void ksu_selinux_hide_exit();
 
 static int sepol_expected_argc(u32 cmd);
 
-// TODO: move to atomic refcounting
+// TODO: move to hazard pointers
 
 // flex array
 struct ksu_hide_buf {
 	size_t len;
+	int refs;
 	char data[];
-};
+}  __attribute__((aligned(sizeof(size_t))));
 
 // types
 // :type1:\0:type2:\0:type3:\0
@@ -36,6 +37,33 @@ static struct ksu_hide_buf *ksu_hide_type_list __read_mostly = NULL;
 static struct ksu_hide_buf *ksu_hide_rule_list __read_mostly = NULL;
 
 static DEFINE_MUTEX(selinux_hide_list_mutex);
+
+static struct ksu_hide_buf *ksu_get_buf(struct ksu_hide_buf **g_buf)
+{
+loop_start:
+	;
+	struct ksu_hide_buf *buf = __atomic_load_n(g_buf, __ATOMIC_ACQUIRE);
+	if (!buf)
+		return NULL;
+	
+	// mark that we have access, refcount + 1
+	__atomic_fetch_add(&buf->refs, 1, __ATOMIC_RELAXED);
+	
+	// g_buf is buf, give access
+	if (__atomic_load_n(g_buf, __ATOMIC_RELAXED) == buf)
+		return buf;
+	
+	// g_buf isnt buf, put refcount - 1
+	__atomic_fetch_sub(&buf->refs, 1, __ATOMIC_RELAXED);
+	goto loop_start;
+}
+
+static void ksu_put_buf(struct ksu_hide_buf *buf)
+{
+	if (buf)
+		__atomic_fetch_sub(&buf->refs, 1, __ATOMIC_RELEASE);
+}
+
 
 static noinline void ksu_add_shit_to_list(u32 cmd, const char *args[])
 {
@@ -85,9 +113,13 @@ static noinline void ksu_add_shit_to_list(u32 cmd, const char *args[])
 		char *w_ptr = new_ptr->data + old_len;
 		sprintf(w_ptr, ":%s:", name);
 
-		struct ksu_hide_buf *old_ptr = ksu_hide_type_list;
-		ksu_hide_type_list = new_ptr;
-		kfree(old_ptr);
+		struct ksu_hide_buf *old_ptr = __atomic_exchange_n(&ksu_hide_type_list, new_ptr, __ATOMIC_ACQ_REL);
+		if (old_ptr) {
+			// spin wait to see if something is using old_ptr
+			while (__atomic_load_n(&old_ptr->refs, __ATOMIC_ACQUIRE) > 0)
+				cpu_relax();
+			kfree(old_ptr);
+		}
 
 		pr_info("selinux_hide: tracking type: %s\n", w_ptr);
 
@@ -146,9 +178,13 @@ static noinline void ksu_add_shit_to_list(u32 cmd, const char *args[])
 		char *w_ptr_tgt = w_ptr_src + strlen(w_ptr_src) + 1;
 		sprintf(w_ptr_tgt, ":%s:", tgt);
 
-		struct ksu_hide_buf *old_ptr = ksu_hide_rule_list;
-		ksu_hide_rule_list = new_ptr;
-		kfree(old_ptr);
+		struct ksu_hide_buf *old_ptr = __atomic_exchange_n(&ksu_hide_rule_list, new_ptr, __ATOMIC_ACQ_REL);
+		if (old_ptr) {
+			// spin wait to see if something is using old_ptr
+			while (__atomic_load_n(&old_ptr->refs, __ATOMIC_ACQUIRE) > 0)
+				cpu_relax();
+			kfree(old_ptr);
+		}
 
 		pr_info("selinux_hide: tracking rule: %s %s\n", w_ptr_src, w_ptr_tgt);
 
@@ -162,46 +198,54 @@ static bool ksu_should_destroy_context(char *str)
 	if (!str)
 		return false;
 
-	guarded_mutex_lock(&selinux_hide_list_mutex);
+	bool ret = false;
 	size_t offset;
 
-	if (!ksu_hide_type_list)
-		goto rule_check;
-	
-	offset = 0;
-	while (ksu_hide_type_list->len > offset) {
-		const char *current_entry = ksu_hide_type_list->data + offset;
+	struct ksu_hide_buf *type_buf = ksu_get_buf(&ksu_hide_type_list);
+	if (type_buf) {
+		offset = 0;
+		while (type_buf->len > offset) {
+			const char *current_entry = type_buf->data + offset;
 
-		if (strstr(str, current_entry))
-			return true;
+			if (strstr(str, current_entry)) {
+				ret = true;
+				break;
+			}
 
-		offset = offset + strlen(current_entry) + 1;
+			offset = offset + strlen(current_entry) + 1;
+		}
+		ksu_put_buf(type_buf);
 	}
 
-rule_check:
-	; // double strstr
+	if (ret)
+		return true;
+
+	// double strstr
 	char *str2 = strchr(str, ' ');
 	if (!str2)
 		return false;
 
-	if (!ksu_hide_rule_list)
-		return false;
+	struct ksu_hide_buf *rule_buf = ksu_get_buf(&ksu_hide_rule_list);
+	if (rule_buf) {
+		offset = 0;
+		while (rule_buf->len > offset) {
+			const char *src_rule = rule_buf->data + offset;
+			size_t src_sz = strlen(src_rule) + 1;
 
-	offset = 0;
-	while (ksu_hide_rule_list->len > offset) {
-		const char *src_rule = ksu_hide_rule_list->data + offset;
-		size_t src_sz = strlen(src_rule) + 1;
+			const char *tgt_rule = src_rule + src_sz;
+			size_t tgt_sz = strlen(tgt_rule) + 1;
 
-		const char *tgt_rule = src_rule + src_sz;
-		size_t tgt_sz = strlen(tgt_rule) + 1;
+			if (strstr(str, src_rule) && strstr(str2, tgt_rule)) {
+				ret = true;
+				break;
+			}
 
-		if (strstr(str, src_rule) && strstr(str2, tgt_rule))
-			return true;
-
-		offset = offset + src_sz + tgt_sz;
+			offset = offset + src_sz + tgt_sz;
+		}
+		ksu_put_buf(rule_buf);
 	}
 
-	return false;
+	return ret;
 }
 
 #endif
