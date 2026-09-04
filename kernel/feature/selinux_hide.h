@@ -38,6 +38,7 @@ static DEFINE_MUTEX(selinux_hide_list_mutex);
 #define KSU_MAX_HP_SLOTS 16
 static struct ksu_hide_buf *ksu_hazardptr_slots[KSU_MAX_HP_SLOTS];
 
+// NOTE: can ret null on uninitialized state
 static inline struct ksu_hide_buf *ksu_get_buf(struct ksu_hide_buf **g_buf)
 {
 	// reader has to pin its own slot
@@ -207,48 +208,55 @@ static bool ksu_should_destroy_context(char *str)
 	size_t offset;
 
 	struct ksu_hide_buf *type_buf = ksu_get_buf(&ksu_hide_type_list);
-	if (type_buf) {
-		offset = 0;
-		while (type_buf->len > offset) {
-			const char *current_entry = type_buf->data + offset;
-
-			if (strstr(str, current_entry)) {
-				ret = true;
-				break;
-			}
-
-			offset = offset + strlen(current_entry) + 1;
-		}
+	if (!type_buf) {
 		ksu_put_buf(type_buf);
+		goto check_rule;
 	}
+
+	offset = 0;
+	while (type_buf->len > offset) {
+		const char *current_entry = type_buf->data + offset;
+
+		if (strstr(str, current_entry)) {
+			ret = true;
+			break;
+		}
+
+		offset = offset + strlen(current_entry) + 1;
+	}
+	ksu_put_buf(type_buf);
 
 	if (ret)
 		return true;
 
-	// double strstr
+check_rule:
+	; // double strstr
 	char *str2 = strchr(str, ' ');
 	if (!str2)
 		return false;
 
 	struct ksu_hide_buf *rule_buf = ksu_get_buf(&ksu_hide_rule_list);
-	if (rule_buf) {
-		offset = 0;
-		while (rule_buf->len > offset) {
-			const char *src_rule = rule_buf->data + offset;
-			size_t src_sz = strlen(src_rule) + 1;
-
-			const char *tgt_rule = src_rule + src_sz;
-			size_t tgt_sz = strlen(tgt_rule) + 1;
-
-			if (strstr(str, src_rule) && strstr(str2, tgt_rule)) {
-				ret = true;
-				break;
-			}
-
-			offset = offset + src_sz + tgt_sz;
-		}
-		ksu_put_buf(rule_buf);
+	if (!rule_buf) {
+		ksu_put_buf(type_buf);
+		return false;	
 	}
+	
+	offset = 0;
+	while (rule_buf->len > offset) {
+		const char *src_rule = rule_buf->data + offset;
+		size_t src_sz = strlen(src_rule) + 1;
+
+		const char *tgt_rule = src_rule + src_sz;
+		size_t tgt_sz = strlen(tgt_rule) + 1;
+
+		if (strstr(str, src_rule) && strstr(str2, tgt_rule)) {
+			ret = true;
+			break;
+		}
+
+		offset = offset + src_sz + tgt_sz;
+	}
+	ksu_put_buf(rule_buf);
 
 	return ret;
 }
