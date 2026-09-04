@@ -19,14 +19,11 @@ void ksu_selinux_hide_exit();
 
 static int sepol_expected_argc(u32 cmd);
 
-// TODO: move to hazard pointers
-
 // flex array
 struct ksu_hide_buf {
 	size_t len;
-	int refs;
 	char data[];
-}  __attribute__((aligned(sizeof(size_t))));
+} __attribute__((aligned(sizeof(size_t))));
 
 // types
 // :type1:\0:type2:\0:type3:\0
@@ -38,32 +35,50 @@ static struct ksu_hide_buf *ksu_hide_rule_list __read_mostly = NULL;
 
 static DEFINE_MUTEX(selinux_hide_list_mutex);
 
-static struct ksu_hide_buf *ksu_get_buf(struct ksu_hide_buf **g_buf)
+#define KSU_MAX_HP_SLOTS 16
+static struct ksu_hide_buf *ksu_hazardptr_slots[KSU_MAX_HP_SLOTS];
+
+static inline struct ksu_hide_buf *ksu_get_buf(struct ksu_hide_buf **g_buf)
 {
-loop_start:
-	;
-	struct ksu_hide_buf *buf = __atomic_load_n(g_buf, __ATOMIC_ACQUIRE);
-	if (!buf)
-		return NULL;
-	
-	// mark that we have access, refcount + 1
-	__atomic_fetch_add(&buf->refs, 1, __ATOMIC_RELAXED);
-	
-	// g_buf is buf, give access
-	if (__atomic_load_n(g_buf, __ATOMIC_RELAXED) == buf)
-		return buf;
-	
-	// g_buf isnt buf, put refcount - 1
-	__atomic_fetch_sub(&buf->refs, 1, __ATOMIC_RELAXED);
-	goto loop_start;
+	// reader has to pin its own slot
+	preempt_disable();
+
+	int slot = raw_smp_processor_id() % KSU_MAX_HP_SLOTS;
+	struct ksu_hide_buf *buf;
+
+check_buf:
+	buf = __atomic_load_n(g_buf, __ATOMIC_ACQUIRE);
+	__atomic_store_n(&ksu_hazardptr_slots[slot], buf, __ATOMIC_RELEASE);
+
+	if (buf != __atomic_load_n(g_buf, __ATOMIC_ACQUIRE))
+		goto check_buf;
+
+	return buf;
 }
 
-static void ksu_put_buf(struct ksu_hide_buf *buf)
+static inline void ksu_put_buf(struct ksu_hide_buf *buf)
 {
-	if (buf)
-		__atomic_fetch_sub(&buf->refs, 1, __ATOMIC_RELEASE);
+	int slot = raw_smp_processor_id() % KSU_MAX_HP_SLOTS;
+	__atomic_store_n(&ksu_hazardptr_slots[slot], NULL, __ATOMIC_RELEASE);
+	
+	preempt_enable();
 }
 
+static void ksu_wait_and_free(struct ksu_hide_buf *old_ptr)
+{
+	if (!old_ptr)
+		return;
+	int i;
+
+	// acquire it on ALL slots!
+	// only free it once ALL slots say that their slot no longer contains old ptr
+	for (i = 0; i < KSU_MAX_HP_SLOTS; i++) {
+		while (__atomic_load_n(&ksu_hazardptr_slots[i], __ATOMIC_ACQUIRE) == old_ptr)
+			cpu_relax();
+	}
+
+	kfree(old_ptr);
+}
 
 static noinline void ksu_add_shit_to_list(u32 cmd, const char *args[])
 {
@@ -114,12 +129,7 @@ static noinline void ksu_add_shit_to_list(u32 cmd, const char *args[])
 		sprintf(w_ptr, ":%s:", name);
 
 		struct ksu_hide_buf *old_ptr = __atomic_exchange_n(&ksu_hide_type_list, new_ptr, __ATOMIC_ACQ_REL);
-		if (old_ptr) {
-			// spin wait to see if something is using old_ptr
-			while (__atomic_load_n(&old_ptr->refs, __ATOMIC_ACQUIRE) > 0)
-				cpu_relax();
-			kfree(old_ptr);
-		}
+		ksu_wait_and_free(old_ptr);
 
 		pr_info("selinux_hide: tracking type: %s\n", w_ptr);
 
@@ -179,12 +189,7 @@ static noinline void ksu_add_shit_to_list(u32 cmd, const char *args[])
 		sprintf(w_ptr_tgt, ":%s:", tgt);
 
 		struct ksu_hide_buf *old_ptr = __atomic_exchange_n(&ksu_hide_rule_list, new_ptr, __ATOMIC_ACQ_REL);
-		if (old_ptr) {
-			// spin wait to see if something is using old_ptr
-			while (__atomic_load_n(&old_ptr->refs, __ATOMIC_ACQUIRE) > 0)
-				cpu_relax();
-			kfree(old_ptr);
-		}
+		ksu_wait_and_free(old_ptr);
 
 		pr_info("selinux_hide: tracking rule: %s %s\n", w_ptr_src, w_ptr_tgt);
 
