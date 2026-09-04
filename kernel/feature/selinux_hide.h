@@ -36,7 +36,7 @@ static struct ksu_hide_buf *ksu_hide_rule_list __read_mostly = NULL;
 static DEFINE_MUTEX(selinux_hide_list_mutex);
 
 #define KSU_MAX_HP_SLOTS 32
-static struct ksu_hide_buf *ksu_hazardptr_slots[KSU_MAX_HP_SLOTS];
+static struct ksu_hide_buf *ksu_hazardptr_slots[KSU_MAX_HP_SLOTS] = { 0 };
 
 // NOTE: can ret null on uninitialized state
 static inline struct ksu_hide_buf *ksu_get_buf(struct ksu_hide_buf **g_buf)
