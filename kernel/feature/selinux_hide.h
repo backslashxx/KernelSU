@@ -11,6 +11,8 @@
  *
  */
 
+// selinux_hide's list, hazard pointers via C11 atomics
+
 #ifndef __KSU_H_SELINUX_HIDE
 #define __KSU_H_SELINUX_HIDE
 
@@ -65,7 +67,7 @@ static inline void ksu_put_buf(struct ksu_hide_buf **unused)
 	preempt_enable();
 }
 
-static void ksu_wait_and_free(struct ksu_hide_buf *old_ptr)
+static inline void ksu_wait_and_free(struct ksu_hide_buf *old_ptr)
 {
 	if (!old_ptr)
 		return;
@@ -73,6 +75,8 @@ static void ksu_wait_and_free(struct ksu_hide_buf *old_ptr)
 
 	// acquire it on ALL slots!
 	// only free it once ALL slots say that their slot no longer contains old ptr
+	// #pragma GCC unroll 0
+	// #pragma nounroll
 	for (i = 0; i < KSU_MAX_HP_SLOTS; i++) {
 		while (__atomic_load_n(&ksu_hazardptr_slots[i], __ATOMIC_ACQUIRE) == old_ptr)
 			cpu_relax();
@@ -204,28 +208,21 @@ static bool ksu_should_destroy_context(char *str)
 	if (!str)
 		return false;
 
-	bool ret = false;
-	size_t offset;
-
 { // scope++
 	struct ksu_hide_buf *type_buf __cleanup(ksu_put_buf) = ksu_get_buf(&ksu_hide_type_list);
 	if (unlikely(!type_buf))
 		goto check_rule;
 
-	offset = 0;
+	size_t offset = 0;
 	while (type_buf->len > offset) {
 		const char *current_entry = type_buf->data + offset;
 
-		if (strstr(str, current_entry)) {
-			ret = true;
-			break;
-		}
+		if (strstr(str, current_entry))
+			return true;
 
 		offset = offset + strlen(current_entry) + 1;
 	}
 } // scope--
-	if (ret)
-		return true;
 
 check_rule:
 	; // double strstr
@@ -238,7 +235,7 @@ check_rule:
 	if (unlikely(!rule_buf))
 		return false;
 	
-	offset = 0;
+	size_t offset = 0;
 	while (rule_buf->len > offset) {
 		const char *src_rule = rule_buf->data + offset;
 		size_t src_sz = strlen(src_rule) + 1;
@@ -246,15 +243,13 @@ check_rule:
 		const char *tgt_rule = src_rule + src_sz;
 		size_t tgt_sz = strlen(tgt_rule) + 1;
 
-		if (strstr(str, src_rule) && strstr(str2, tgt_rule)) {
-			ret = true;
-			break;
-		}
+		if (strstr(str, src_rule) && strstr(str2, tgt_rule))
+			return true;
 
 		offset = offset + src_sz + tgt_sz;
 	}
 } // scope--
-	return ret;
+	return false;
 }
 
 #endif
