@@ -57,7 +57,7 @@ check_buf:
 	return buf;
 }
 
-static inline void ksu_put_buf(struct ksu_hide_buf *buf)
+static inline void ksu_put_buf(struct ksu_hide_buf **unused)
 {
 	int slot = raw_smp_processor_id() % KSU_MAX_HP_SLOTS;
 	__atomic_store_n(&ksu_hazardptr_slots[slot], NULL, __ATOMIC_RELEASE);
@@ -207,11 +207,10 @@ static bool ksu_should_destroy_context(char *str)
 	bool ret = false;
 	size_t offset;
 
-	struct ksu_hide_buf *type_buf = ksu_get_buf(&ksu_hide_type_list);
-	if (unlikely(!type_buf)) {
-		ksu_put_buf(type_buf);
+{ // scope++
+	struct ksu_hide_buf *type_buf __cleanup(ksu_put_buf) = ksu_get_buf(&ksu_hide_type_list);
+	if (unlikely(!type_buf))
 		goto check_rule;
-	}
 
 	offset = 0;
 	while (type_buf->len > offset) {
@@ -224,8 +223,7 @@ static bool ksu_should_destroy_context(char *str)
 
 		offset = offset + strlen(current_entry) + 1;
 	}
-	ksu_put_buf(type_buf);
-
+} // scope--
 	if (ret)
 		return true;
 
@@ -235,11 +233,10 @@ check_rule:
 	if (!str2)
 		return false;
 
-	struct ksu_hide_buf *rule_buf = ksu_get_buf(&ksu_hide_rule_list);
-	if (unlikely(!rule_buf)) {
-		ksu_put_buf(type_buf);
-		return false;	
-	}
+{ // scope++
+	struct ksu_hide_buf *rule_buf __cleanup(ksu_put_buf) = ksu_get_buf(&ksu_hide_rule_list);
+	if (unlikely(!rule_buf))
+		return false;
 	
 	offset = 0;
 	while (rule_buf->len > offset) {
@@ -256,8 +253,7 @@ check_rule:
 
 		offset = offset + src_sz + tgt_sz;
 	}
-	ksu_put_buf(rule_buf);
-
+} // scope--
 	return ret;
 }
 
