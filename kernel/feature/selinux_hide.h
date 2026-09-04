@@ -208,7 +208,7 @@ static bool ksu_should_destroy_context(char *str)
 	size_t offset;
 
 	struct ksu_hide_buf *type_buf = ksu_get_buf(&ksu_hide_type_list);
-	if (!type_buf) {
+	if (unlikely(!type_buf)) {
 		ksu_put_buf(type_buf);
 		goto check_rule;
 	}
@@ -236,7 +236,7 @@ check_rule:
 		return false;
 
 	struct ksu_hide_buf *rule_buf = ksu_get_buf(&ksu_hide_rule_list);
-	if (!rule_buf) {
+	if (unlikely(!rule_buf)) {
 		ksu_put_buf(type_buf);
 		return false;	
 	}
