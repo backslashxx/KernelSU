@@ -1219,7 +1219,7 @@ bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path,
 	return add_genfscon(db, fs_name, path, ctx);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+#if 0 // LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 #include "ss/avtab.h"
 #include "ss/constraint.h"
 #include "ss/ebitmap.h"
