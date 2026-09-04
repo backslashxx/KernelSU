@@ -28,13 +28,13 @@ static __always_inline void ksu_hosts_file_redirect(const char __user *filename,
 		return;
 
 	const char hf[] = "/system/etc/hosts";
-	uint64_t *hf_p = (uint64_t *)hf;
 
+	uint64_t *hf_p = (uint64_t *)hf;
 	uint64_t __user *fn_p = (uint64_t __user *)untagged_addr((void *)filename);
-	uint16_t *last_p = (uint16_t *)((char *)hf + 16);
-	uint16_t buf16;
 	__builtin_prefetch(fn_p);
 
+	uint16_t *last_p = (uint16_t *)((char *)hf + 16);
+	uint16_t buf16;
 	if (likely(get_user(buf16, (uint16_t __user *)((char __user *)fn_p + 16))))
 		return;
 
