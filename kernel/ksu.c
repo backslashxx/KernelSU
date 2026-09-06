@@ -200,7 +200,7 @@
 
 static int __init kernelsu_init(void)
 {
-	pr_info("Initialized on: %s (%s) with ksuver: %s%s\n", UTS_RELEASE, UTS_MACHINE, __stringify(KSU_VERSION), EXTRA_FEATURES);
+	pr_info("Initialized on: %s (%s) stdc: %s with ksuver: %s%s\n", UTS_RELEASE, UTS_MACHINE, __stringify(__STDC_VERSION__), __stringify(KSU_VERSION), EXTRA_FEATURES);
 
 #ifdef CONFIG_KSU_DEBUG
 	pr_alert("*************************************************************");
