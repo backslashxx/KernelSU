@@ -13,6 +13,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <dlfcn.h>
+#include <signal.h>
+#include <errno.h>
+#include <sys/ucontext.h>
 
 /**
  * compat handling for: https://github.com/tiann/KernelSU/pull/3624
@@ -70,4 +73,29 @@ fn2_ok:
 		serial = read_fn(pi, name, value);
 
 	callback(cookie, name, value, (uint32_t)serial);
+}
+
+/**
+ * HandleSigsysSeccompOverride
+ * ref: https://github.com/LineageOS/android_bionic/blob/ff9fe01e7e1e81febaf32b15fa561aec480a112c/libc/bionic/android_profiling_dynamic.cpp#L187
+ */
+
+__attribute__((used))
+void compat_sigsys_set_return(void *void_context, int ret)
+{
+	ucontext_t *ctx = (ucontext_t *)void_context;
+
+#if defined(__aarch64__)
+	ctx->uc_mcontext.regs[0] = ret;
+#elif defined(__arm__)
+	ctx->uc_mcontext.arm_r0 = ret;
+#elif defined(__i386__)
+	ctx->uc_mcontext.gregs[REG_EAX] = ret;
+#elif defined(__riscv)
+	ctx->uc_mcontext.__gregs[REG_A0] = ret;
+#elif defined(__x86_64__)
+	ctx->uc_mcontext.gregs[REG_RAX] = ret;
+#else
+# error "unsupported architecture"
+#endif
 }

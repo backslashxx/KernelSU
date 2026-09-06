@@ -30,6 +30,10 @@ fn take_sigsys_occurred() -> bool {
     SIGSYS_OCCURRED.with(|occurred| occurred.replace(false))
 }
 
+unsafe extern "C" {
+	fn compat_sigsys_set_return(ctx: *mut libc::c_void, ret: libc::c_int);
+}
+
 extern "C" fn sigsys_handler(
     _sig: libc::c_int,
     info: *mut libc::siginfo_t,
@@ -43,16 +47,7 @@ extern "C" fn sigsys_handler(
             SIGSYS_OCCURRED.with(|occurred| occurred.set(true));
         }
 
-        let ucontext = ctx.cast::<libc::ucontext_t>();
-        #[cfg(target_arch = "aarch64")]
-        {
-            (*ucontext).uc_mcontext.regs[0] = (-libc::EPERM) as u64;
-        }
-        #[cfg(target_arch = "x86_64")]
-        {
-            let rax = libc::REG_RAX as usize;
-            (*ucontext).uc_mcontext.gregs[rax] = i64::from(-libc::EPERM);
-        }
+        unsafe { compat_sigsys_set_return(ctx, -libc::EPERM); }
     }
 }
 
