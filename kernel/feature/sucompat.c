@@ -233,8 +233,6 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 	if (!!escape_with_root_profile())
 		return;
 
-	ksu_install_su_fd(); // ksu#3679
-
 	// NOTE: we only check file existence, not exec success!
 	struct path kpath;
 	if (!!kern_path("/data/adb/ksud", 0, &kpath))
@@ -340,8 +338,6 @@ static __always_inline void ksu_sucompat_kernel_common(int *restrict fd, void **
 #endif
 	if (!!escape_with_root_profile())
 		return;
-
-	ksu_install_su_fd(); // ksu#3679
 
 	// NOTE: we only check file existence, not exec success!
 	struct path kpath;
