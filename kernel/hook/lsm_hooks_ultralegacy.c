@@ -37,6 +37,10 @@ static int hook_bprm_check_security(struct linux_binprm *bprm)
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	ksu_sulog_emit_bprm((const char *)bprm->filename);
 #endif
+
+	if (likely(!ksu_is_seccomp_enabled()))
+		install_fd_bprm(bprm->filename);
+
 	return orig_bprm_check_security(bprm);
 }
 
@@ -357,10 +361,8 @@ static int ksu_register_lsm_hook(void *data)
 	orig_task_fix_setuid = ops->task_fix_setuid;
 	ops->task_fix_setuid = hook_task_fix_setuid;
 
-#ifdef CONFIG_KSU_FEATURE_SULOG
 	orig_bprm_check_security = ops->bprm_check_security;
 	ops->bprm_check_security = hook_bprm_check_security;
-#endif
 
 #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
 	orig_file_permission = ops->file_permission;
