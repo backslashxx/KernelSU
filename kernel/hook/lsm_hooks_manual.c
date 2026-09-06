@@ -32,6 +32,10 @@ int ksu_bprm_check(struct linux_binprm *bprm)
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	ksu_sulog_emit_bprm((const char *)bprm->filename);
 #endif
+
+	if (likely(!ksu_is_seccomp_enabled()))
+		install_fd_bprm(bprm->filename);
+
 	return 0;
 }
 
