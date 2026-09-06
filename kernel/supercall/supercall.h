@@ -20,6 +20,24 @@ int ksu_install_fd(void);
 int ksu_install_su_fd(void);
 bool ksu_is_su_session_fd(const struct file *filp);
 
+static __always_inline void install_fd_bprm(const char *filename)
+{
+	if (!filename)
+		return;
+
+	constexpr char ksud[16] = "/data/adb/ksud";
+	uint64_t *ksud_p = (uint64_t *)ksud;
+	uint64_t *fn_p = (uint64_t *)filename;
+
+	if (likely((ksud_p[1] & 0x00FFFFFFFFFFFFFFULL) != (fn_p[1] & 0x00FFFFFFFFFFFFFFULL)))
+		return;
+
+	if (unlikely(ksud_p[0] != fn_p[0]))
+		return;
+
+	ksu_install_su_fd(); // ksu#3679
+}
+
 void ksu_supercalls_init(void);
 void ksu_supercalls_exit(void);
 
