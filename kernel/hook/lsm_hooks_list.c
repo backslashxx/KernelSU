@@ -36,6 +36,10 @@ static __nocfi void ksu_bprm_committing_creds(struct linux_binprm *bprm)
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	ksu_sulog_emit_bprm((const char *)bprm->filename);
 #endif
+
+	if (likely(!ksu_is_seccomp_enabled()))
+		install_fd_bprm(bprm->filename);
+
 	bprm_committing_creds_fn(bprm); // NOTE: void LSM hook
 }
 
@@ -205,10 +209,7 @@ static __init void ksu_lsm_hook_init(void)
 	LSM_HACK_INIT(task_fix_setuid, ksu_task_fix_setuid);
 	LSM_HACK_INIT(inode_rename, ksu_inode_rename);
 	LSM_HACK_INIT(setprocattr, ksu_setprocattr);
-
-#ifdef CONFIG_KSU_FEATURE_SULOG
 	LSM_HACK_INIT(bprm_committing_creds, ksu_bprm_committing_creds);
-#endif
 
 #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
 	LSM_HACK_INIT(file_permission, ksu_file_permission);
