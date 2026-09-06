@@ -125,13 +125,6 @@ config KSU_DEBUG
 	help
 	  Enable KernelSU debug mode.
 
-config KSU_COMPILE_AS_C23
-	bool "compile ksu with against C23"
-	depends on KSU
-	default n
-	help
-	  Experimental. Dont bother if it breaks your build.
-
 config KSU_HEURISTIC_IN_TREE_BUILD
 	bool "heuristic. do NOT touch"
 	depends on KSU

@@ -125,15 +125,16 @@ CFLAGS_REMOVE_ksu.o += -Os
 CFLAGS_ksu.o += -O2
 endif
 
-# experimental, linux kernel is GNU89 / GNU11
-# theres possible conflicts on kernel macros especially on 6.x
-ifeq ($(CONFIG_KSU_COMPILE_AS_C23),y)
-CFLAGS_ksu.o += $(call cc-option, -std=gnu23)
-else
 # while we can flag for gnu11 if !gnu17, theres an issue GCC < 5.1 which is a bit nasty on mutexes with k3.x code.
 # so for those, we literally just dont flag anything, gnu17 flag wont exist on them.
-CFLAGS_ksu.o += $(call cc-option, -std=gnu17)
-endif # CONFIG_KSU_COMPILE_AS_C23
+CFLAGS_ksu.o += $(call cc-option,-std=gnu17)
+
+# now attempt to enable gnu23
+CFLAGS_ksu.o += $(call cc-option, -std=gnu23)
+
+#ifeq ($(shell $(CC) -v 2>&1 | grep -q 'clang'; echo $$?),0)
+# $(info -- KernelSU/CC: clang!)
+#endif
 
 # always inline atomics
 # clang and gcc CAN try to drop a runtime C11 atomics detector
