@@ -14,16 +14,23 @@
 #ifndef __KSU_H_KERNEL_INCLUDES
 #define __KSU_H_KERNEL_INCLUDES
 
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+// gcc -std=gnu23 -dM -E -x c /dev/null
+// NOTE: gcc14 uses 202000L on -std=gnu23
+#if (defined(__clang__) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L) || \
+	(!defined(__clang__) && (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202000L))
+#define KSU_HAS_C23
+#endif
+
+#ifdef KSU_HAS_C23
 #define bool  __ksu_bool
 #define false __ksu_false
 #define true  __ksu_true
 #include <linux/types.h>
 #include <linux/stddef.h>
-#undef bool
 #undef false
 #undef true
-#endif
+#undef bool
+#endif // KSU_HAS_C23
 
 // common
 #include <asm/current.h>
@@ -196,17 +203,17 @@
  * emulate-able C23 features, should be fine on GNU11 compilers
  *
  */
-#if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 202311L
+#if !defined(KSU_HAS_C23)
 #define nullptr ((void *)0)
 typedef typeof(nullptr) nullptr_t;
 #define constexpr const
 #define auto __auto_type
 #define alignas _Alignas
 #define alignof _Alignof
-#endif
+#endif // KSU_HAS_C23
 
 // NOTE: clang < 19 has issues on constexpr even with -std=gnu23
-#if defined(__clang__) && (__clang_major__ < 19)
+#if defined (KSU_HAS_C23) && defined(__clang__) && (__clang_major__ < 19)
 #define constexpr const
 #endif
 
