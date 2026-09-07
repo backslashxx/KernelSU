@@ -382,10 +382,10 @@ found:
 }
 
 // ksu_get_ksym_size, return symbol size, return retfail if fail.
-static noinline size_t ksu_get_ksym_size(uintptr_t symbol_addr, ptrdiff_t retfail)
+static noinline size_t ksu_get_ksym_size(uintptr_t symbol_addr, size_t retfail)
 {
-	size_t offset = 0;
-	size_t symbolsize = 0;
+	unsigned long offset = 0;
+	unsigned long symbolsize = 0;
 
 	kallsyms_lookup_size_offset(symbol_addr, &symbolsize, &offset);
 
