@@ -1,6 +1,9 @@
 # NOTE: unity build. single unit.
 
-obj-$(CONFIG_KSU) := ksu.o
+obj-$(CONFIG_KSU) := kernelsu.o
+
+kernelsu-objs += ksu.o
+kernelsu-objs += ksu_cpp_tu.o
 
 CFLAGS_ksu.o += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
 CFLAGS_ksu.o += -I$(objtree)/security/selinux
@@ -132,6 +135,16 @@ CFLAGS_ksu.o += $(call cc-option, -std=gnu11)
 CFLAGS_ksu.o += $(call cc-option, -std=gnu17)
 CFLAGS_ksu.o += $(call cc-option, -std=gnu23)
 CFLAGS_ksu.o += $(call cc-option, -std=gnu2y)
+
+CFLAGS_REMOVE_ksu_cpp_tu.o += -std=gnu89
+CFLAGS_REMOVE_ksu_cpp_tu.o += -std=gnu11
+CFLAGS_REMOVE_ksu_cpp_tu.o += -Werror
+
+CFLAGS_ksu_cpp_tu.o += $(call cc-option, -std=gnu++11)
+CFLAGS_ksu_cpp_tu.o += -x c++ -ffreestanding -fno-exceptions -fno-rtti 
+CFLAGS_ksu_cpp_tu.o += -Wno-missing-prototypes
+CFLAGS_ksu_cpp_tu.o += -fpermissive
+CFLAGS_ksu_cpp_tu.o += -D__STDC_VERSION__=201112L
 
 #ifeq ($(shell $(CC) -v 2>&1 | grep -q 'clang'; echo $$?),0)
 # $(info -- KernelSU/CC: clang!)
