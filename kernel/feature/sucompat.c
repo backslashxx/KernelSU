@@ -7,7 +7,7 @@
 #define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
 
-static bool ksu_su_compat_enabled __read_mostly = true;
+static bool ksu_su_compat_enabled __read_mostly = false;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 static void __user *userspace_stack_buffer(const void *d, size_t len)
