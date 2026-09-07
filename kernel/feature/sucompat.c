@@ -60,7 +60,7 @@ static char __user *ksud_user_path(void)
 }
 
 #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && defined(KSU_CAN_USE_JUMP_LABEL)
-DEFINE_STATIC_KEY_TRUE(ksud_sucompat_key);
+DEFINE_STATIC_KEY_FALSE(ksud_sucompat_key);
 static inline void ksu_sucompat_enable_branch()
 {
 	pr_info("su_compat: enable sucompat branches\n");
