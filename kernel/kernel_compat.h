@@ -314,7 +314,6 @@ __weak void ext4_unregister_sysfs(struct super_block *sb)
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 16, 0) && !defined(strscpy)
 /**
  * hand-rolled strscpy from builtins.
  *
@@ -342,8 +341,23 @@ no_null_term:
 	dest[count - 1] = '\0';
 	return -E2BIG;
 }
-#define strscpy ksu_strscpy
+
+extern ssize_t constexpr_strscpy(char *dest, const char *src, size_t count);
+
+#ifdef strscpy
+#undef strscpy
 #endif
+
+#define strscpy(a, b, sz) ({				\
+	ssize_t ret;					\
+	if (__builtin_constant_p(sz))			\
+		ret = constexpr_strscpy(a, b, sz);	\
+	else						\
+		ret = ksu_strscpy(a, b, sz);		\
+	ret;						\
+})
+
+
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) && !defined(strscpy_pad)
 static ssize_t ksu_strscpy_pad(char *dest, const char *src, size_t count)
