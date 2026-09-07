@@ -450,11 +450,11 @@ static const struct ksu_feature_handler su_compat_handler = {
 // sucompat: permited process can execute 'su' to gain root access.
 void __init ksu_sucompat_init()
 {
+	tiny_sulog_init_heap();
+
 	if (ksu_register_feature_handler(&su_compat_handler)) {
 		pr_err("Failed to register su_compat feature handler\n");
 	}
-
-	tiny_sulog_init_heap();
 }
 
 void __exit ksu_sucompat_exit()
