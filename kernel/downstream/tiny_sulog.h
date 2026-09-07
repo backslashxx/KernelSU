@@ -29,12 +29,9 @@ struct sulog_entry {
 static void *sulog_buf_ptr = nullptr;
 static uint32_t sulog_index_next = 0;
 
-static void tiny_sulog_init_heap()
+static inline void tiny_sulog_init_heap()
 {
-	sulog_buf_ptr = kzalloc(SULOG_BUFSIZ, GFP_KERNEL);
-	if (!sulog_buf_ptr)
-		return;
-	
+	sulog_buf_ptr = kzalloc(SULOG_BUFSIZ, GFP_KERNEL | __GFP_NOFAIL);	
 	pr_info("tiny_sulog: allocated %lu bytes on 0x%lx \n", SULOG_BUFSIZ, (uintptr_t)sulog_buf_ptr);
 }
 
@@ -75,9 +72,6 @@ static inline uint32_t boottime_s_get()
  */
 static noinline void write_sulog(uint8_t sym)
 {
-	if (unlikely(!sulog_buf_ptr))
-		return;
-
 	struct sulog_entry entry;
 
 	// WARNING!!! this is LE only!
