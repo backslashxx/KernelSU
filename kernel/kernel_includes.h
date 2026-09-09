@@ -46,6 +46,7 @@
 #include <linux/capability.h>
 #include <linux/compat.h>
 #include <linux/compiler.h>
+#include <linux/cpumask.h>
 #include <linux/cred.h>
 #include <linux/dcache.h>
 #include <linux/delay.h>
@@ -80,6 +81,7 @@
 #include <linux/namei.h>
 #include <linux/nsproxy.h>
 #include <linux/path.h>
+#include <linux/percpu.h>
 #include <linux/pid.h>
 #include <linux/poll.h>
 #include <linux/printk.h>

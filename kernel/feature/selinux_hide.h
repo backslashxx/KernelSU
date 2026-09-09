@@ -37,40 +37,36 @@ static struct ksu_hide_buf *ksu_hide_rule_list __read_mostly = NULL;
 
 static DEFINE_MUTEX(selinux_hide_list_mutex);
 
-/**
- * this has to be done due to how ARM/64 atomics work.
- * arm64 atomics promises exclusive cacheline access (mEsi)
- * so we need to align one ptr to one cacheline
- *
- * we assume max of 16 nproc, not a big deal for now
- * we can heapify once theres a real need for dynamic handling 
- * (e.g. num_possible_cpus())
- *
- */
-#if CONFIG_NR_CPUS > 16
-#define KSU_MAX_HP_SLOTS 16
-#else
-#define KSU_MAX_HP_SLOTS CONFIG_NR_CPUS
-static_assert(KSU_MAX_HP_SLOTS > 0);
-#endif
-struct ksu_hazptr_slot {
-	struct ksu_hide_buf *ptr;
-} ____cacheline_aligned;
+static struct ksu_hide_buf *__percpu *ksu_selinux_hide_hazptr_slot __read_mostly = nullptr;
 
-static struct ksu_hazptr_slot ksu_selinux_hide_hazptr[KSU_MAX_HP_SLOTS] = { 0 };
+static inline void ksu_selinux_hide_alloc_hazptr_slot(void)
+{
+	ksu_selinux_hide_hazptr_slot = alloc_percpu(struct ksu_hide_buf *);
+
+	// asshole assert nofail.
+	if (!ksu_selinux_hide_hazptr_slot) {
+		__builtin_trap();
+		__builtin_unreachable();
+	}
+
+	int cpu;
+	for_each_possible_cpu(cpu) {
+		struct ksu_hide_buf **slot = per_cpu_ptr(ksu_selinux_hide_hazptr_slot, cpu);
+		pr_info("selinux_hide: hazptr_slot: 0x%llx cpu: %d \n", (uintptr_t)slot, cpu );
+	}
+}
 
 // NOTE: can ret null on uninitialized state
 static inline struct ksu_hide_buf *ksu_selinux_hide_get_buf(struct ksu_hide_buf **g_buf)
 {
 	// reader has to pin its own slot
 	preempt_disable();
-
-	int slot = raw_smp_processor_id() % KSU_MAX_HP_SLOTS;
+	struct ksu_hide_buf **slot = this_cpu_ptr(ksu_selinux_hide_hazptr_slot);
 	struct ksu_hide_buf *buf;
 
 check_buf:
 	buf = __atomic_load_n(g_buf, __ATOMIC_ACQUIRE);
-	__atomic_store_n(&ksu_selinux_hide_hazptr[slot].ptr, buf, __ATOMIC_RELEASE);
+	__atomic_store_n(slot, buf, __ATOMIC_RELEASE);
 
 	if (buf != __atomic_load_n(g_buf, __ATOMIC_ACQUIRE))
 		goto check_buf;
@@ -80,8 +76,8 @@ check_buf:
 
 static inline void ksu_selinux_hide_put_buf(struct ksu_hide_buf **unused)
 {
-	int slot = raw_smp_processor_id() % KSU_MAX_HP_SLOTS;
-	__atomic_store_n(&ksu_selinux_hide_hazptr[slot].ptr, NULL, __ATOMIC_RELEASE);
+	struct ksu_hide_buf **slot = this_cpu_ptr(ksu_selinux_hide_hazptr_slot);
+	__atomic_store_n(slot, NULL, __ATOMIC_RELEASE);
 	
 	preempt_enable();
 }
@@ -92,12 +88,12 @@ static inline void ksu_selinux_hide_hazptr_free(struct ksu_hide_buf *old_ptr)
 		return;
 	int i;
 
-	// acquire it on ALL slots!
+	// acquire it on ALL cpus!
 	// only free it once ALL slots say that their slot no longer contains old ptr
-	// #pragma GCC unroll 0
-	// #pragma nounroll
-	for (i = 0; i < KSU_MAX_HP_SLOTS; i++) {
-		while (__atomic_load_n(&ksu_selinux_hide_hazptr[i].ptr, __ATOMIC_ACQUIRE) == old_ptr)
+	int cpu;
+	for_each_possible_cpu(cpu) {
+		struct ksu_hide_buf **slot = per_cpu_ptr(ksu_selinux_hide_hazptr_slot, cpu);
+		while (__atomic_load_n(slot, __ATOMIC_ACQUIRE) == old_ptr)
 			cpu_relax();
 	}
 
@@ -140,10 +136,7 @@ static noinline void ksu_add_shit_to_list(u32 cmd, const char *args[])
 		size_t old_len = (ksu_hide_type_list) ? ksu_hide_type_list->len : 0;
 		size_t new_total_len = old_len + needed_len;
 
-		struct ksu_hide_buf *new_ptr = kmalloc(sizeof(*new_ptr) + new_total_len, GFP_KERNEL);
-		if (!new_ptr)
-			return;
-
+		struct ksu_hide_buf *new_ptr = kmalloc(sizeof(*new_ptr) + new_total_len, GFP_KERNEL | __GFP_NOFAIL);
 		new_ptr->len = new_total_len;
 
 		if (ksu_hide_type_list && old_len > 0)
@@ -197,10 +190,7 @@ static noinline void ksu_add_shit_to_list(u32 cmd, const char *args[])
 		size_t old_len = (ksu_hide_rule_list) ? ksu_hide_rule_list->len : 0;
 		size_t new_total_len = old_len + needed_len;
 
-		struct ksu_hide_buf *new_ptr = kmalloc(sizeof(*new_ptr) + new_total_len, GFP_KERNEL);
-		if (!new_ptr)
-			return;
-
+		struct ksu_hide_buf *new_ptr = kmalloc(sizeof(*new_ptr) + new_total_len, GFP_KERNEL | __GFP_NOFAIL);
 		new_ptr->len = new_total_len;
 
 		if (ksu_hide_rule_list && old_len > 0)

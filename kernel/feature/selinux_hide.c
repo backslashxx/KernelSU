@@ -361,6 +361,8 @@ static const struct ksu_feature_handler selinux_hide_handler = {
 
 void __init ksu_selinux_hide_init()
 {
+	ksu_selinux_hide_alloc_hazptr_slot();
+
 	// we init this on a kthread
 	kthread_run(ksu_selinux_hide_init_thread, NULL, "kthread");
 
