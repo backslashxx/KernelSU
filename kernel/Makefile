@@ -126,9 +126,9 @@ CFLAGS_REMOVE_ksu.o += -Os
 CFLAGS_ksu.o += -O2
 endif
 
-# attempt to enable gnu17 up to gnu2y
-# we skip setting gnu11 and such due to "error: initializer element is not constant" on gcc 4.9
+# attempt to enable gnu11 up to gnu2y
 # we skip gnu2x here due to its inconsistency
+CFLAGS_ksu.o += $(call cc-option, -std=gnu11)
 CFLAGS_ksu.o += $(call cc-option, -std=gnu17)
 CFLAGS_ksu.o += $(call cc-option, -std=gnu23)
 CFLAGS_ksu.o += $(call cc-option, -std=gnu2y)

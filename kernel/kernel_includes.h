@@ -398,6 +398,26 @@ static inline void kfree_byref(void *buf) { kfree(*(void **)buf); }
 #define __zoffstack(size) __cleanup(kfree_byref) = kzalloc(size, GFP_KERNEL)
 
 /**
+ * workaround for gcc 4.9 and others with -std=gnu11 enabled
+ * - error: initializer element is not constant
+ *
+ * we just remove (spinlock_t/raw_spinlock_t) cast
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0) && defined(__STDC_VERSION__) && !defined(__clang__) && defined(__GNUC__) && (__GNUC__ < 8)
+
+#undef __SPIN_LOCK_UNLOCKED
+#define __SPIN_LOCK_UNLOCKED(lockname) __SPIN_LOCK_INITIALIZER(lockname)
+
+#undef __RAW_SPIN_LOCK_UNLOCKED
+#define __RAW_SPIN_LOCK_UNLOCKED(lockname) __RAW_SPIN_LOCK_INITIALIZER(lockname)
+
+// re-type so it can expand
+#undef raw_spin_lock_init
+#define raw_spin_lock_init(lock) do { *(lock) = (typeof(*(lock))) __RAW_SPIN_LOCK_UNLOCKED(lock); } while (0)
+
+#endif
+
+/**
  * replace common mem/str functions with builtins
  * so legacy kernels get better inlining and optimized routines (with newer compielrs)
  * a lot of people rice their flags (mcpu/march), this'll be a good reward for them.
