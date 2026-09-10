@@ -126,10 +126,15 @@ CFLAGS_REMOVE_ksu.o += -Os
 CFLAGS_ksu.o += -O2
 endif
 
-# attempt to enable gnu11 up to gnu2y
-# we skip gnu2x here due to its inconsistency
-CFLAGS_ksu.o += $(call cc-option, -std=gnu11)
+# while we can enable gnu11 actually with gcc 4.9 even, 
+# it has this issue where casted lvalue fucks up with initializers on it
+# 'error: initializer element is not constant'
+# which makes us need to redefine and uncast those macros
+# CFLAGS_ksu.o += $(call cc-option, -std=gnu11)
+
+# attempt to enable gnu17 onwards
 CFLAGS_ksu.o += $(call cc-option, -std=gnu17)
+# we skip gnu2x here due to its inconsistency
 CFLAGS_ksu.o += $(call cc-option, -std=gnu23)
 CFLAGS_ksu.o += $(call cc-option, -std=gnu2y)
 
