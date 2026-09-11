@@ -199,19 +199,9 @@
 
 #define EXTRA_FEATURES FEAT_1 FEAT_2 FEAT_3 FEAT_4 FEAT_5 FEAT_6 FEAT_7 FEAT_8
 
-__attribute__((used))
-void ksu_c_print(unsigned int value)
-{
-	pr_info("C++ constexpr test: 0x%x\n", value);
-}
-
-extern void ksu_cpp_test(void);
-
 static inline void ksu_print_build_info(void)
 {
 	pr_info("Initialized on: %s (%s) with ksuver: %s%s\n", UTS_RELEASE, UTS_MACHINE, __stringify(KSU_VERSION), EXTRA_FEATURES);
-	
-	ksu_cpp_test();
 
 #if defined(__VERSION__) && defined(__STDC_VERSION__)
 #if defined(__clang_version__)

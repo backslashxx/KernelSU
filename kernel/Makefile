@@ -145,6 +145,7 @@ CFLAGS_ksu_cpp_tu.o += -x c++ -ffreestanding -fno-exceptions -fno-rtti
 CFLAGS_ksu_cpp_tu.o += -Wno-missing-prototypes
 CFLAGS_ksu_cpp_tu.o += -fpermissive
 CFLAGS_ksu_cpp_tu.o += -D__STDC_VERSION__=201112L
+CFLAGS_ksu_cpp_tu.o += $(call cc-option, -Wno-implicit-function-declaration)
 
 #ifeq ($(shell $(CC) -v 2>&1 | grep -q 'clang'; echo $$?),0)
 # $(info -- KernelSU/CC: clang!)
