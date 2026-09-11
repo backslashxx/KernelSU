@@ -23,6 +23,9 @@
 #include "avc.h"
 #endif
 
+// kernel compat
+#include "kernel_compat.h"
+
 #include "policy/app_profile.h"
 #include "policy/allowlist.h"
 #include "policy/feature.h"
