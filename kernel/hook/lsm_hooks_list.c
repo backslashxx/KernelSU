@@ -104,6 +104,7 @@ static typeof(security_setprocattr) *ksu_setprocattr __read_mostly = OVERLOAD_SE
 #undef SETPROCATTR_TYPE_old
 #undef OVERLOAD_SETPROCATTR
 
+#if 0
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0) || defined(KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST)
 static void ksu_hack_lsm_slot(struct hlist_head *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr)
 {
@@ -167,6 +168,76 @@ static void ksu_hack_lsm_slot(struct list_head *hook_head, uintptr_t *old_ptr, u
 	pr_info("LSM: 0x%lx written to slot\n", new_ptr);
 }
 #endif
+#endif
+
+/**
+ *
+ * Instead of using list/hlist abstractions and shit, since we know these things exist
+ * we can just pointerwalk and walk away like its nothing.
+ *
+ * this should work as the first member of both list_head and hlist_head are just *
+ *
+ * struct list_head { struct list_head *next, *prev; };
+ * struct hlist_node { struct hlist_node *next, **pprev; };
+ *
+ * variant 1: 4.3 ~ 4.10
+ * struct security_hook_list {
+ *	struct list_head		list;	// 2 uintptr
+ *	struct list_head		*head;
+ *	union security_list_options	hook;	// 1 uintptr
+ * };
+ *
+ * variant 2: 4.11 - 4.17
+ * struct security_hook_list {
+ *	struct list_head		list;
+ * 	struct list_head		*head;
+ * 	union security_list_options	hook;
+ * 	char				*lsm;
+ * };
+ *
+ * variant 3: 4.17+, normally backported to 4.14
+ * struct security_hook_list {
+ * 	struct hlist_node		list;
+ * 	struct hlist_head		*head;
+ * 	union security_list_options	hook;
+ * 	char				*lsm;
+ * };
+ *
+ */
+static void ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr)
+{
+	if (!hook_head)
+		return;
+
+	static_assert(sizeof(struct security_hook_list) >= 4 * sizeof(uintptr_t));
+	static_assert(offsetof(struct security_hook_list, hook) == 3 * sizeof(uintptr_t));
+
+	// technincally next
+	uintptr_t head = *(uintptr_t *)hook_head;
+	uintptr_t hook_slot_addr = head + 3 * sizeof(uintptr_t);
+
+	uintptr_t current_hook = *(uintptr_t *)hook_slot_addr;
+	if (!current_hook) {
+		pr_info("LSM: No LSM hook on slot\n");
+		return;
+	}
+
+	WRITE_ONCE(*old_ptr, current_hook);
+	smp_mb();
+
+	if (sizeof(struct security_hook_list) == 5 * sizeof(uintptr_t))
+		pr_info("LSM: 0x%lx found at 0x%lx slot, name: %s \n", current_hook, hook_slot_addr, *(char **)(node + 4 * sizeof(uintptr_t)));
+	else
+		pr_info("LSM: 0x%lx found at slot 0x%lx\n", current_hook, hook_slot_addr);
+
+	int err = ksu_write_to_readonly_slot(hook_slot_addr, new_ptr);
+	if (err) {
+		pr_err("LSM: ksu_write_to_readonly_slot err: %d\n", err);
+		return;
+	}
+
+	pr_info("LSM: 0x%lx written to slot\n", new_ptr);
+}
 
 #define LSM_HACK_INIT(hook_name, hook_fn)									\
 do {														\
