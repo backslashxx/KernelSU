@@ -31,10 +31,6 @@ static __nocfi void ksu_bprm_committing_creds(struct linux_binprm *bprm)
 	bprm_committing_creds_fn(bprm); // NOTE: void LSM hook
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) || defined(KSU_COMPAT_SECURITY_ADD_HOOKS_V2)
-// reserved for setprocattr
-#endif
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0) || defined(KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST)
 static void ksu_hack_lsm_slot(struct hlist_head *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr)
 {
