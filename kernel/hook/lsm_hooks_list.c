@@ -104,6 +104,72 @@ static typeof(security_setprocattr) *ksu_setprocattr __read_mostly = OVERLOAD_SE
 #undef SETPROCATTR_TYPE_old
 #undef OVERLOAD_SETPROCATTR
 
+#if 0
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0) || defined(KSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST)
+static void ksu_hack_lsm_slot(struct hlist_head *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr)
+{
+	struct security_hook_list *pos;
+	struct hlist_head *head = hook_head;
+	bool found = false;
+
+	// just grab first entry
+	hlist_for_each_entry(pos, head, list) {
+		found = true;
+		break;
+	}
+
+	if (!found) {
+		pr_info("LSM: No LSM hook on slot\n");
+		return;
+	}
+
+	// make sure this happens first, this way we dont have to pre-check on the handler
+	WRITE_ONCE(*old_ptr, *(uintptr_t *)&pos->hook);
+	smp_mb();
+
+	pr_info("LSM: 0x%lx found at 0x%lx slot, name: %s \n", *(uintptr_t *)&pos->hook, (uintptr_t)&pos->hook, pos->lsm);
+	int err = ksu_write_to_readonly_slot((uintptr_t)&pos->hook, new_ptr);
+	if (err) {
+		pr_err("LSM: ksu_write_to_readonly_slot err: %d\n", err);
+		return;
+	}
+
+	pr_info("LSM: 0x%lx written to slot\n", new_ptr);
+}
+#else
+static void ksu_hack_lsm_slot(struct list_head *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr)
+{
+	struct security_hook_list *pos;
+	struct list_head *head = hook_head;
+	bool found = false;
+
+	// just grab first entry
+	list_for_each_entry(pos, head, list) {
+		found = true;
+		break;
+	}
+
+	if (!found) {
+		pr_info("LSM: No hook on slot!\n");
+		return;
+	}
+
+	WRITE_ONCE(*old_ptr, *(uintptr_t *)&pos->hook);
+	smp_mb();
+
+	pr_info("LSM: 0x%lx found at first slot 0x%lx\n", *(uintptr_t *)&pos->hook, (uintptr_t)&pos->hook);
+
+	int err = ksu_write_to_readonly_slot((uintptr_t)&pos->hook, new_ptr);
+	if (err) {
+		pr_err("LSM: ksu_write_to_readonly_slot err: %d\n", err);
+		return;
+	}
+
+	pr_info("LSM: 0x%lx written to slot\n", new_ptr);
+}
+#endif
+#endif
+
 /**
  *
  * Instead of using list/hlist abstractions and shit, since we know these things exist
