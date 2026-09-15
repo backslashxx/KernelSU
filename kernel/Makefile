@@ -33,12 +33,6 @@ $(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
 CFLAGS_ksu.o += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 CFLAGS_ksu.o += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
 
-# see security_delete_hooks
-ifeq ($(shell grep -A5 "^struct security_hook_list" $(srctree)/include/linux/lsm_hooks.h 2>/dev/null | grep -q "struct hlist_node" 2>/dev/null; echo $$?),0)
-$(info -- KernelSU/compat: security_hook_list - hlist_node found!)
-CFLAGS_ksu.o += -DKSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST
-endif
-
 ifeq ($(shell grep -q "^struct security_operations selinux_ops" $(srctree)/security/selinux/hooks.c; echo $$?),0)
 $(info -- KernelSU/compat: exported selinux_ops found!)
 CFLAGS_ksu.o += -DKSU_HAS_EXPORTED_SELINUX_OPS
