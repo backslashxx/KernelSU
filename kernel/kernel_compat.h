@@ -31,7 +31,6 @@
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) // ksyscall start
-
 #if defined(__aarch64__)
 #define KSU_SYS_PREFIX(name) __arm64_sys_##name
 #elif defined(__x86_64__)
@@ -44,9 +43,9 @@
  * ksyscall: call syscalls from kernelspace
  * - tries to copy unistd's syscall()
  *
- * usage: ksyscall(close, fd, 0, 0, 0, 0, 0);
+ * usage: ksyscall(close, fd);
  */
-#define ksyscall(name, a, b, c, d, e, f) ({			\
+#define __ksyscall(name, a, b, c, d, e, f) ({			\
 	extern long KSU_SYS_PREFIX(name)(struct pt_regs *);	\
 	struct pt_regs regs;					\
 	PT_REGS_PARM1(&regs) = (unsigned long)(a);		\
@@ -57,6 +56,10 @@
 	PT_REGS_PARM6(&regs) = (unsigned long)(f);		\
 	(long)KSU_SYS_PREFIX(name)(&regs);			\
 })
+
+#define __ksyscall_pad(a, b, c, d, e, f, ...)	a, b, c, d, e, f
+#define __ksyscall_exp(fn, args)		fn args
+#define ksyscall(name, ...)			__ksyscall_exp(__ksyscall, (name, __ksyscall_pad(__VA_ARGS__, 0, 0, 0, 0, 0, 0)) )
 
 #endif /* < 4.19 */ // ksyscall end
 
@@ -200,11 +203,10 @@ static noinline ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) 
-#define ksu_close_fd(fd) ({ ksyscall(close, fd, 0, 0, 0, 0, 0); })
+#define ksu_close_fd(fd) ({ ksyscall(close, fd); })
 #else
 #define ksu_close_fd sys_close
 #endif
-
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
 static inline struct file *ksu_dentry_open(const struct path *path, int flags, const struct cred *cred)
@@ -236,7 +238,7 @@ __weak int path_mount(const char *dev_name, struct path *path, const char *type_
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
-#define sys_umount(name, flags) ({ ksyscall(umount, name, flags, 0, 0, 0, 0); })
+#define sys_umount(name, flags) ({ ksyscall(umount, name, flags); })
 #endif
 
 __weak int path_umount(struct path *path, int flags)
