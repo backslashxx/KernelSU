@@ -284,12 +284,22 @@ check_managed_features() {
   done
 }
 
+set_selinux_context() {
+  # Only skip labeling when selinuxfs is absent. Permissive mode still needs
+  # labels; an unreadable mount table or a failed chcon must not be ignored.
+  grep -q '^[^ ]* [^ ]* selinuxfs ' /proc/self/mounts
+  local status=$?
+  [ "$status" -eq 1 ] && return 0
+  [ "$status" -eq 0 ] || return "$status"
+  chcon "$@"
+}
+
 set_perm() {
   chown $2:$3 $1 || return 1
   chmod $4 $1 || return 1
   local CON=$5
   [ -z $CON ] && CON=u:object_r:system_file:s0
-  chcon $CON $1 || return 1
+  set_selinux_context "$CON" "$1" || return 1
 }
 
 set_perm_recursive() {
@@ -350,7 +360,7 @@ handle_partition() {
 install_module() {
   rm -rf $TMPDIR
   mkdir -p $TMPDIR
-  chcon u:object_r:system_file:s0 $TMPDIR
+  set_selinux_context u:object_r:system_file:s0 "$TMPDIR" || abort "! Unable to label installer directory"
   cd $TMPDIR
 
   mount_partitions
