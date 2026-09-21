@@ -2,33 +2,8 @@ extern int path_mount(const char *dev_name, struct path *path,
 					  const char *type_page, unsigned long flags,
 					  void *data_page);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
-#if defined(__aarch64__)
-extern long __arm64_sys_setns(const struct pt_regs *regs);
-#elif defined(__x86_64__)
-extern long __x64_sys_setns(const struct pt_regs *regs);
-#elif defined(__arm__) // https://syscalls.mebeim.net/?table=arm/32/eabi/latest
-extern long sys_setns(const struct pt_regs *regs);
-#endif
-
-static long ksu_sys_setns(int fd, int flags)
-{
-	struct pt_regs regs;
-	memset(&regs, 0, sizeof(regs));
-
-	PT_REGS_PARM1(&regs) = fd;
-	PT_REGS_PARM2(&regs) = flags;
-
-#if defined(__aarch64__)
-	return __arm64_sys_setns(&regs);
-#elif defined(__x86_64__)
-	return __x64_sys_setns(&regs);
-#elif defined(__arm__)
-	return sys_setns(&regs);
-#else
-	return -ENOSYS;
-#endif
-}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#define ksu_sys_setns(fd, flags) ({ ksyscall(setns, fd, flags); })
 #else
 #define ksu_sys_setns sys_setns
 #define ksys_unshare sys_unshare
