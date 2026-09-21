@@ -30,6 +30,38 @@
 #define WRITE_ONCE(x, y) (*(volatile typeof(x) __may_alias *)&(x) = (typeof(x) __may_alias)(y))
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) // ksyscall start
+#if defined(__aarch64__)
+#define KSU_SYS_PREFIX(name) __arm64_sys_##name
+#elif defined(__x86_64__)
+#define KSU_SYS_PREFIX(name) __x64_sys_##name
+#else // arm / 32-bit
+#define KSU_SYS_PREFIX(name) sys_##name
+#endif
+
+/**
+ * ksyscall: call syscalls from kernelspace
+ * - tries to copy unistd's syscall()
+ *
+ * usage: ksyscall(close, fd);
+ */
+#define __ksyscall(name, a, b, c, d, e, f) ({			\
+	extern long KSU_SYS_PREFIX(name)(struct pt_regs *);	\
+	struct pt_regs regs;					\
+	PT_REGS_PARM1(&regs) = (unsigned long)(a);		\
+	PT_REGS_PARM2(&regs) = (unsigned long)(b);		\
+	PT_REGS_PARM3(&regs) = (unsigned long)(c);		\
+	PT_REGS_SYSCALL_PARM4(&regs) = (unsigned long)(d);	\
+	PT_REGS_PARM5(&regs) = (unsigned long)(e);		\
+	PT_REGS_PARM6(&regs) = (unsigned long)(f);		\
+	(long)KSU_SYS_PREFIX(name)(&regs);			\
+})
+
+#define __ksyscall_pad(a, b, c, d, e, f, ...)	a, b, c, d, e, f
+#define __ksyscall_exp(fn, args)		fn args
+#define ksyscall(name, ...)			__ksyscall_exp(__ksyscall, (name, __ksyscall_pad(__VA_ARGS__, 0, 0, 0, 0, 0, 0)))
+#endif // ksyscall end
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
 static void *ksu_kvmalloc(size_t size, gfp_t flags)
 {
@@ -188,9 +220,14 @@ static struct file *ksu_dentry_open_filp(const struct path *path, int flags, con
 	if (IS_ERR(realpath) || realpath == buf)
 		return ERR_PTR(-ENOENT);
 
-	const struct cred *c = override_creds(cred);
+	const struct cred *c = nullptr;	
+	if (cred && cred != current_cred())
+		c = override_creds(cred);
+
 	struct file *f = filp_open(realpath, flags, 0);
-	revert_creds(c);
+	if (c)
+		revert_creds(c);
+
 	return f;
 }
 #define dentry_open ksu_dentry_open_filp
@@ -217,25 +254,11 @@ __weak int path_mount(const char *dev_name, struct path *path, const char *type_
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
-#ifdef MODULE // bring an inline one for LKM
-extern long __arm64_sys_umount(struct pt_regs *);
-#define ksys_umount(name, flags) ({	\
-	struct pt_regs regs;		\
-	PT_REGS_PARM1(&regs) = name;	\
-	PT_REGS_PARM2(&regs) = flags;	\
-	(int)__arm64_sys_umount(&regs);	\
-})
-#else	/* ! MODULE */
-/**
- * if ksys_umount does NOT exist, it should have path_umount!
- * unreachable! polyfill is here so it compiles if thats the case.
- */
-__weak int ksys_umount(char __user *name, int flags) { return -ENOSYS; }
-#endif	/* ! MODULE */
-#else	// < 4.17
-#define ksys_umount(name, flags) ({ (int)sys_umount(name, flags); })
-#endif	// < 4.17
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#define ksu_sys_umount(name, flags) ({ (int)ksyscall(umount, name, flags); })
+#else
+#define ksu_sys_umount(name, flags) ({ (int)sys_umount(name, flags); })
+#endif
 
 __weak int path_umount(struct path *path, int flags)
 {
@@ -248,7 +271,7 @@ __weak int path_umount(struct path *path, int flags)
 
 	mm_segment_t old_fs = get_fs();
 	set_fs(KERNEL_DS);
-	ret = ksys_umount((char __user *)usermnt, flags);
+	ret = ksu_sys_umount((char __user *)usermnt, flags);
 	set_fs(old_fs);
 
 	// release ref here! user_path_at increases it
