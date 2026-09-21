@@ -1,12 +1,15 @@
 #ifndef __KSU_H_UTIL
 #define __KSU_H_UTIL
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) // ksyscall start
 #if defined(__aarch64__)
 #define KSU_SYS_PREFIX(name) __arm64_sys_##name
 #elif defined(__x86_64__)
 #define KSU_SYS_PREFIX(name) __x64_sys_##name
 #elif defined(__riscv)
 #define KSU_SYS_PREFIX(name) __riscv_sys_##name
+#elif defined(__arm__)
+#define KSU_SYS_PREFIX(name) sys_##name
 #else // wire up your arch here.
 static_assert(1 == 0, "Unsupported architecture!");
 #define KSU_SYS_PREFIX(name) sys_##name
@@ -39,6 +42,47 @@ static_assert(1 == 0, "Unsupported architecture!");
 #define ksyscall_5(name, a, b, c, d, e) __ksyscall(name, a, b, c, d, e, 0)
 #define ksyscall_6(name, a, b, c, d, e, f) __ksyscall(name, a, b, c, d, e, f)
 
+#else /* < 4.19 */
+
+#define KSU_SYS_PREFIX(name) sys_##name
+
+#define ksyscall_0(name) ({						\
+	extern typeof(KSU_SYS_PREFIX(name)) KSU_SYS_PREFIX(name);	\
+	(long)KSU_SYS_PREFIX(name)();					\
+})
+
+#define ksyscall_1(name, a) ({						\
+	extern typeof(KSU_SYS_PREFIX(name)) KSU_SYS_PREFIX(name);	\
+	(long)KSU_SYS_PREFIX(name)(a);					\
+})
+
+#define ksyscall_2(name, a, b) ({					\
+	extern typeof(KSU_SYS_PREFIX(name)) KSU_SYS_PREFIX(name);	\
+	(long)KSU_SYS_PREFIX(name)(a, b);				\
+})
+
+#define ksyscall_3(name, a, b, c) ({					\
+	extern typeof(KSU_SYS_PREFIX(name)) KSU_SYS_PREFIX(name);	\
+	(long)KSU_SYS_PREFIX(name)(a, b, c);				\
+})
+
+#define ksyscall_4(name, a, b, c, d) ({					\
+	extern typeof(KSU_SYS_PREFIX(name)) KSU_SYS_PREFIX(name);	\
+	(long)KSU_SYS_PREFIX(name)(a, b, c, d);				\
+})
+
+#define ksyscall_5(name, a, b, c, d, e) ({				\
+	extern typeof(KSU_SYS_PREFIX(name)) KSU_SYS_PREFIX(name);	\
+	(long)KSU_SYS_PREFIX(name)(a, b, c, d, e);			\
+})
+
+#define ksyscall_6(name, a, b, c, d, e, f) ({				\
+	extern typeof(KSU_SYS_PREFIX(name)) KSU_SYS_PREFIX(name);	\
+	(long)KSU_SYS_PREFIX(name)(a, b, c, d, e, f);			\
+})
+
+#endif /* < 4.19 */
+
 #define __ksyscall_arg_n(_1, _2, _3, _4, _5, _6, _7, N, ...) N
 #define __ksyscall_count_args(...) __ksyscall_arg_n(__VA_ARGS__, 6, 5, 4, 3, 2, 1, 0)
 #define __ksyscall_concat(a, b) a##b
@@ -47,6 +91,10 @@ static_assert(1 == 0, "Unsupported architecture!");
 
 #define ksu_close_fd(fd) ({ ksyscall(close, fd); })
 #define ksu_sys_setns(fd, flags) ({ ksyscall(setns, fd, flags); })
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)
+#define ksys_unshare(flags) ({ ksyscall(unshare, flags); })
+#endif
 
 static inline struct file *ksu_filp_open_nonotify(const char *path, int flags)
 {
