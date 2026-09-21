@@ -1,12 +1,10 @@
 #ifndef __KSU_H_UTIL
 #define __KSU_H_UTIL
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-#define ksu_close_fd close_fd
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
-#define ksu_close_fd(fd) __close_fd(current->files, fd)
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
-#define ksu_close_fd sys_close
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) 
+#define ksu_close_fd(fd) ({ ksyscall(close, fd); })
+#else
+#define ksu_close_fd(fd) sys_close(fd)
 #endif
 
 static inline struct file *ksu_filp_open_nonotify(const char *path, int flags)
