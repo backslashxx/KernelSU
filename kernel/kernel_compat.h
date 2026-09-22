@@ -139,9 +139,26 @@ static inline void ksu_memzero_explicit(void *s, size_t count) { memset_explicit
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
-// https://elixir.bootlin.com/linux/v4.14.336/source/fs/read_write.c#L418
-// https://elixir.bootlin.com/linux/v4.14.336/source/fs/read_write.c#L512
-static ssize_t ksu_kernel_read_compat(struct file *file, void *buf, size_t count, loff_t *pos)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+static __nocfi inline ssize_t ksu_kernel_read_compat(struct file *file, void *buf, size_t count, loff_t *pos)
+{
+	extern typeof(kernel_read) kernel_read;
+	static_assert(!!&kernel_read);
+	assume((void *)&kernel_read != nullptr);
+	if (!__builtin_types_compatible_p(typeof(kernel_read), typeof(ksu_kernel_read_compat)))
+		goto compat;
+
+	return ((typeof(ksu_kernel_read_compat) *)&kernel_read)(file, buf, count, pos);
+
+compat:; // https://github.com/tiann/KernelSU/blob/v0.9.5/kernel/kernel_compat.c
+	loff_t offset = pos ? *pos : 0;
+	ssize_t result = ((int (*)(struct file *, loff_t, char *, unsigned long))&kernel_read)(file, offset, (char *)buf, count);
+	if (pos && result > 0)
+		*pos = offset + result;
+	return result;
+}
+#else // https://elixir.bootlin.com/linux/v4.14.336/source/fs/read_write.c#L418
+static noinline ssize_t ksu_kernel_read_compat(struct file *file, void *buf, size_t count, loff_t *pos)
 {
 	mm_segment_t old_fs = get_fs();
 	set_fs(get_ds());
@@ -149,7 +166,28 @@ static ssize_t ksu_kernel_read_compat(struct file *file, void *buf, size_t count
 	set_fs(old_fs);
 	return result;
 }
-static ssize_t ksu_kernel_write_compat(struct file *file, const void *buf, size_t count, loff_t *pos)
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+static __nocfi inline ssize_t ksu_kernel_write_compat(struct file *file, const void *buf, size_t count, loff_t *pos)
+{
+	extern typeof(kernel_write) kernel_write;
+	static_assert(!!&kernel_write);
+	assume((void *)&kernel_write != nullptr);
+	if (!__builtin_types_compatible_p(typeof(kernel_write), typeof(ksu_kernel_write_compat)))
+		goto compat;
+
+	return ((typeof(ksu_kernel_write_compat) *)&kernel_write)(file, buf, count, pos);
+
+compat:; // https://github.com/tiann/KernelSU/blob/v0.9.5/kernel/kernel_compat.c
+	loff_t offset = pos ? *pos : 0;
+	ssize_t result = ((ssize_t (*)(struct file *, const char *, size_t, loff_t))&kernel_write)(file, buf, count, offset);
+	if (pos && result > 0)
+		*pos = offset + result;
+	return result;
+}
+#else // https://elixir.bootlin.com/linux/v4.14.336/source/fs/read_write.c#L512
+static noinline ssize_t ksu_kernel_write_compat(struct file *file, const void *buf, size_t count, loff_t *pos)
 {
 	mm_segment_t old_fs = get_fs();
 	set_fs(get_ds());
@@ -157,6 +195,8 @@ static ssize_t ksu_kernel_write_compat(struct file *file, const void *buf, size_
 	set_fs(old_fs);
 	return res;
 }
+#endif
+
 #define kernel_read ksu_kernel_read_compat
 #define kernel_write ksu_kernel_write_compat
 #endif // < 4.14
