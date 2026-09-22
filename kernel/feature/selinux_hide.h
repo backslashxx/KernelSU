@@ -12,6 +12,7 @@
  */
 
 // selinux_hide's list, hazard pointers via C11 atomics
+// context: rcu grace period is unaffordable: https://github.com/FlopKernel-Series/flop_trinket-mi_kernel/commit/c318f003c0bd9f9ef7b6bf4b1f06974c57b4cd32
 
 #ifndef __KSU_H_SELINUX_HIDE
 #define __KSU_H_SELINUX_HIDE
