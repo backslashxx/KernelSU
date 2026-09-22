@@ -148,10 +148,10 @@ static typeof(security_setprocattr) *ksu_setprocattr __read_mostly = OVERLOAD_SE
  * };
  *
  */
-static void ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr, const char *hook_name)
+static noinline int ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr, const char *hook_name)
 {
 	if (!hook_head || !*(void **)hook_head)
-		return;
+		return 1;
 
 	static_assert(sizeof(struct security_hook_list) >= 4 * sizeof(uintptr_t));
 	static_assert(offsetof(struct security_hook_list, hook) == 3 * sizeof(uintptr_t));
@@ -163,17 +163,16 @@ static void ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new
 	uintptr_t current_hook = *(uintptr_t *)hook_slot_addr;
 	if (!current_hook) {
 		pr_info("LSM: No LSM hook on slot\n");
-		return;
+		return 1;
 	}
 
-#if defined(MODULE) || defined(CONFIG_KALLSYMS) // kallsyms strstarts check
+#ifdef CONFIG_KALLSYMS // kallsyms strstr check
 	char symbuf[KSYM_NAME_LEN];
 	sprint_symbol_no_offset(symbuf, current_hook);
 	if (!strstr(symbuf, hook_name)) {
 		pr_info("LSM: expected: %s on 0x%lx mismatches ksym: %s\n", hook_name, current_hook, symbuf);
-		return;
+		return 2;
 	}
-	pr_info("LSM: expected: %s on 0x%lx matches ksym: %s\n", hook_name, current_hook, symbuf);
 #endif
 
 	WRITE_ONCE(*old_ptr, current_hook);
@@ -187,26 +186,82 @@ static void ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new
 	int err = ksu_write_to_readonly_slot(hook_slot_addr, new_ptr);
 	if (err) {
 		pr_err("LSM: ksu_write_to_readonly_slot err: %d\n", err);
-		return;
+		return 1;
 	}
 
 	pr_info("LSM: 0x%lx written to slot\n", new_ptr);
-	return;
+	return 0;
 }
 
-#define LSM_HACK_INIT(hook_name, hook_fn)											\
-do {																\
-	pr_info("LSM: Initializing hook for %s\n", #hook_name);									\
-	ksu_hack_lsm_slot(&security_hook_heads.hook_name, (uintptr_t *)&hook_name##_fn, (uintptr_t)(hook_fn), #hook_name);	\
+#ifdef CONFIG_KALLSYMS
+static noinline void ksu_bruteforce_lsm_slot(uintptr_t *old_ptr, uintptr_t new_ptr, const char *hook_name)
+{
+	extern struct security_hook_heads security_hook_heads;
+
+	uintptr_t *heads_arr = (uintptr_t *)&security_hook_heads;
+	constexpr unsigned int total_slots = sizeof(security_hook_heads) / sizeof(uintptr_t);
+
+	pr_info("LSM: probe %u array slots starting at 0x%lx\n", total_slots, heads_arr);
+
+	uintptr_t first_node = 0;
+	uintptr_t current_hook_fn = 0;
+	unsigned int i = 0;
+
+start_scan:
+	if (!!copy_from_kernel_nofault(&first_node, &heads_arr[i], sizeof(first_node)))
+		goto increment;
+
+	if (!first_node)
+		goto increment;
+
+	uintptr_t hook_slot_addr = first_node + (3 * sizeof(uintptr_t));
+	if (!!copy_from_kernel_nofault(&current_hook_fn, (void *)hook_slot_addr, sizeof(current_hook_fn)))
+		goto increment;
+
+	if (!current_hook_fn)
+		goto increment;
+
+	char symbuf[KSYM_NAME_LEN];
+	sprint_symbol_no_offset(symbuf, current_hook_fn);
+	if (!strstr(symbuf, hook_name))
+		goto increment;
+	
+	pr_info("LSM: tries: %u expected: %s found on 0x%lx matches ksym: %s\n", i, hook_name, current_hook_fn, symbuf);
+	ksu_hack_lsm_slot(&heads_arr[i], old_ptr, new_ptr, hook_name);
+	return;
+
+increment:
+	i++;
+	if (total_slots > i)
+		goto start_scan;
+}
+#else
+#define ksu_bruteforce_lsm_slot(...) do { } while (0)
+#endif
+
+#define LSM_HACK_INIT(hook_name, hook_fn)									\
+do {														\
+	pr_info("LSM: Initializing hook for %s\n", #hook_name);							\
+	void *hook_head = (void *)&security_hook_heads.hook_name;						\
+	int ret = ksu_hack_lsm_slot(hook_head, (uintptr_t *)&hook_name##_fn, (uintptr_t)(hook_fn), #hook_name);	\
+	if (ret == 2)												\
+		ksu_bruteforce_lsm_slot((uintptr_t *)&hook_name##_fn, (uintptr_t)(hook_fn), #hook_name);	\
 } while (0)
 
-#define LSM_HACK_RESTORE(hook_name)										\
-do {														\
-	if (!hook_name##_fn)											\
-		break;												\
-	uintptr_t dummy_int;											\
-	pr_info("LSM: Restoring original hook for %s\n", #hook_name);						\
-	ksu_hack_lsm_slot(&security_hook_heads.hook_name, &dummy_int, (uintptr_t)hook_name##_fn, #hook_name);	\
+#define LSM_HACK_INIT2(hook_name, hook_fn)								\
+do {													\
+	pr_info("LSM: Initializing hook for %s\n", #hook_name);						\
+	ksu_bruteforce_lsm_slot((uintptr_t *)&hook_name##_fn, (uintptr_t)(hook_fn), #hook_name);	\
+} while (0)
+
+#define LSM_HACK_RESTORE(hook_name)								\
+do {												\
+	if (!hook_name##_fn)									\
+		break;										\
+	uintptr_t dummy_int;									\
+	pr_info("LSM: Restoring original hook for %s\n", #hook_name);				\
+	void *hook_head = (void *)&security_hook_heads.hook_name;				\
+	ksu_hack_lsm_slot(hook_head, &dummy_int, (uintptr_t)hook_name##_fn, #hook_name);	\
 } while (0)
 
 static int ksu_restore_file_permission(void *data)
@@ -245,7 +300,7 @@ static __init void ksu_lsm_hook_init(void)
 {
 	LSM_HACK_INIT(task_fix_setuid, ksu_task_fix_setuid);
 	LSM_HACK_INIT(inode_rename, ksu_inode_rename);
-	LSM_HACK_INIT(setprocattr, ksu_setprocattr);
+	LSM_HACK_INIT2(setprocattr, ksu_setprocattr);
 
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	LSM_HACK_INIT(bprm_committing_creds, ksu_bprm_committing_creds);
