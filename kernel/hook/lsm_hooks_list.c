@@ -248,12 +248,6 @@ do {														\
 		ksu_bruteforce_lsm_slot((uintptr_t *)&hook_name##_fn, (uintptr_t)(hook_fn), #hook_name);	\
 } while (0)
 
-#define LSM_HACK_INIT2(hook_name, hook_fn)								\
-do {													\
-	pr_info("LSM: Initializing hook for %s\n", #hook_name);						\
-	ksu_bruteforce_lsm_slot((uintptr_t *)&hook_name##_fn, (uintptr_t)(hook_fn), #hook_name);	\
-} while (0)
-
 #define LSM_HACK_RESTORE(hook_name)								\
 do {												\
 	if (!hook_name##_fn)									\
@@ -300,7 +294,7 @@ static __init void ksu_lsm_hook_init(void)
 {
 	LSM_HACK_INIT(task_fix_setuid, ksu_task_fix_setuid);
 	LSM_HACK_INIT(inode_rename, ksu_inode_rename);
-	LSM_HACK_INIT2(setprocattr, ksu_setprocattr);
+	LSM_HACK_INIT(setprocattr, ksu_setprocattr);
 
 #ifdef CONFIG_KSU_FEATURE_SULOG
 	LSM_HACK_INIT(bprm_committing_creds, ksu_bprm_committing_creds);
