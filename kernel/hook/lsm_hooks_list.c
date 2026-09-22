@@ -148,7 +148,7 @@ static typeof(security_setprocattr) *ksu_setprocattr __read_mostly = OVERLOAD_SE
  * };
  *
  */
-static void ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr)
+static void ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new_ptr, const char *hook_name)
 {
 	if (!hook_head || !*(void **)hook_head)
 		return;
@@ -165,6 +165,16 @@ static void ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new
 		pr_info("LSM: No LSM hook on slot\n");
 		return;
 	}
+
+#if defined(MODULE) || defined(CONFIG_KALLSYMS) // kallsyms strstarts check
+	char symbuf[KSYM_NAME_LEN];
+	sprint_symbol_no_offset(symbuf, current_hook);
+	if (!strstr(symbuf, hook_name)) {
+		pr_info("LSM: expected: %s on 0x%lx mismatches ksym: %s\n", hook_name, current_hook, symbuf);
+		return;
+	}
+	pr_info("LSM: expected: %s on 0x%lx matches ksym: %s\n", hook_name, current_hook, symbuf);
+#endif
 
 	WRITE_ONCE(*old_ptr, current_hook);
 	smp_mb();
@@ -184,10 +194,10 @@ static void ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new
 	return;
 }
 
-#define LSM_HACK_INIT(hook_name, hook_fn)									\
-do {														\
-	pr_info("LSM: Initializing hook for %s\n", #hook_name);							\
-	ksu_hack_lsm_slot(&security_hook_heads.hook_name, (uintptr_t *)&hook_name##_fn, (uintptr_t)(hook_fn));	\
+#define LSM_HACK_INIT(hook_name, hook_fn)											\
+do {																\
+	pr_info("LSM: Initializing hook for %s\n", #hook_name);									\
+	ksu_hack_lsm_slot(&security_hook_heads.hook_name, (uintptr_t *)&hook_name##_fn, (uintptr_t)(hook_fn), #hook_name);	\
 } while (0)
 
 #define LSM_HACK_RESTORE(hook_name)										\
@@ -196,7 +206,7 @@ do {														\
 		break;												\
 	uintptr_t dummy_int;											\
 	pr_info("LSM: Restoring original hook for %s\n", #hook_name);						\
-	ksu_hack_lsm_slot(&security_hook_heads.hook_name, &dummy_int, (uintptr_t)hook_name##_fn);		\
+	ksu_hack_lsm_slot(&security_hook_heads.hook_name, &dummy_int, (uintptr_t)hook_name##_fn, #hook_name);	\
 } while (0)
 
 static int ksu_restore_file_permission(void *data)
