@@ -169,36 +169,27 @@ static ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t c
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
-#if 0 // this does work, but less portable, we can override with d_path + filp_open instead
-static inline struct file *ksu_dentry_open(const struct path *path, int flags, const struct cred *cred)
+static __nocfi noinline struct file *ksu_dentry_open(const struct path *path, int flags, const struct cred *cred)
 {
-	// old dentry_open consumes a reference either on failure or success, we have to take one
-	// see nameidata_to_filp
+	// new type: struct file * dentry_open(const struct path *, int, const struct cred *);
+	// old type: struct file * dentry_open(struct dentry *, struct vfsmount *, int, const struct cred *);
+
+	extern typeof(dentry_open) dentry_open;
+	static_assert(!!&dentry_open);
+
+	if (!__builtin_types_compatible_p(typeof(dentry_open), struct file *(struct dentry *, struct vfsmount *, int, const struct cred *)))
+		goto new_fn;
+
+	// old dentry_open consumes a reference either on failure or success, we have to take one. see nameidata_to_filp
+	struct file *(*fn_old)(struct dentry *, struct vfsmount *, int, const struct cred *) = (void *)&dentry_open;
 	path_get(path); 
-	return dentry_open((*path).dentry, (*path).mnt, flags, cred);
+	return fn_old((*path).dentry, (*path).mnt, flags, cred);
+
+new_fn:;
+	struct file *(*fn_new)(const struct path *, int, const struct cred *) = (void *)&dentry_open;
+	return fn_new(path, flags, cred);
 }
-#endif
-static struct file *ksu_dentry_open_filp(const struct path *path, int flags, const struct cred *cred)
-{
-	char *buf __offstack_flags(PATH_MAX, GFP_KERNEL);
-	if (!buf)
-		return ERR_PTR(-ENOMEM);
-
-	char *realpath = d_path(path, buf, PATH_MAX);
-	if (IS_ERR(realpath) || realpath == buf)
-		return ERR_PTR(-ENOENT);
-
-	const struct cred *c = nullptr;	
-	if (cred && cred != current_cred())
-		c = override_creds(cred);
-
-	struct file *f = filp_open(realpath, flags, 0);
-	if (c)
-		revert_creds(c);
-
-	return f;
-}
-#define dentry_open ksu_dentry_open_filp
+#define dentry_open ksu_dentry_open
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
@@ -416,7 +407,7 @@ __weak void groups_sort(struct group_info *group_info) { } // no-op
 #endif // < 4.12 && !EPOLLIN
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION (3, 15, 0)
-#define task_ppid_nr(a) ({ (pid_t)sys_getppid(); })
+#define task_ppid_nr(__unused) ({ (pid_t)sys_getppid(); })
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION (3, 17, 0)
