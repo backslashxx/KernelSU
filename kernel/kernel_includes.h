@@ -65,6 +65,7 @@
 #include <linux/ioctl.h>
 #include <linux/jump_label.h>
 #include <linux/kernel.h>
+#include <linux/key.h>
 #include <linux/kobject.h>
 #include <linux/kref.h>
 #include <linux/kthread.h>
