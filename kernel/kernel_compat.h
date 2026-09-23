@@ -541,14 +541,6 @@ new_fn:;
 
 #if defined(CONFIG_KEYS) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 
-// up to 5.1, struct key __rcu *session_keyring; /* keyring inherited over fork */
-// so we need to grab this using rcu_dereference
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
-static inline struct key *ksu_get_current_session_keyring() { return rcu_dereference(current->cred->session_keyring); }
-#else
-static inline struct key *ksu_get_current_session_keyring() { return rcu_dereference(current->cred->tgcred->session_keyring); }
-#endif
-
 static void ksu_grab_init_session_keyring()
 {
 	extern struct cred* ksu_cred;
@@ -566,11 +558,11 @@ static void ksu_grab_init_session_keyring()
 		return;
 
 	// now we are sure that this is the key we want
-	struct key *keyring = ksu_get_current_session_keyring();
-	if (!keyring)
+	key_ref_t key_ref = lookup_user_key(KEY_SPEC_SESSION_KEYRING, 0, 0);
+	if (IS_ERR(key_ref))
 		return;
 
-	init_session_keyring = key_get(keyring);
+	init_session_keyring = key_ref_to_ptr(key_ref);
 
 	pr_info("%s: init_session_keyring: 0x%lx \n", __func__, (uintptr_t)init_session_keyring);
 	install_session_keyring_to_cred(ksu_cred, init_session_keyring);
