@@ -541,11 +541,22 @@ new_fn:;
 
 #if defined(CONFIG_KEYS) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 
+#define KEY_SPEC_SESSION_KEYRING	-3	/* - key ID for session-specific keyring */
+
+// torvalds/linux 8c0637e950d68933a67f7438f779d79b049b5e5c
+#ifdef KEY_DEFER_PERM_CHECK 
+extern key_ref_t lookup_user_key(key_serial_t id, unsigned long lflags, enum key_need_perm need_perm);
+#define KSU_KEY_ALLPERM KEY_DEFER_PERM_CHECK
+#else
+extern key_ref_t lookup_user_key(key_serial_t id, unsigned long lflags, key_perm_t perm);
+#define KSU_KEY_ALLPERM 0
+#endif
+
 static void ksu_grab_init_session_keyring()
 {
-	extern struct cred* ksu_cred;
-	extern bool is_init(const struct cred* cred);
 	extern int install_session_keyring_to_cred(struct cred *, struct key *);
+	extern bool is_init(const struct cred* cred);
+	extern struct cred* ksu_cred;
 	static struct key *init_session_keyring = nullptr;
 
 	if (init_session_keyring)
@@ -558,7 +569,7 @@ static void ksu_grab_init_session_keyring()
 		return;
 
 	// now we are sure that this is the key we want
-	key_ref_t key_ref = lookup_user_key(KEY_SPEC_SESSION_KEYRING, 0, 0);
+	key_ref_t key_ref = lookup_user_key(KEY_SPEC_SESSION_KEYRING, 0, KSU_KEY_ALLPERM);
 	if (IS_ERR(key_ref))
 		return;
 
