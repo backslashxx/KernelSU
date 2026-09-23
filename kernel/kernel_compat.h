@@ -398,9 +398,23 @@ static ssize_t ksu_strscpy_pad(char *dest, const char *src, size_t count)
 #define d_is_reg(dentry) S_ISREG((dentry)->d_inode->i_mode)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0) && !defined(KSU_HAS_ITERATE_DIR)
-struct dir_context { const filldir_t actor; loff_t pos; };
-#define iterate_dir(file, ctx) vfs_readdir(file, (ctx)->actor, ctx)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0)
+struct dir_context;
+struct ksu_dir_context { const filldir_t actor; loff_t pos; };
+static __nocfi noinline int ksu_iterate_dir(struct file *file, struct ksu_dir_context *ctx)
+{
+	extern int vfs_readdir(struct file *file, filldir_t filler, void *buf) __weak;
+	if (!!vfs_readdir)
+		return vfs_readdir(file, ctx->actor, ctx);
+
+	extern int iterate_dir(struct file *file, struct dir_context *ctx) __weak;
+	if (!!iterate_dir)
+		return ((typeof(iterate_dir) *)&iterate_dir)(file, (struct dir_context *)ctx);
+
+	return -ENOSYS;
+}
+#define iterate_dir(file, ctx) ksu_iterate_dir(file, (struct ksu_dir_context *)(ctx))
+#define dir_context ksu_dir_context
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0)
