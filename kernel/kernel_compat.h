@@ -539,7 +539,7 @@ new_fn:;
 #define alloc_uid(kuid) ksu_alloc_uid(ksu_get_uid_t(kuid))
 #endif
 
-#if defined(CONFIG_KEYS) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+#if 1 // defined(CONFIG_KEYS) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 
 #define KEY_SPEC_SESSION_KEYRING	-3	/* - key ID for session-specific keyring */
 
