@@ -21,6 +21,7 @@ static const struct ksu_feature_handler kernel_umount_handler = {
 	.set_handler = kernel_umount_feature_set,
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 extern int path_umount(struct path *path, int flags);
 
 static inline void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
@@ -29,6 +30,31 @@ static inline void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 	if (err)
 		pr_info("umount %s failed: %d\n", mnt, err);
 }
+#else /* we play 'guess if backported' */
+static __nocfi inline void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
+{
+	extern int path_umount(struct path *path, int flags) __weak;
+	int err;
+#ifdef MODULE
+	assume(!path_umount);
+#endif
+	if (!path_umount)
+		goto syscall;
+
+	err = path_umount(path, flags);
+	goto out;
+
+syscall:;
+	mm_segment_t old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	err = (int)ksyscall(umount, (const char __user *)mnt, flags);
+	set_fs(old_fs);
+	path_put(path);  // release caller's ref
+out:
+	if (err)
+		pr_info("umount %s failed: %d\n", mnt, err);
+}
+#endif
 
 static inline void try_umount(const char *mnt, int flags)
 {
