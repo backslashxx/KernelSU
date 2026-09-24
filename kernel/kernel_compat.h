@@ -250,6 +250,7 @@ __weak int path_mount(const char *dev_name, struct path *path, const char *type_
 }
 #endif
 
+#if 0 // unused! only kept for reference purposes!
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 static __always_inline long ksu_sys_umount(char __user *name, int flags);
 __weak int path_umount(struct path *path, int flags)
@@ -271,6 +272,7 @@ out: // release ref here! user_path_at increases it then only cleans for itself
 	return ret;
 }
 #endif // < 5.9
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0) && !defined(replace_fops)
 #define replace_fops(f, fops) do {		\
