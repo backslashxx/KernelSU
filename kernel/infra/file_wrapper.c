@@ -3,6 +3,8 @@ struct ksu_file_wrapper {
 	struct file_operations ops;
 };
 
+#pragma clang attribute push (__attribute__((overloadable)), apply_to = function)
+
 static struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp);
 
 static int ksu_wrapper_open(struct inode *ino, struct file *fp)
@@ -429,6 +431,8 @@ static const struct dentry_operations ksu_file_wrapper_d_ops = {
 	.d_dname = ksu_wrapper_d_dname,
 	.d_release = ksu_wrapper_d_release
 };
+
+#pragma clang attribute pop
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
 #define ksu_anon_inode_create_getfile_compat anon_inode_create_getfile
