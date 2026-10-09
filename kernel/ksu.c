@@ -18,6 +18,8 @@
 #endif
 #endif // MODULE
 
+#pragma clang attribute push (__attribute__((no_sanitize("cfi"))), apply_to = function)
+
 #include "kernel_includes.h"
 
 // selinux includes
@@ -153,6 +155,8 @@
 #if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
 #include "hook/kp_ksud.c"
 #endif
+
+#pragma clang attribute pop
 
 // track backports and other quirks here
 // ref: kernel_compat.c, Makefile
