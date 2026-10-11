@@ -19,22 +19,17 @@ static int __init kernelsu_init(void)
 		return -ENOSYS;
 	}
 
+	// register features
 	ksu_feature_init();
+	ksu_sucompat_init();
+	ksu_kernel_umount_init();
+	ksu_selinux_hide_init();
 
 	ksu_supercalls_init();
 
-	ksu_sucompat_init(); // so the feature is registered
-
-	ksu_kernel_umount_init(); // so the feature is registered
-
-	ksu_selinux_hide_init(); // so the feature is registered
-
 	ksu_allowlist_init();
-
 	ksu_throne_tracker_init();
-
 	ksu_ksud_init();
-
 	ksu_file_wrapper_init();
 
 	return 0;
