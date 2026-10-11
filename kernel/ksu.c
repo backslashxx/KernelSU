@@ -294,10 +294,15 @@ device_initcall(kernelsu_init);
 module_param(allow_shell, bool, 0); 
 #endif
 
+// module_blacklist
+#include "feature/module_blacklist.h"
+#include "feature/module_blacklist.c"
+
 static int __init kernelsu_lkm_init(void)
 {
 	kernelsu_init();
 
+	ksu_module_blacklist_init();
 	// list_del(&THIS_MODULE->list);
 	kobject_del(&THIS_MODULE->mkobj.kobj); // tiann/KernelSU fefb02e
 
