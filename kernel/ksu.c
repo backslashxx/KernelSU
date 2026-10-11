@@ -87,6 +87,11 @@
 #include "infra/file_wrapper.c"
 #include "infra/event_queue.c"
 
+#if defined(CONFIG_KALLSYMS_ALL) && defined(CONFIG_MODULES)
+#include "feature/module_blacklist.h"
+#include "feature/module_blacklist.c"
+#endif
+
 #include "feature/adb_root.c"
 #include "feature/kernel_umount.c"
 #include "feature/selinux_hide.c"
@@ -156,6 +161,10 @@ static int __init kernelsu_init(void)
 		pr_err("prepare cred failed!\n");
 		return -ENOSYS;
 	}
+
+#if defined(CONFIG_KALLSYMS_ALL) && defined(CONFIG_MODULES)
+	ksu_module_blacklist_init(); // Block modules early, before vendor modules are loaded in second stage.
+#endif
 
 	// register features
 	ksu_feature_init();

@@ -8,6 +8,8 @@
 // cmdline (built-in). Names use the kernel form (underscores, e.g.
 // `oplus_secure_guard`).
 
+#define KSU_MODULES_TO_BLOCK "ksu,kernelsu"
+
 static char block_modules[256];
 
 // The param may be parsed before the slab allocator is up (built-in), so copy
@@ -26,7 +28,9 @@ static int block_modules_param_set(const char *val, const struct kernel_param *k
 
 static const struct kernel_param_ops block_modules_param_ops = {
 	// A bare `block_modules` would otherwise fail parse_args() and the load
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
 	.flags = KERNEL_PARAM_OPS_FL_NOARG,
+#endif
 	.set = block_modules_param_set,
 };
 module_param_cb(block_modules, &block_modules_param_ops, NULL, 0);
@@ -39,10 +43,15 @@ void __init ksu_module_blacklist_init(void)
 	char *merged;
 	size_t existing_len;
 
-	if (!block_modules[0])
-		return;
+	static_assert(sizeof(KSU_MODULES_TO_BLOCK) > 0);
+	char combined[256 + sizeof(KSU_MODULES_TO_BLOCK)];
 
-	native_blacklist = (char **)find_kernel_symbol_exact("module_blacklist");
+	if (!block_modules[0])
+		snprintf(combined, sizeof(combined), "%s", KSU_MODULES_TO_BLOCK);
+	else
+		snprintf(combined, sizeof(combined), "%s,%s", KSU_MODULES_TO_BLOCK, block_modules);
+
+	native_blacklist = (char **)kallsyms_lookup_name("module_blacklist");
 	if (!native_blacklist) {
 		pr_warn("module_blacklist: symbol not found, cannot block modules\n");
 		return;
@@ -52,7 +61,7 @@ void __init ksu_module_blacklist_init(void)
 	existing_len = existing ? strlen(existing) : 0;
 
 	// Merge with any existing blacklist (e.g. one set on the kernel cmdline).
-	merged = kasprintf(GFP_KERNEL, "%s%s%s", existing_len ? existing : "", existing_len ? "," : "", block_modules);
+	merged = kasprintf(GFP_KERNEL, "%s%s%s", existing_len ? existing : "", existing_len ? "," : "", combined);
 	if (!merged) {
 		pr_err("module_blacklist: cannot allocate blacklist\n");
 		return;
@@ -67,6 +76,8 @@ void __init ksu_module_blacklist_init(void)
 	kick_all_cpus_sync();
 	pr_info("module_blacklist: blocking modules: %s\n", merged);
 }
+
+#undef KSU_MODULES_TO_BLOCK
 
 void __exit ksu_module_blacklist_exit(void)
 {
