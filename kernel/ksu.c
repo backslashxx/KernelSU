@@ -50,6 +50,10 @@
 #include "selinux/selinux.h"
 #include "selinux/sepolicy.h"
 
+#ifdef CONFIG_KSU_DISABLE_32BIT_HOOKS
+#undef CONFIG_COMPAT
+#endif
+
 #ifdef CONFIG_KPROBES
 #include "downstream/kprobes_common.h"
 #endif
