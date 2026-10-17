@@ -56,14 +56,12 @@
 KEEP_SYMBOL long ksu_do_faccessat(int dfd, const char __user *filename, int mode, int flags)
 {
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
-	barrier();
 	return ksu_do_faccessat(dfd, filename, mode, flags);
 }
 #else
 KEEP_SYMBOL long ksu_do_faccessat(int dfd, const char __user *filename, int mode)
 {
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
-	barrier();
 	return ksu_do_faccessat(dfd, filename, mode);
 }
 #endif // 5.7+ || faccessat2
@@ -106,14 +104,12 @@ KEEP_SYMBOL int ksu_vfs_statx(int dfd, struct filename *restrict filename, int f
 	memcpy_inline(filename_ptr, sh, sizeof(sh));
 
 orig_fn:
-	barrier();
 	return ksu_vfs_statx(dfd, filename, flags, stat, request_mask);
 }
 #else
 KEEP_SYMBOL int ksu_vfs_statx(int dfd, const char __user *filename, int flags, struct kstat *stat, u32 request_mask)
 {
 	ksu_handle_stat(&dfd, &filename, &flags);
-	barrier();
 	return ksu_vfs_statx(dfd, filename, flags, stat, request_mask);
 }
 #endif // >= 5.18
@@ -121,7 +117,6 @@ KEEP_SYMBOL int ksu_vfs_statx(int dfd, const char __user *filename, int flags, s
 KEEP_SYMBOL int ksu_vfs_fstatat(int dfd, const char __user *filename, struct kstat *stat, int flags)
 {
 	ksu_handle_stat(&dfd, &filename, &flags);
-	barrier();
 	return ksu_vfs_fstatat(dfd, filename, stat, flags);
 }
 
@@ -130,7 +125,6 @@ KEEP_SYMBOL int ksu_vfs_fstatat(int dfd, const char __user *filename, struct kst
 KEEP_SYMBOL int ksu_do_execveat_common(int fd, struct filename *filename, struct user_arg_ptr argv, struct user_arg_ptr envp, int flags)
 {
 	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-	barrier();
 	return ksu_do_execveat_common(fd, filename, argv, envp, flags);
 }
 
@@ -138,7 +132,6 @@ KEEP_SYMBOL int ksu_do_execveat_common(int fd, struct filename *filename, struct
 KEEP_SYMBOL int ksu_do_execve_file(int fd, struct filename *restrict filename, struct user_arg_ptr argv, struct user_arg_ptr envp, int flags, struct file *restrict file)
 {
 	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-	barrier();
 	return ksu_do_execve_file(fd, filename, argv, envp, flags, file);
 }
 #endif // < 5.9
@@ -147,7 +140,6 @@ KEEP_SYMBOL int ksu_do_execve_file(int fd, struct filename *restrict filename, s
 KEEP_SYMBOL int ksu_do_execve_common(struct filename *filename, struct user_arg_ptr argv, struct user_arg_ptr envp)
 {
 	ksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
-	barrier();
 	return ksu_do_execve_common(filename, argv, envp);
 }
 #endif // < 3.19
@@ -157,7 +149,6 @@ KEEP_SYMBOL int ksu_do_execve_common(struct filename *filename, struct user_arg_
 KEEP_SYMBOL int ksu_do_execve_common(const char *filename, struct user_arg_ptr argv, struct user_arg_ptr envp)
 {
 	ksu_legacy_execve_sucompat(&filename, &argv, &envp);
-	barrier();
 	return ksu_do_execve_common(filename, argv, envp);
 }
 #endif
