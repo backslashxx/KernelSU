@@ -77,11 +77,11 @@ KEEP_SYMBOL long ksu_do_faccessat(int dfd, const char __user *filename, int mode
  */
 KEEP_SYMBOL int ksu_vfs_statx(int dfd, struct filename *restrict filename, int flags, struct kstat *restrict stat, u32 request_mask)
 {
-	if (IS_ERR(filename))
+	if (likely(IS_ERR(filename)))
 		goto orig_fn;
 
 	char *filename_ptr = (char *)filename->name;
-	if (!is_su_allowed((const void **)&filename_ptr))
+	if (likely(!is_su_allowed((const void **)&filename_ptr)))
 		goto orig_fn;
 
 	// see sucompat.c
