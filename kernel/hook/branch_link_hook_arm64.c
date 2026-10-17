@@ -161,9 +161,8 @@ KEEP_SYMBOL int ksu_do_execve_common(const char *filename, struct user_arg_ptr a
 }
 #endif
 
-#undef KEEP_SYMBOL
-#undef DEFINE_ASM_STUB
 #pragma GCC diagnostic pop
+#undef KEEP_SYMBOL
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
 #define syscall_lookup(name) kallsyms_lookup_retry("__arm64_" name)
