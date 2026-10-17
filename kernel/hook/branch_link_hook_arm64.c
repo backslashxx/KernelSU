@@ -170,7 +170,10 @@ KEEP_SYMBOL_NO_TAIL int ksu_do_execve_common(const char *filename, struct user_a
 #ifdef CONFIG_MODULES
 #define kernel_function_lookup(name) kallsyms_lookup_retry(#name)
 #else
-#define kernel_function_lookup(name) (uintptr_t)&name
+#define kernel_function_lookup(name) ({ 						\
+	pr_info("kernel_function_lookup: %s addr: 0x%lx\n", #name, (uintptr_t)&name);	\
+	(uintptr_t)&name; 								\
+})
 #endif
 
 #define ksu_get_ksym_size32(addr)	ksu_get_ksym_size(addr, (32 * sizeof(uint32_t)))
