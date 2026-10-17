@@ -180,9 +180,11 @@ KEEP_SYMBOL int ksu_do_execve_common(const char *filename, struct user_arg_ptr a
 #define ksu_get_ksym_size32(addr)	ksu_get_ksym_size(addr, (32 * sizeof(uint32_t)))
 
 // patch the first call of the hook to itself
-#define ksu_self_patch_hook(hook_fn, tgt) ({ 					\
-	uintptr_t hook_p = kernel_function_lookup(hook_fn);			\
-	arm64_b_or_bl_patch(hook_p, ksu_get_ksym_size32(hook_p), hook_p, tgt); 	\
+#define ksu_self_patch_hook(hook_fn, tgt) ({							\
+	uintptr_t hook_p = kernel_function_lookup(hook_fn);					\
+	int ret = arm64_b_or_bl_patch(hook_p, ksu_get_ksym_size32(hook_p), hook_p, tgt);	\
+	pr_info("patch_hook: %s ret: %d \n", #hook_fn, ret);					\
+	ret;											\
 })
 
 static int bl_hook_faccessat(void *data)
@@ -200,7 +202,6 @@ static int bl_hook_faccessat(void *data)
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_do_faccessat, symbol_addr);
-	pr_info("patch_hook: ksu_do_faccessat ret: %d \n", ret);
 	if (ret)
 		return ret;
 
@@ -237,7 +238,6 @@ static int bl_hook_newfstatat(void *data)
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_vfs_statx, symbol_addr);
-	pr_info("patch_hook: ksu_vfs_statx ret: %d \n", ret);
 	if (ret)
 		return ret;
 
@@ -275,7 +275,6 @@ skip_single_hook:
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_vfs_statx, symbol_addr);
-	pr_info("patch_hook: ksu_vfs_statx ret: %d \n", ret);
 	if (ret)
 		return ret;
 
@@ -291,7 +290,6 @@ hook2:
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_vfs_fstatat, symbol_addr);
-	pr_info("patch_hook: ksu_vfs_fstatat ret: %d \n", ret);
 	if (ret)
 		return ret;
 
@@ -352,7 +350,6 @@ static int bl_hook_execve(void *data)
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_do_execveat_common, symbol_addr);
-	pr_info("patch_hook: ksu_do_execveat_common ret: %d \n", ret);
 	if (ret)
 		return ret;
 
@@ -373,7 +370,6 @@ hook2:
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_do_execve_file, symbol_addr);
-	pr_info("patch_hook: ksu_do_execve_file ret: %d \n", ret);
 	if (ret)
 		return ret;
 
@@ -394,7 +390,6 @@ hook3:
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_do_execve_common, symbol_addr);
-	pr_info("patch_hook: ksu_do_execve_common ret: %d \n", ret);
 	if (ret)
 		return ret;
 
@@ -472,7 +467,6 @@ static int bl_hook_execve(void *data)
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_do_execve_common, symbol_addr);
-	pr_info("patch_hook: ksu_do_execve_common ret: %d \n", ret);
 	if (ret)
 		return ret;
 
