@@ -33,6 +33,7 @@
  *	- smaller stub code (260728)
  *	- smaller stub code p.2, gcc fix, thx to lh_mouse @ #gcc (260728)
  *	- limit insn scan to symbol size or 32 insn (260809)
+ *	- recurse. have the hook call itself and patch that branch it makes to itself. (261017)
  *
  * NOTES:
  *	- not everyone is expected to understand how this works.
