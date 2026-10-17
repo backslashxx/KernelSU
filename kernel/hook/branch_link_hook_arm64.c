@@ -498,6 +498,7 @@ unhook_sct_compat:
 }
 #endif
 
+#undef ksu_self_patch_hook
 #undef kernel_function_lookup
 #undef syscall_lookup
 #undef ksu_get_ksym_size32
