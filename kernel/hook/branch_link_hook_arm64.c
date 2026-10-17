@@ -49,6 +49,7 @@
 
 #define KEEP_SYMBOL __attribute__((used)) noinline
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic ignored "-Winfinite-recursion"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0) || defined(KSU_HAS_FACCESSAT2)
