@@ -5,16 +5,10 @@ extern const char ksu_preinit_runner_start[];
 extern const char ksu_preinit_runner_end[];
 
 static bool ksu_preinit_enabled = true;
-module_param_named(preinit, ksu_preinit_enabled, bool, 0);
+// module_param_named(preinit, ksu_preinit_enabled, bool, 0);
 
-// Owned here until PID 1 executes it; the init section holding the blob is
-// gone by then, so it lives in an unlinked shmem file.
-static struct file *ksu_preinit_file;
-
-void __init ksu_preinit_init(void)
+void ksu_preinit_init(void)
 {
-	size_t size = ksu_preinit_runner_end - ksu_preinit_runner_start;
-	struct file *file;
 	loff_t pos = 0;
 	ssize_t written;
 
@@ -22,64 +16,37 @@ void __init ksu_preinit_init(void)
 		pr_info("preinit: disabled\n");
 		return;
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 19, 0)
-	file = shmem_file_setup("ksu_preinit", size, EMPTY_VMA_FLAGS);
-#else
-	file = shmem_file_setup("ksu_preinit", size, 0);
-#endif
+
+	struct file *file = filp_open("/dev/ksu_preinit", O_WRONLY | O_CREAT | O_TRUNC, 0700);
 	if (IS_ERR(file)) {
-		pr_err("preinit: shmem_file_setup failed: %ld\n", PTR_ERR(file));
+		pr_err("preinit: failed to create runner in /dev: %ld\n", PTR_ERR(file));
 		return;
 	}
 
-	written = kernel_write(file, ksu_preinit_runner_start, size, &pos);
-	if (written != size) {
-		pr_err("preinit: write runner failed: %zd\n", written);
-		fput(file);
+	written = kernel_write(file, runner_binary, runner_binary_len, &pos);
+	filp_close(file, NULL);
+
+	if (written != (ssize_t)runner_binary_len) {
+		pr_err("preinit: write runner failed: %zd / %u\n", written, runner_binary_len);
 		return;
 	}
 
-	ksu_preinit_file = file;
-	pr_info("preinit: runner staged (%zu bytes)\n", size);
+	pr_info("preinit: runner staged to /dev/ksu_preinit (%u bytes)\n", runner_binary_len);
 }
 
 bool ksu_preinit_enabled_param(void)
 {
-	return ksu_preinit_enabled;
 }
 
 void ksu_preinit_release(void)
 {
-	struct file *file = xchg(&ksu_preinit_file, NULL);
-
-	if (file) {
-		pr_info("preinit: selinux_setup not seen, dropping runner\n");
-		fput(file);
-	}
 }
 
 void ksu_preinit_exit(void)
 {
-	ksu_preinit_release();
 }
 
-static bool is_selinux_setup(const char __user *const __user *argv_user)
-{
-	static const char expected[] = "selinux_setup";
-	const char __user *arg;
-	char buf[sizeof(expected) + 1];
-
-	if (!argv_user || get_user(arg, argv_user + 1) || !arg)
-		return false;
-
-	memset(buf, 0, sizeof(buf));
-	if (strncpy_from_user(buf, arg, sizeof(buf) - 1) < 0)
-		return false;
-
-	return !strcmp(buf, expected);
-}
-
-// TODO: move to post sys_mount of /metadata
+#if 0
 bool ksu_preinit_handle_execve(const char __user **filename_user, const char __user *const __user *argv_user,
 							   int orig_nr, struct pt_regs *regs, long *ret)
 {
@@ -145,3 +112,4 @@ bool ksu_preinit_handle_execve(const char __user **filename_user, const char __u
 	}
 	return true;
 }
+#endif
