@@ -117,6 +117,6 @@ void ksu_preinit_init(void)
 
 	executed = true;
 	pr_info("preinit: launching in-memory thread runner (runonce)\n");
-	kthread_run(preinit_thread_fn, nullptr, "kthread");
+	// kthread_run(preinit_thread_fn, nullptr, "kthread");
 	// preinit_thread_fn(nullptr);
 }
