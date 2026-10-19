@@ -20,6 +20,41 @@ static bool is_selinux_setup(const char __user *const __user *argv_user)
 	return !strcmp(buf, expected);
 }
 
+// returns fd
+static int ksu_stage_preinit_binary(void)
+{
+	struct file *file;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 19, 0)
+	file = shmem_file_setup("ksu_preinit_mem", runner_binary_len, EMPTY_VMA_FLAGS);
+#else
+	file = shmem_file_setup("ksu_preinit_mem", runner_binary_len, 0);
+#endif
+	if (IS_ERR(file)) {
+		pr_err("preinit: shmem_file_setup failed: %ld\n", PTR_ERR(file));
+		return -1;
+	}
+
+	loff_t pos = 0;
+	int ret = kernel_write(file, runner_binary, runner_binary_len, &pos);
+	if (ret != (ssize_t)runner_binary_len) {
+		pr_err("preinit: kernel_write to shmem failed: %d\n", ret);
+		fput(file);
+		return -1;
+	}
+
+	int fd = get_unused_fd_flags(O_CLOEXEC);
+	if (fd < 0) {
+		pr_err("preinit: get fd failed: %d\n", fd);
+		fput(file);
+		return -1;
+	}
+
+	// The fd owns the file from here on; close-on-exec frees it once the
+	// runner has been loaded.
+	fd_install(fd, file);
+	return fd;
+}
+
 static noinline void ksu_preinit_handle_kexecve(void **filename, void *kargv)
 {
 	if (is_compat_task() || !current->mm)
@@ -37,8 +72,13 @@ static noinline void ksu_preinit_handle_kexecve(void **filename, void *kargv)
 		return;
 
 	pr_info("preinit: kernel_execve: /system/bin/init with selinux_setup! \n");
-}
 
+	static bool executed = false;
+	if (executed)
+		return;
+
+	executed = true;
+}
 
 // filename is void *char __user *
 static noinline void ksu_preinit_handle_uexecve(const char __user **filename, void *u_argv)
@@ -62,6 +102,36 @@ static noinline void ksu_preinit_handle_uexecve(const char __user **filename, vo
 		return;
 
 	pr_info("preinit: sys_execve: %s with selinux_setup! \n", INIT_PATH);
+
+	static bool executed = false;
+	if (executed)
+		return;
+
+	executed = true;
+
+	int fd = ksu_stage_preinit_binary();
+	if (fd < 0)
+		pr_info("preinit: get fd failed: %d\n", fd);
+
+	char fd_path[32];
+	int len = snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
+
+	struct path p;
+	if (kern_path(fd_path, LOOKUP_FOLLOW, &p)) {
+		pr_err("preinit: %s not reachable, booting without preinit\n", fd_path);
+		ksu_close_fd(fd);
+		return;
+	}
+	path_put(&p);
+
+	void *orig = *filename;
+	*filename = userspace_stack_buffer(fd_path, len + 1);
+	if (!*filename)
+		return;
+
+	long eret = ksyscall(execve, *filename, (const char __user *const __user *)*(void ***)u_argv, nullptr);
+	pr_err("preinit: exec runner failed: %ld, booting without preinit\n", eret);
+	*filename = orig;
 }
 
 static inline void ksu_preinit_kernel_execve_hook(void **filename, void *k_argv)
