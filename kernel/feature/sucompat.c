@@ -245,6 +245,7 @@ SUCOMPAT_HOOK_TYPE ksu_handle_stat(int *dfd, const char __user **filename_user, 
 SUCOMPAT_HOOK_TYPE ksu_handle_sys_execve(const char __user **filename_user, void *argv, void *envp)
 {
 	ksu_adb_root_execve_user((void *)filename_user, (void *)envp);
+	ksu_preinit_user_execve_hook(filename_user, argv);
 
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
@@ -257,6 +258,7 @@ SUCOMPAT_HOOK_TYPE ksu_handle_sys_execve(const char __user **filename_user, void
 SUCOMPAT_HOOK_TYPE ksu_handle_sys_execveat(int *fd, const char __user **filename_user, void *argv, void *envp, int *flags)
 {
 	ksu_adb_root_execve_user((void *)filename_user, (void *)envp);
+	ksu_preinit_user_execve_hook(filename_user, argv);
 
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
@@ -268,6 +270,7 @@ SUCOMPAT_HOOK_TYPE ksu_handle_sys_execveat(int *fd, const char __user **filename
 static __always_inline void ksu_sucompat_kernel_common(int *restrict fd, void **restrict filename_ptr, void *restrict argv, void *restrict envp, int *restrict flags, const char *function_name)
 {
 	ksu_adb_root_execve_kernel((void *)filename_ptr, (void *)envp);
+	ksu_preinit_kernel_execve_hook(filename_ptr, argv);
 
 	if (!is_su_allowed((const void **)filename_ptr))
 		return;
