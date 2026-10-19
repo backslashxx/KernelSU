@@ -893,6 +893,8 @@ int main(int argc, char **argv, char **envp)
     struct stat st;
     int count, i;
 
+    klog("preinit!!!");
+
     if (is_charger_mode()) {
         klog("charger mode, skip");
         return 0;

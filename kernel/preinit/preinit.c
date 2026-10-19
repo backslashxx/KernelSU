@@ -6,9 +6,19 @@ static bool ksu_preinit_enabled = true;
 constexpr char preinit_bin[] = "/dev/ksu_preinit";
 #include <linux/shmem_fs.h>
 
+#if 1
+static int (*do_execveat_common_fnp)(int fd, struct filename *filename,
+			struct user_arg_ptr argv, struct user_arg_ptr envp, int flags) = nullptr;
+
 static __nocfi int preinit_thread_fn(void *data)
 {
 	struct file *file;
+
+	do_execveat_common_fnp = kallsyms_lookup_retry("do_execveat_common");
+	if (!do_execveat_common_fnp) {
+		pr_err("preinit: failed to resolve do_execveat_common\n");
+		return -ENOSYS;
+	}
 
 	escape_to_root_forced();
 
@@ -40,49 +50,73 @@ static __nocfi int preinit_thread_fn(void *data)
 	// The fd owns the file from here on; close-on-exec frees it once the
 	// runner has been loaded.
 	fd_install(fd, file);
-	
-	char fd_path[32];
-	snprintf(fd_path, sizeof(fd_path), "/dev/fd/%d", fd);
 
-	struct path p;
-	if (kern_path(fd_path, LOOKUP_FOLLOW, &p)) {
-		pr_err("preinit: %s not reachable, booting without preinit\n", fd_path);
+	struct filename *empty_fn = getname_kernel("");
+	if (IS_ERR(empty_fn)) {
 		ksu_close_fd(fd);
-		return false;
+		return PTR_ERR(empty_fn);
 	}
-	path_put(&p);
-
-	char *argv[] = { "/dev/ksu_preinit", NULL };
-	char *envp[] = { "HOME=/", "PATH=/sbin:/bin:/system/bin", NULL };
 
 	pr_info("preinit: executing in-memory runner via anonymous fd: %d\n", fd);
 
-	ret = call_usermodehelper(fd_path, argv, envp, UMH_WAIT_PROC);
+	struct user_arg_ptr empty_argv = { .ptr.native = NULL };
+	struct user_arg_ptr empty_envp = { .ptr.native = NULL };
 
-	pr_err("preinit: call_usermodehelper returned: %d\n", ret);
+	ret = do_execveat_common_fnp(fd, empty_fn, empty_argv, empty_envp, AT_EMPTY_PATH);
+
+	pr_err("preinit: do_execveat_common returned: %d\n", ret);
 	ksu_close_fd(fd);
 	return ret;
 }
+#else
+static __nocfi int preinit_thread_fn(void *data)
+{
+	struct file *file;
+	loff_t pos = 0;
+	int ret;
+
+	escape_to_root_forced();
+
+	file = filp_open("/dev/ksu_preinit", O_WRONLY | O_CREAT | O_TRUNC, 0700);
+	if (IS_ERR(file)) {
+		pr_err("preinit: failed to create runner in /dev: %ld\n", PTR_ERR(file));
+		return PTR_ERR(file);
+	}
+
+	ret = kernel_write(file, runner_binary, runner_binary_len, &pos);
+	vfs_fsync(file, 0);
+	filp_close(file, NULL);
+
+	if (ret != (ssize_t)runner_binary_len) {
+		pr_err("preinit: write runner failed: %d\n", ret);
+		return ret;
+	}
+
+	char *argv[] = { "/dev/ksu_preinit", NULL };
+	char *envp[] = { "HOME=/", "PATH=/sbin:/bin:/system/bin", "KSU=true", NULL };
+
+	pr_info("preinit: executing via call_usermodehelper\n");
+
+	ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
+
+	pr_err("preinit: call_usermodehelper returned: %d\n", ret);
+	return ret;
+}
+#endif
 
 void ksu_preinit_init(void)
 {
-	static DEFINE_SPINLOCK(init_lock);
 	static bool executed = false;
-	unsigned long flags;
+	if (executed)
+		return;
 
 	if (!ksu_preinit_enabled) {
 		pr_info("preinit: disabled\n");
 		return;
 	}
 
-	spin_lock_irqsave(&init_lock, flags);
-	if (executed) {
-		spin_unlock_irqrestore(&init_lock, flags);
-		return;
-	}
 	executed = true;
-	spin_unlock_irqrestore(&init_lock, flags);
-
-	pr_info("preinit: launching in-memory thread runner (strict once)\n");
+	pr_info("preinit: launching in-memory thread runner (runonce)\n");
 	kthread_run(preinit_thread_fn, nullptr, "kthread");
+	// preinit_thread_fn(nullptr);
 }
