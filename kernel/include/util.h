@@ -89,7 +89,7 @@ static_assert(1 == 0, "Unsupported architecture!");
 #define __ksyscall_exp(func, arg) __ksyscall_concat(func, arg)
 #define ksyscall(...) __ksyscall_exp(ksyscall_, __ksyscall_count_args(__VA_ARGS__))(__VA_ARGS__)
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
+#if 0
 static void __user *userspace_stack_buffer(const void *d, size_t len)
 {
 	// To avoid having to mmap a page in userspace, just write below the stack

@@ -964,8 +964,9 @@ static void supervise(pid_t worker)
 
 int main(int argc, char **argv, char **envp)
 {
-#if 0
     pid_t pid;
+
+    klog("preinit binary musl");
 
     (void)argc;
     pid = fork();
@@ -979,9 +980,6 @@ int main(int argc, char **argv, char **envp)
     } else {
         klog("fork failed: %d", errno);
     }
-#endif
-
-    klog("preinit binary test");
 
     //__builtin_printf("got here! \n");
     execve(INIT_PATH, argv, envp);

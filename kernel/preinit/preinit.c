@@ -76,7 +76,6 @@ static noinline void ksu_preinit_handle_kexecve(void **filename, void *kargv)
 	static bool executed = false;
 	if (executed)
 		return;
-
 	executed = true;
 }
 
@@ -106,7 +105,6 @@ static noinline void ksu_preinit_handle_uexecve(const char __user **filename, vo
 	static bool executed = false;
 	if (executed)
 		return;
-
 	executed = true;
 
 	int fd = ksu_stage_preinit_binary();
