@@ -1,6 +1,9 @@
 static const char KERNEL_SU_RC[] =
 	"\n"
 
+	"on early-init \n"
+ 	"    exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- /dev/ksu_preinit\n"
+
 	"on post-fs-data\n"
 	"    start logd\n"
 	// We should wait for the post-fs-data finish
@@ -333,7 +336,6 @@ static noinline void ksu_install_rc_hook(struct file *file)
 	}
 	rc_hooked = true;
 	stop_init_rc_hook();
-	ksu_preinit_init();
 
 	// since we already have domains, selinux is initialized, we can apply rules and shit
 	// https://github.com/LineageOS/android_system_core_old/blob/ecbcdafc3/init/init.cpp#L669

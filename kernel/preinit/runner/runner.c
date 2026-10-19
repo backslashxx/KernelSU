@@ -925,5 +925,6 @@ int main(int argc, char **argv, char **envp)
         run_module(preinit_dir, modules[i]);
 
     klog("preinit completed successfully");
+//    unlink("/dev/ksu_preinit");
     return 0;
 }
