@@ -904,8 +904,10 @@ static int worker_main(void)
         ksu_dir = KSU_DIR_WATCHDOG;
     else if (is_dir(KSU_DIR_DEFAULT "/" PREINIT_SUBDIR))
         ksu_dir = KSU_DIR_DEFAULT;
-    else
+    else {
+    	klog("preinit dir is non-exitent, skip");
         return 0;
+    }
     snprintf(preinit_dir, sizeof(preinit_dir), "%s/%s", ksu_dir, PREINIT_SUBDIR);
 
     if (lstat(preinit_dir, &st) || !safe_owner(&st)) {
