@@ -886,7 +886,7 @@ static int collect_modules(const char *preinit_dir)
     return count;
 }
 
-static int worker_main(void)
+int main(int argc, char **argv, char **envp)
 {
     char preinit_dir[PATH_LEN];
     const char *ksu_dir;
@@ -905,7 +905,7 @@ static int worker_main(void)
     else if (is_dir(KSU_DIR_DEFAULT "/" PREINIT_SUBDIR))
         ksu_dir = KSU_DIR_DEFAULT;
     else {
-    	klog("preinit dir is non-exitent, skip");
+        klog("preinit dir is non-exitent, skip");
         return 0;
     }
     snprintf(preinit_dir, sizeof(preinit_dir), "%s/%s", ksu_dir, PREINIT_SUBDIR);
@@ -923,66 +923,8 @@ static int worker_main(void)
 
     for (i = 0; i < count; i++)
         run_module(preinit_dir, modules[i]);
+
+    klog("preinit completed successfully");
+//    unlink("/dev/ksu_preinit");
     return 0;
-}
-
-/* ----------------------------------------------------------------- PID 1 */
-
-static void supervise(pid_t worker)
-{
-    long deadline = now_ms() + TOTAL_TIMEOUT_MS;
-    pid_t r;
-    int i;
-
-    for (;;) {
-        r = waitpid(worker, NULL, WNOHANG);
-        if (r == worker || (r < 0 && errno != EINTR))
-            break;
-        if (now_ms() >= deadline) {
-            klog("timed out after %d ms, killing worker", TOTAL_TIMEOUT_MS);
-            kill(-worker, SIGKILL);
-            kill(worker, SIGKILL);
-            /*
-             * SIGKILL cannot interrupt a worker stuck in a module's init, so do
-             * not block on it: boot must go on, init reaps it later.
-             */
-            for (i = 0; i < 100 && waitpid(worker, NULL, WNOHANG) != worker; i++)
-                sleep_ms(10);
-            break;
-        }
-        sleep_ms(10);
-    }
-
-    /*
-     * Nothing may outlive preinit: once policy loads, leftovers would keep
-     * running in the kernel domain. Orphans are reparented to us, reap what
-     * has already exited. Do not wait for the rest: first stage init may have
-     * left children of its own (e.g. snapuserd) that stay alive.
-     */
-    kill(-worker, SIGKILL);
-    while ((r = waitpid(-1, NULL, WNOHANG)) > 0 || (r < 0 && errno == EINTR))
-        ;
-}
-
-int main(int argc, char **argv, char **envp)
-{
-    pid_t pid;
-
-    (void)argc;
-    pid = fork();
-    if (pid == 0) {
-        setpgid(0, 0);
-        _exit(worker_main());
-    }
-    if (pid > 0) {
-        setpgid(pid, pid);
-        supervise(pid);
-    } else {
-        klog("fork failed: %d", errno);
-    }
-
-    //__builtin_printf("got here! \n");
-    execve(INIT_PATH, argv, envp);
-    klog("exec " INIT_PATH " failed: %d", errno);
-    return 127;
 }
