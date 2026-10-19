@@ -6,19 +6,9 @@ static bool ksu_preinit_enabled = true;
 constexpr char preinit_bin[] = "/dev/ksu_preinit";
 #include <linux/shmem_fs.h>
 
-static int (*do_execveat_common_fnp)(int fd, struct filename *filename,
-			struct user_arg_ptr argv, struct user_arg_ptr envp, int flags) = nullptr;
-
 static __nocfi int preinit_thread_fn(void *data)
 {
 	struct file *file;
-
-
-	do_execveat_common_fnp = kallsyms_lookup_retry("do_execveat_common");
-	if (!do_execveat_common_fnp) {
-		pr_err("preinit: failed to resolve do_execveat_common\n");
-		return -ENOSYS;
-	}
 
 	escape_to_root_forced();
 
@@ -50,33 +40,49 @@ static __nocfi int preinit_thread_fn(void *data)
 	// The fd owns the file from here on; close-on-exec frees it once the
 	// runner has been loaded.
 	fd_install(fd, file);
+	
+	char fd_path[32];
+	snprintf(fd_path, sizeof(fd_path), "/dev/fd/%d", fd);
 
-	struct filename *empty_fn = getname_kernel("");
-	if (IS_ERR(empty_fn)) {
+	struct path p;
+	if (kern_path(fd_path, LOOKUP_FOLLOW, &p)) {
+		pr_err("preinit: %s not reachable, booting without preinit\n", fd_path);
 		ksu_close_fd(fd);
-		return PTR_ERR(empty_fn);
+		return false;
 	}
+	path_put(&p);
+
+	char *argv[] = { "/dev/ksu_preinit", NULL };
+	char *envp[] = { "HOME=/", "PATH=/sbin:/bin:/system/bin", NULL };
 
 	pr_info("preinit: executing in-memory runner via anonymous fd: %d\n", fd);
 
-	struct user_arg_ptr empty_argv = { .ptr.native = NULL };
-	struct user_arg_ptr empty_envp = { .ptr.native = NULL };
+	ret = call_usermodehelper(fd_path, argv, envp, UMH_WAIT_PROC);
 
-	ret = do_execveat_common_fnp(fd, empty_fn, empty_argv, empty_envp, AT_EMPTY_PATH);
-
-	pr_err("preinit: do_execveat_common returned: %d\n", ret);
+	pr_err("preinit: call_usermodehelper returned: %d\n", ret);
 	ksu_close_fd(fd);
 	return ret;
 }
 
 void ksu_preinit_init(void)
 {
+	static DEFINE_SPINLOCK(init_lock);
+	static bool executed = false;
+	unsigned long flags;
+
 	if (!ksu_preinit_enabled) {
 		pr_info("preinit: disabled\n");
 		return;
 	}
 
-	pr_info("preinit: launching in-memory thread runner\n");
+	spin_lock_irqsave(&init_lock, flags);
+	if (executed) {
+		spin_unlock_irqrestore(&init_lock, flags);
+		return;
+	}
+	executed = true;
+	spin_unlock_irqrestore(&init_lock, flags);
+
+	pr_info("preinit: launching in-memory thread runner (strict once)\n");
 	kthread_run(preinit_thread_fn, nullptr, "kthread");
-	// preinit_thread_fn(nullptr);
 }
