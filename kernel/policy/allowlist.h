@@ -1,9 +1,7 @@
 #ifndef __KSU_H_ALLOWLIST
 #define __KSU_H_ALLOWLIST
 
-#include <linux/types.h>
-#include <linux/uidgid.h>
-#include "uapi/app_profile.h"
+#include "app_profile.h"
 
 #define PER_USER_RANGE 100000
 #define WEBVIEW_ZYGOTE_UID 1053
@@ -52,13 +50,13 @@ void ksu_put_root_profile(struct root_profile *);
 
 static inline bool is_appuid(uid_t uid)
 {
-    uid_t appid = uid % PER_USER_RANGE;
-    return appid >= FIRST_APPLICATION_UID && appid <= LAST_APPLICATION_UID;
+	uid_t appid = uid % PER_USER_RANGE;
+	return appid >= FIRST_APPLICATION_UID && appid <= LAST_APPLICATION_UID;
 }
 
 static inline bool is_isolated_process(uid_t uid)
 {
-    uid_t appid = uid % PER_USER_RANGE;
-    return appid >= FIRST_ISOLATED_UID && appid <= LAST_ISOLATED_UID;
+	uid_t appid = uid % PER_USER_RANGE;
+	return appid >= FIRST_ISOLATED_UID && appid <= LAST_ISOLATED_UID;
 }
 #endif

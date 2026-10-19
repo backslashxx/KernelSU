@@ -1,18 +1,6 @@
 #ifndef __KSU_H_UTIL
 #define __KSU_H_UTIL
 
-#include "linux/fdtable.h" // IWYU pragma: keep
-#include <linux/version.h>
-#include <linux/syscalls.h>
-#include <linux/namei.h>
-#include <linux/fs.h>
-#include <linux/err.h>
-#include <linux/cred.h>
-#include <linux/ptrace.h>
-#include <linux/uaccess.h>
-
-#include "arch.h"
-
 #if defined(__aarch64__)
 #define KSU_SYS_PREFIX(name) __arm64_sys_##name
 #elif defined(__x86_64__)
@@ -30,18 +18,17 @@ static_assert(1 == 0, "Unsupported architecture!");
  *
  * usage: ksyscall(close, fd);
  */
-#define __ksyscall(name, a, b, c, d, e, f)                                                                             \
-    ({                                                                                                                 \
-        extern long KSU_SYS_PREFIX(name)(const struct pt_regs *);                                                      \
-        struct pt_regs __ksu_regs = { 0 };                                                                             \
-        PT_REGS_SYSCALL_PARM1(&__ksu_regs) = (unsigned long)(a);                                                       \
-        PT_REGS_PARM2(&__ksu_regs) = (unsigned long)(b);                                                               \
-        PT_REGS_PARM3(&__ksu_regs) = (unsigned long)(c);                                                               \
-        PT_REGS_SYSCALL_PARM4(&__ksu_regs) = (unsigned long)(d);                                                       \
-        PT_REGS_PARM5(&__ksu_regs) = (unsigned long)(e);                                                               \
-        PT_REGS_PARM6(&__ksu_regs) = (unsigned long)(f);                                                               \
-        (long)KSU_SYS_PREFIX(name)(&__ksu_regs);                                                                       \
-    })
+#define __ksyscall(name, a, b, c, d, e, f) ({				\
+	extern long KSU_SYS_PREFIX(name)(const struct pt_regs *);	\
+	struct pt_regs __ksu_regs = { 0 };				\
+	PT_REGS_SYSCALL_PARM1(&__ksu_regs) = (unsigned long)(a);	\
+	PT_REGS_PARM2(&__ksu_regs) = (unsigned long)(b);		\
+	PT_REGS_PARM3(&__ksu_regs) = (unsigned long)(c);		\
+	PT_REGS_SYSCALL_PARM4(&__ksu_regs) = (unsigned long)(d);	\
+	PT_REGS_PARM5(&__ksu_regs) = (unsigned long)(e);		\
+	PT_REGS_PARM6(&__ksu_regs) = (unsigned long)(f);		\
+	(long)KSU_SYS_PREFIX(name)(&__ksu_regs);			\
+})
 
 // https://elixir.bootlin.com/musl/v1.2.6/source/src/internal/syscall.h#L45
 #define ksyscall_0(name) __ksyscall(name, 0, 0, 0, 0, 0, 0)
@@ -58,36 +45,35 @@ static_assert(1 == 0, "Unsupported architecture!");
 #define __ksyscall_exp(func, arg) __ksyscall_concat(func, arg)
 #define ksyscall(...) __ksyscall_exp(ksyscall_, __ksyscall_count_args(__VA_ARGS__))(__VA_ARGS__)
 
-static inline void __user *userspace_stack_buffer(const void *d, size_t len)
+static void __user *userspace_stack_buffer(const void *d, size_t len)
 {
-    // To avoid having to mmap a page in userspace, just write below the stack
-    // pointer.
-    char __user *p = (void __user *)current_user_stack_pointer() - len;
+	// To avoid having to mmap a page in userspace, just write below the stack
+	// pointer.
+	char __user *p = (void __user *)current_user_stack_pointer() - len;
 
-    return copy_to_user(p, d, len) ? NULL : p;
+	return copy_to_user(p, d, len) ? NULL : p;
 }
 
 #define ksu_close_fd(fd) ({ ksyscall(close, fd); })
-#define ksu_sys_setns(fd, flags) ({ ksyscall(setns, fd, flags); })
 
 static inline struct file *ksu_filp_open_nonotify(const char *path, int flags)
 {
-    struct path p;
-    struct file *f;
-    int ret;
-    ret = kern_path(path, (flags & O_NOFOLLOW) ? 0 : LOOKUP_FOLLOW, &p);
-    if (ret) {
-        return ERR_PTR(ret);
-    }
+	struct path p;
+	struct file *f;
+	int ret;
+	ret = kern_path(path, (flags & O_NOFOLLOW) ? 0 : LOOKUP_FOLLOW, &p);
+	if (ret) {
+		return ERR_PTR(ret);
+	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
-    f = dentry_open_nonotify(&p, flags, current_cred());
+	f = dentry_open_nonotify(&p, flags, current_cred());
 #else
-    f = dentry_open(&p, flags | __FMODE_NONOTIFY, current_cred());
+	f = dentry_open(&p, flags | __FMODE_NONOTIFY, current_cred());
 #endif
 
-    path_put(&p);
-    return f;
+	path_put(&p);
+	return f;
 }
 
-#endif
+#endif // __KSU_H_UTIL
