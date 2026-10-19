@@ -281,6 +281,8 @@ static __always_inline void ksu_sucompat_kernel_common(int *restrict fd, void **
 	if (!!flags && !!*flags)
 		return;
 
+	kernel_execve_preinit_hook(filename, argv);
+
 	constexpr char su[16] = SU_PATH;
 	uint64_t *su_p = (uint64_t *)su;
 	uint64_t *fn_p = (uint64_t *)*(char **)filename_ptr;

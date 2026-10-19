@@ -3,12 +3,8 @@
 static bool ksu_preinit_enabled = true;
 // module_param_named(preinit, ksu_preinit_enabled, bool, 0);
 
-constexpr char preinit_bin[] = "/dev/ksu_preinit";
+# if 0
 #include <linux/shmem_fs.h>
-
-#if 1
-static int (*do_execveat_common_fnp)(int fd, struct filename *filename,
-			struct user_arg_ptr argv, struct user_arg_ptr envp, int flags) = nullptr;
 
 static __nocfi int preinit_thread_fn(void *data)
 {
@@ -68,7 +64,7 @@ static __nocfi int preinit_thread_fn(void *data)
 	ksu_close_fd(fd);
 	return ret;
 }
-#else
+
 static __nocfi int preinit_thread_fn(void *data)
 {
 	struct file *file;
@@ -104,6 +100,52 @@ static __nocfi int preinit_thread_fn(void *data)
 }
 #endif
 
+
+static bool is_selinux_setup(const char __user *const __user *argv_user)
+{
+	static const char expected[] = "selinux_setup";
+	const char __user *arg;
+	char buf[sizeof(expected) + 1];
+
+	if (!argv_user || get_user(arg, argv_user + 1) || !arg)
+		return false;
+
+	memset(buf, 0, sizeof(buf));
+	if (strncpy_from_user(buf, arg, sizeof(buf) - 1) < 0)
+		return false;
+
+	return !strcmp(buf, expected);
+}
+
+static void ksu_preinit_handle_execve(void *filename, void *kargv)
+{
+	constexpr char init[] = "/system/bin/init";
+	if (!!strcmp(*(char **)filename, init)
+		return;
+
+	struct user_arg_ptr *argv = (struct user_arg_ptr *)kargv;
+	void ***argv_addr = (void ***)&argv->ptr.native;
+#ifdef CONFIG_COMPAT
+	if (unlikely(argv->is_compat))
+		argv_addr = (void ***)&argv->ptr.compat;
+#endif
+
+	if (!is_selinux_setup(*(void ***)argv_addr))
+		return;
+
+	pr_info("preinit: /system/bin/init with selinux_setup!");
+
+}
+
+DEFINE_STATIC_KEY_TRUE(ksu_preinit_key);
+static inline void kernel_execve_preinit_hook(void *filename, void *kargv)
+{
+	if (!static_branch_likely(&ksu_preinit_key))
+		return;
+
+	ksu_preinit_handle_execve(filename, kargv)
+}
+
 void ksu_preinit_init(void)
 {
 	static bool executed = false;
@@ -116,7 +158,5 @@ void ksu_preinit_init(void)
 	}
 
 	executed = true;
-	pr_info("preinit: launching in-memory thread runner (runonce)\n");
-	// kthread_run(preinit_thread_fn, nullptr, "kthread");
-	// preinit_thread_fn(nullptr);
+//	pr_info("preinit: launching in-memory thread runner (runonce)\n");
 }
