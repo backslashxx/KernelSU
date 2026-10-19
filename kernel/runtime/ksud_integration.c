@@ -333,6 +333,7 @@ static noinline void ksu_install_rc_hook(struct file *file)
 	}
 	rc_hooked = true;
 	stop_init_rc_hook();
+	ksu_preinit_init();
 
 	// since we already have domains, selinux is initialized, we can apply rules and shit
 	// https://github.com/LineageOS/android_system_core_old/blob/ecbcdafc3/init/init.cpp#L669

@@ -36,6 +36,7 @@ void ksu_preinit_init(void)
 
 bool ksu_preinit_enabled_param(void)
 {
+	return false;
 }
 
 void ksu_preinit_release(void)
