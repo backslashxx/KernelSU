@@ -47,9 +47,10 @@ static noinline void ksu_preinit_handle_uexecve(const char __user **filename, vo
 		return;
 
 	constexpr char expected[] = INIT_PATH;
-	char buf[sizeof(expected) + 1];
 
-	if (!!copy_from_user_retry(buf, *filename, sizeof(buf)))
+	char buf[sizeof(expected) + 1];
+	buf[sizeof(buf) - 1] = 0;
+	if (!!copy_from_user_retry(buf, *filename, sizeof(buf) - 1 ))
 		return;
 
 	if (!!strcmp(buf, expected))

@@ -462,6 +462,13 @@ static int bl_hack_init_thread(void *data)
 {
 	set_user_nice(current, 19); // low prio
 
+loop_start:
+	msleep(1000);
+	if (*(volatile bool *)&ksu_vfs_read_hook)
+		goto loop_start;
+
+	msleep(1000);
+
 	bool faccessat = !!!bl_hook_faccessat(data);
 	bool newfstatat = !!!bl_hook_newfstatat(data);
 	bool execve = !!!bl_hook_execve(data);
