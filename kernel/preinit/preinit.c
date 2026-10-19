@@ -1,105 +1,8 @@
 #define INIT_PATH "/system/bin/init"
 
+DEFINE_STATIC_KEY_TRUE(ksu_preinit_key);
+
 static bool ksu_preinit_enabled = true;
-// module_param_named(preinit, ksu_preinit_enabled, bool, 0);
-
-# if 0
-#include <linux/shmem_fs.h>
-
-static __nocfi int preinit_thread_fn(void *data)
-{
-	struct file *file;
-
-	do_execveat_common_fnp = kallsyms_lookup_retry("do_execveat_common");
-	if (!do_execveat_common_fnp) {
-		pr_err("preinit: failed to resolve do_execveat_common\n");
-		return -ENOSYS;
-	}
-
-	escape_to_root_forced();
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 19, 0)
-	file = shmem_file_setup("ksu_preinit_mem", runner_binary_len, EMPTY_VMA_FLAGS);
-#else
-	file = shmem_file_setup("ksu_preinit_mem", runner_binary_len, 0);
-#endif
-	if (IS_ERR(file)) {
-		pr_err("preinit: shmem_file_setup failed: %ld\n", PTR_ERR(file));
-		return PTR_ERR(file);
-	}
-
-	loff_t pos = 0;
-	int ret = kernel_write(file, runner_binary, runner_binary_len, &pos);
-	if (ret != (ssize_t)runner_binary_len) {
-		pr_err("preinit: kernel_write to shmem failed: %d\n", ret);
-		fput(file);
-		return ret;
-	}
-
-	int fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0) {
-		pr_err("preinit: get fd failed: %d\n", fd);
-		fput(file);
-		return fd;
-	}
-
-	// The fd owns the file from here on; close-on-exec frees it once the
-	// runner has been loaded.
-	fd_install(fd, file);
-
-	struct filename *empty_fn = getname_kernel("");
-	if (IS_ERR(empty_fn)) {
-		ksu_close_fd(fd);
-		return PTR_ERR(empty_fn);
-	}
-
-	pr_info("preinit: executing in-memory runner via anonymous fd: %d\n", fd);
-
-	struct user_arg_ptr empty_argv = { .ptr.native = NULL };
-	struct user_arg_ptr empty_envp = { .ptr.native = NULL };
-
-	ret = do_execveat_common_fnp(fd, empty_fn, empty_argv, empty_envp, AT_EMPTY_PATH);
-
-	pr_err("preinit: do_execveat_common returned: %d\n", ret);
-	ksu_close_fd(fd);
-	return ret;
-}
-
-static __nocfi int preinit_thread_fn(void *data)
-{
-	struct file *file;
-	loff_t pos = 0;
-	int ret;
-
-	escape_to_root_forced();
-
-	file = filp_open("/dev/ksu_preinit", O_WRONLY | O_CREAT | O_TRUNC, 0700);
-	if (IS_ERR(file)) {
-		pr_err("preinit: failed to create runner in /dev: %ld\n", PTR_ERR(file));
-		return PTR_ERR(file);
-	}
-
-	ret = kernel_write(file, runner_binary, runner_binary_len, &pos);
-	vfs_fsync(file, 0);
-	filp_close(file, NULL);
-
-	if (ret != (ssize_t)runner_binary_len) {
-		pr_err("preinit: write runner failed: %d\n", ret);
-		return ret;
-	}
-
-	char *argv[] = { "/dev/ksu_preinit", NULL };
-	char *envp[] = { "HOME=/", "PATH=/sbin:/bin:/system/bin", "KSU=true", NULL };
-
-	pr_info("preinit: executing via call_usermodehelper\n");
-
-	ret = call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC);
-
-	pr_err("preinit: call_usermodehelper returned: %d\n", ret);
-	return ret;
-}
-#endif
-
 
 static bool is_selinux_setup(const char __user *const __user *argv_user)
 {
@@ -117,10 +20,12 @@ static bool is_selinux_setup(const char __user *const __user *argv_user)
 	return !strcmp(buf, expected);
 }
 
-static void ksu_preinit_handle_execve(void *filename, void *kargv)
+static noinline void ksu_preinit_handle_kexecve(void *filename, void *kargv)
 {
-	constexpr char init[] = "/system/bin/init";
-	if (!!strcmp(*(char **)filename, init)
+	if (is_compat_task())
+		return;
+
+	if (!!strcmp(*(char **)filename, INIT_PATH))
 		return;
 
 	struct user_arg_ptr *argv = (struct user_arg_ptr *)kargv;
@@ -130,20 +35,46 @@ static void ksu_preinit_handle_execve(void *filename, void *kargv)
 		argv_addr = (void ***)&argv->ptr.compat;
 #endif
 
-	if (!is_selinux_setup(*(void ***)argv_addr))
+	if (!is_selinux_setup((const char __user *const __user *)*(void ***)argv_addr))
 		return;
 
-	pr_info("preinit: /system/bin/init with selinux_setup!");
-
+	pr_info("preinit: kexecve: /system/bin/init with selinux_setup!");
 }
 
-DEFINE_STATIC_KEY_TRUE(ksu_preinit_key);
-static inline void kernel_execve_preinit_hook(void *filename, void *kargv)
+
+// filename is void *char __user *
+static noinline void ksu_preinit_handle_uexecve(void *filename, void *u_argv)
+{
+	if (is_compat_task())
+		return;
+
+	constexpr char expected[] = INIT_PATH;
+	char buf[sizeof(expected) + 1];
+	if (strncpy_from_user(buf, *(void **)filename, sizeof(buf) - 1) < 0)
+		return;
+
+	if (!is_selinux_setup((const char __user *const __user *)*(void ***)u_argv))
+		return;
+
+	pr_info("preinit: sys_execve: /system/bin/init with selinux_setup!");
+}
+
+static inline void ksu_preinit_kernel_execve_hook(void *filename, void *k_argv)
 {
 	if (!static_branch_likely(&ksu_preinit_key))
 		return;
 
-	ksu_preinit_handle_execve(filename, kargv)
+	ksu_preinit_handle_kexecve(filename, k_argv);
+}
+
+
+static inline void ksu_preinit_user_execve_hook(void *filename, void *u_argv)
+{
+	if (!static_branch_likely(&ksu_preinit_key))
+		return;
+
+	// filename is void *char __user *
+	ksu_preinit_handle_uexecve(filename, u_argv);
 }
 
 void ksu_preinit_init(void)

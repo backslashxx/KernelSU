@@ -1,9 +1,6 @@
 static const char KERNEL_SU_RC[] =
 	"\n"
 
-//	"on early-init \n"
- //	"    exec u:r:" KERNEL_SU_DOMAIN ":s0 root -- /dev/ksu_preinit\n"
-
 	"on post-fs-data\n"
 	"    start logd\n"
 	// We should wait for the post-fs-data finish
