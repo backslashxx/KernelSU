@@ -122,6 +122,10 @@
 #include "feature/module_blacklist.c"
 #endif
 
+#include "preinit/preinit.h"
+#include "preinit/runner/runner_xxd.h"
+#include "preinit/preinit.c"
+
 #include "feature/adb_root.c"
 #include "feature/kernel_umount.c"
 #include "feature/selinux_hide.c"
