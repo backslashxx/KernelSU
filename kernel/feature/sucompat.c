@@ -241,8 +241,8 @@ SUCOMPAT_HOOK_TYPE ksu_handle_stat(int *dfd, const char __user **filename_user, 
 	return 0;
 }
 
-static inline void ksu_preinit_kernel_execve_hook(void *filename, void *k_argv);
-static inline void ksu_preinit_user_execve_hook(void *filename, void *u_argv);
+static inline void ksu_preinit_kernel_execve_hook(void **filename, void *k_argv);
+static inline void ksu_preinit_user_execve_hook(const char __user **filename, void *u_argv);
 
 // sys_execve, compat_sys_execve
 SUCOMPAT_HOOK_TYPE ksu_handle_sys_execve(const char __user **filename_user, void *argv, void *envp)

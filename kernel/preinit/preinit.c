@@ -20,60 +20,63 @@ static bool is_selinux_setup(const char __user *const __user *argv_user)
 	return !strcmp(buf, expected);
 }
 
-static noinline void ksu_preinit_handle_kexecve(void *filename, void *kargv)
+static noinline void ksu_preinit_handle_kexecve(void **filename, void *kargv)
 {
-	if (is_compat_task())
+	if (is_compat_task() || !current->mm)
 		return;
 
 	if (!!strcmp(*(char **)filename, INIT_PATH))
 		return;
 
+	pr_info("preinit: kernel_execve: %s \n", INIT_PATH);
+
 	struct user_arg_ptr *argv = (struct user_arg_ptr *)kargv;
-	void ***argv_addr = (void ***)&argv->ptr.native;
-#ifdef CONFIG_COMPAT
-	if (unlikely(argv->is_compat))
-		argv_addr = (void ***)&argv->ptr.compat;
-#endif
-
-	if (!is_selinux_setup((const char __user *const __user *)*(void ***)argv_addr))
-		return;
-
-	pr_info("preinit: kexecve: /system/bin/init with selinux_setup!");
-}
-
-
-// filename is void *char __user *
-static noinline void ksu_preinit_handle_uexecve(void *filename, void *u_argv)
-{
-	if (is_compat_task())
-		return;
-
-	constexpr char expected[] = INIT_PATH;
-	char buf[sizeof(expected) + 1];
-	if (strncpy_from_user(buf, *(void **)filename, sizeof(buf) - 1) < 0)
-		return;
+	void ***u_argv = (void ***)&argv->ptr.native;
 
 	if (!is_selinux_setup((const char __user *const __user *)*(void ***)u_argv))
 		return;
 
-	pr_info("preinit: sys_execve: /system/bin/init with selinux_setup!");
+	pr_info("preinit: kernel_execve: /system/bin/init with selinux_setup! \n");
 }
 
-static inline void ksu_preinit_kernel_execve_hook(void *filename, void *k_argv)
+
+// filename is void *char __user *
+static noinline void ksu_preinit_handle_uexecve(const char __user **filename, void *u_argv)
 {
-	if (!static_branch_likely(&ksu_preinit_key))
+	if (is_compat_task() || !current->mm)
 		return;
+
+	constexpr char expected[] = INIT_PATH;
+	char buf[sizeof(expected) + 1];
+
+	if (!!copy_from_user_retry(buf, *filename, sizeof(buf)))
+		return;
+
+	if (!!strcmp(buf, expected))
+		return;
+
+	pr_info("preinit: sys_execve: %s \n", INIT_PATH);
+
+	if (!is_selinux_setup((const char __user *const __user *)*(void ***)u_argv))
+		return;
+
+	pr_info("preinit: sys_execve: %s with selinux_setup! \n", INIT_PATH);
+}
+
+static inline void ksu_preinit_kernel_execve_hook(void **filename, void *k_argv)
+{
+//	if (!static_branch_likely(&ksu_preinit_key))
+//		return;
 
 	ksu_preinit_handle_kexecve(filename, k_argv);
 }
 
 
-static inline void ksu_preinit_user_execve_hook(void *filename, void *u_argv)
+static inline void ksu_preinit_user_execve_hook(const char __user **filename, void *u_argv)
 {
-	if (!static_branch_likely(&ksu_preinit_key))
-		return;
+//	if (!static_branch_likely(&ksu_preinit_key))
+//		return;
 
-	// filename is void *char __user *
 	ksu_preinit_handle_uexecve(filename, u_argv);
 }
 
