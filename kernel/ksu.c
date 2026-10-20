@@ -20,6 +20,8 @@
 
 #include "kernel_includes.h"
 
+#pragma clang attribute push (__nocfi, apply_to = function)
+
 // selinux includes
 #include "avc_ss.h"
 #include "objsec.h"
@@ -176,6 +178,8 @@
 #if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
 #include "hook/kp_ksud.c"
 #endif
+
+#pragma clang attribute pop
 
 // track backports and other quirks here
 // ref: kernel_compat.c, Makefile
