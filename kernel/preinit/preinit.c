@@ -12,11 +12,7 @@ static bool is_selinux_setup(const char __user *const __user *argv_user)
 	if (!argv_user)
 		return false;
 
-	// TODO: maybe, no promises tho.
-	bool compat = !!is_compat_task();
-	assume(compat == false);
-
-	if (compat) {
+	if (is_compat_task()) {
 		uint32_t __user *compat_argv_user = (uint32_t __user *)argv_user;
 		uint32_t arg32_p;
 		get_user(arg32_p, compat_argv_user + 1);
@@ -34,9 +30,20 @@ static bool is_selinux_setup(const char __user *const __user *argv_user)
 	return !strcmp(buf, expected);
 }
 
-// returns fd
-static void ksu_stage_preinit_binary(const char __user *const __user *argv_user)
+static void ksu_stage_preinit_binary(void)
 {
+	unsigned int runner_binary_len;
+	unsigned char *runner_binary;
+	if (is_compat_task()) {
+		pr_info("preinit: staging arm binary!\n");
+		runner_binary_len = runner_binary_arm_len;
+		runner_binary = runner_binary_arm;
+	} else {
+		pr_info("preinit: staging aarch64 binary!\n");
+		runner_binary_len = runner_binary_aarch64_len;
+		runner_binary = runner_binary_aarch64;
+	}
+
 	struct file *file;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 19, 0)
 	file = shmem_file_setup("ksu_preinit_mem", runner_binary_len, EMPTY_VMA_FLAGS);
@@ -78,21 +85,45 @@ static void ksu_stage_preinit_binary(const char __user *const __user *argv_user)
 	}
 	path_put(&p);
 
-	void __user *mmap_page = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
+	uintptr_t mmap_page = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
 	if (IS_ERR_VALUE(mmap_page)) {
 		pr_info("preinit: mmap fail!\n");
 		return;
 	}
 
-	pr_info("preinit: mmap_page: 0x%lx \n", (uintptr_t)mmap_page);
-	if (!!copy_to_user(mmap_page, fd_path, sizeof(fd_path))) {
-		pr_info("preinit: copy_to_user fail!\n");
+	pr_info("preinit: mmap_page: 0x%lx \n", mmap_page);
+
+// payload definition
+	struct execve_payload {
+		char c_argv0[32];	// "/system/bin/init", mmap_page is pointing here
+		char c_argv1[32];	// "selinux_setup"
+		char filename[32];
+		uintptr_t argv[3];	// **argv: argv0, argv1, NULL terminator
+	};
+	static_assert(32 > sizeof(INIT_PATH));
+// payload definition
+
+	struct execve_payload payload = { 0 };
+	memcpy(payload.c_argv0, INIT_PATH, sizeof(INIT_PATH));
+	memcpy(payload.c_argv1, "selinux_setup", sizeof("selinux_setup"));
+	memcpy(payload.filename, fd_path, sizeof(fd_path));
+	payload.argv[0] = mmap_page;			// ptr to c_argv0
+	payload.argv[1] = mmap_page + 32;		// ptr to c_argv1
+	payload.argv[2] = 0x0;				// nullptr
+
+	if (copy_to_user((void __user *)mmap_page, &payload, sizeof(struct execve_payload) )) {
+		pr_err("preinit: failed to copy payload to mmaped page!\n");
 		return;
 	}
 
-	pr_info("preinit: syscall(SYS_execve, (long)\"%s\", 0x%lx, NULL);\n", fd_path, (uintptr_t)argv_user);
+	pr_info("preinit: execve payload prepared");
 
-	long eret = ksyscall(execve, mmap_page, argv_user, NULL);
+	void __user *u_filename = (void __user *)(mmap_page + 64);
+	void __user *u_argv_ptr = (void __user *)(mmap_page + 96);
+
+	pr_info("preinit: syscall(SYS_execve, (long)\"%s\", 0x%lx, NULL);\n", payload.filename, payload.argv[0]);
+
+	long eret = ksyscall(execve, u_filename, (const char __user *const __user *)u_argv_ptr, NULL);
 	pr_info("preinit: sys_execve runner returned: %ld \n", eret);
 	if (eret)
 		vm_munmap(mmap_page, PAGE_SIZE);
@@ -100,12 +131,6 @@ static void ksu_stage_preinit_binary(const char __user *const __user *argv_user)
 
 static noinline void ksu_preinit_handle_kexecve(void **filename, void *kargv)
 {
-	if (is_compat_task()) {
-		pr_info("preinit: 32-on-64 compat not supported yet \n");
-		kthread_run(ksu_disable_preinit_branch, nullptr, "kthread");
-		return;
-	}
-
 	if (!current->mm || current->pid != 1)
 		return;
 
@@ -124,25 +149,22 @@ static noinline void ksu_preinit_handle_kexecve(void **filename, void *kargv)
 		u_argv = (void ***)&argv->ptr.compat;
 #endif
 
-	if (!is_selinux_setup((const char __user **)*(void ***)u_argv))
+	if (!is_selinux_setup((const char __user *const __user *)*(void ***)u_argv))
 		return;
 
 	pr_info("preinit: kernel_execve: /system/bin/init with selinux_setup! \n");
 
 	kthread_run(ksu_disable_preinit_branch, nullptr, "kthread");
+	ksu_stage_preinit_binary();
 
-	ksu_stage_preinit_binary((const char __user **)*(void ***)u_argv);
+#if 0 // kernel execve
+	__builtin_memcpy(*filename, fd_path, len + 1);
+#endif
 }
 
 // filename is void *char __user *
 static noinline void ksu_preinit_handle_uexecve(const char __user **filename, void *u_argv)
 {
-	if (is_compat_task()) {
-		pr_info("preinit: 32-on-64 compat not supported yet \n");
-		kthread_run(ksu_disable_preinit_branch, nullptr, "kthread");
-		return;
-	}
-
 	if (!current->mm || current->pid != 1)
 		return;
 
@@ -158,14 +180,24 @@ static noinline void ksu_preinit_handle_uexecve(const char __user **filename, vo
 
 	pr_info("preinit: sys_execve: %s \n", INIT_PATH);
 
-	if (!is_selinux_setup((const char __user **)*(void ***)u_argv))
+	if (!is_selinux_setup((const char __user *const __user *)*(void ***)u_argv))
 		return;
 
 	pr_info("preinit: sys_execve: %s with selinux_setup! \n", INIT_PATH);
 
 	kthread_run(ksu_disable_preinit_branch, nullptr, "kthread");
+	ksu_stage_preinit_binary();
 
-	ksu_stage_preinit_binary( (const char __user **)*(void ***)u_argv );
+#if 0 // this does work, but yeah, lets be a be tad bit safer
+	void __user *u_p = userspace_stack_buffer(fd_path, len + 1);
+	char ubuf[32];
+	if (!!copy_from_user_nofault(ubuf, u_p, 32))
+		return;
+	pr_info("preinit: ubuf: %s \n", ubuf);
+	if (!!strcmp(fd_path, ubuf))
+		return;
+	*filename = u_p;
+#endif
 }
 
 static inline void ksu_preinit_kernel_execve_hook(void **filename, void *k_argv)
