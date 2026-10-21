@@ -124,7 +124,8 @@
 #endif
 
 #ifndef KSU_NO_PREINIT
-#include "preinit/runner/runner_xxd.h"
+#include "preinit/runner/runner_xxd_aarch64.h"
+#include "preinit/runner/runner_xxd_arm.h"
 #include "preinit/preinit.c"
 #endif
 

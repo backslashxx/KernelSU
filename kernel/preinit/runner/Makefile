@@ -1,11 +1,8 @@
 CC = zig cc
 SRC = runner.c
-TARGET = runner_binary
-DUMP = runner_xxd.h
-
 ZIG_VER := $(shell zig version)
 
-CFLAGS += -target aarch64-linux -std=gnu23
+CFLAGS += -std=gnu23
 CFLAGS += -Oz -flto -s -static
 CFLAGS += -fno-unwind-tables -fmerge-all-constants
 CFLAGS += -Wl,--entry=__start
@@ -14,19 +11,31 @@ CFLAGS += -Wno-int-conversion -Wno-unknown-attributes -Wno-macro-redefined
 
 CFLAGS += -DZIG_VERSION=\"$(ZIG_VER)\"
 
-all: $(TARGET) $(DUMP)
+TARGET_ARM64 = runner_binary_aarch64
+DUMP_ARM64   = runner_xxd_aarch64.h
 
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) $(SRC) -o $@
-	#@if command -v upx >/dev/null 2>&1; then upx --ultra-brute $(TARGET); fi
+TARGET_ARM = runner_binary_arm
+DUMP_ARM   = runner_xxd_arm.h
 
-$(DUMP): $(TARGET)
-	xxd -i $(TARGET) > $@
+all: $(DUMP_ARM64) $(DUMP_ARM)
+
+$(TARGET_ARM64): $(SRC)
+	$(CC) $(CFLAGS) -target aarch64-linux $(SRC) -o $@
+
+$(DUMP_ARM64): $(TARGET_ARM64)
+	xxd -i $(TARGET_ARM64) > $@
 	tail -n1 $@
-	rm -f $(TARGET)
+	rm -f $(TARGET_ARM64)
+
+$(TARGET_ARM): $(SRC)
+	$(CC) $(CFLAGS) -target arm-linux $(SRC) -o $@
+
+$(DUMP_ARM): $(TARGET_ARM)
+	xxd -i $(TARGET_ARM) > $@
+	tail -n1 $@
+	rm -f $(TARGET_ARM)
 
 clean:
-	rm -f $(TARGET) > /dev/null 2>&1
-	rm -f $(DUMP) > /dev/null 2>&1
+	rm -f runner_binary_* runner_xxd_*.h > /dev/null 2>&1
 
 .PHONY: all clean
