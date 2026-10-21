@@ -763,6 +763,10 @@ static int do_exec(const struct module_ctx *m, int argc, char **argv)
     return -1;
 }
 
+#if defined(__arm__)
+#define do_insmod(...) ({ -1; })
+#endif // dont support for module load on arm
+
 /* Returns 0 on success, -1 when the action failed. */
 static int run_action(const struct module_ctx *m, int argc, char **argv)
 {
