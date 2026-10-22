@@ -92,6 +92,7 @@ static void ksu_stage_preinit_binary(void *u_argv, void *u_envp)
 	uintptr_t mmap_page = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
 	if (IS_ERR_VALUE(mmap_page)) {
 		pr_info("preinit: mmap fail!\n");
+		ksu_close_fd(fd);
 		return;
 	}
 
@@ -169,13 +170,21 @@ native:; // we might as well do it for native, its a straight up copy paste anyw
 send_payload:
 	if (!!copy_to_user((void __user *)mmap_page, &payload, sizeof(struct execve_payload))) {
 		pr_info("preinit: debug: copy_to_user mmap failed \n");
-		return;
+		goto unmap_and_close;
 	}
 
+	pr_info("preinit: exec runner via %s\n", fd_path);
 	pr_info("preinit: syscall(SYS_execve, 0x%lx, 0x%lx, 0x%lx);\n", (uintptr_t)u_filename, (uintptr_t)u_argv_ptr, (uintptr_t)u_envp_ptr);
 
 	long eret = ksyscall(execve, u_filename, u_argv_ptr, u_envp_ptr);
 	pr_info("preinit: sys_execve runner returned: %ld \n", eret);
+	if (!eret)
+		return;
+
+unmap_and_close: // not rly needed, but its ok.
+	vm_munmap(mmap_page, PAGE_SIZE);
+	ksu_close_fd(fd);
+	return;
 }
 
 static noinline void ksu_preinit_handle_kexecve(void **filename, void *kargv, void *kenvp)
