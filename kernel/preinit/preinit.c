@@ -67,6 +67,8 @@ static void ksu_stage_preinit_binary(void *u_argv, void *u_envp)
 		return;
 	}
 
+	pr_info("preinit: runner staged (%zu bytes)\n", runner_binary_len);
+
 	int fd = get_unused_fd_flags(O_CLOEXEC);
 	if (fd < 0) {
 		pr_err("preinit: get fd failed: %d\n", fd);

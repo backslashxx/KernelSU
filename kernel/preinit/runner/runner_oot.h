@@ -48,12 +48,9 @@
 #include "../../include/uapi/app_profile.h"
 #include "../../include/uapi/supercall.h"
 
-// imported from: https://github.com/mpaland/printf
-#define PRINTF_DISABLE_SUPPORT_FLOAT
-#define PRINTF_DISABLE_SUPPORT_EXPONENTIAL
-#include "printf/printf.c"
-#define snprintf snprintf_
-#define vsnprintf vsnprintf_
+#include "picoprintf/picoprintf.c"
+#define snprintf	pico_snprintf
+#define vsnprintf	pico_vsnprintf
 
 /**
  * while we can actually just let libc map these for us
@@ -69,14 +66,26 @@
 #define sys_reboot(a, b, c, d)	syscall(SYS_reboot, a, b, c, d)
 #define sys_ioctl(a, b, c)	syscall(SYS_ioctl, a, b, c)
 #define getdents64(a, b, c)	syscall(SYS_getdents64, a, b, c)
-#define open(path, flags, ...)	syscall(SYS_openat, AT_FDCWD, path, flags, ##__VA_ARGS__)
-#define close(fd)		syscall(SYS_close, fd)
-#define read(fd, buf, count)	syscall(SYS_read, fd, buf, count)
-#define write(fd, buf, count)	syscall(SYS_write, fd, buf, count)
 #define fsync(fd)		syscall(SYS_fsync, fd)
 #define chdir(path)		syscall(SYS_chdir, path)
+#define fork()			syscall(SYS_clone, SIGCHLD, 0, 0, 0, 0)
+#define setpgid(pid, pgid)	syscall(SYS_setpgid, pid, pgid)
+#define execve(fn, arg, env)	syscall(SYS_execve, fn, arg, env)
+#define pipe2(pipefd, flags)	syscall(SYS_pipe2, pipefd, flags)
+#define nanosleep(req, rem)	syscall(SYS_nanosleep, req, rem)
+#define munmap(addr, len)	syscall(SYS_munmap, addr, len)
+#define write(fd, buf, count)	syscall(SYS_write, fd, buf, count)
 
-static long __sys_exit(int code)
+#if defined(__arm__) // https://elixir.bootlin.com/linux/v3.0.101/source/arch/arm/kernel/entry-common.S#L580
+#define SYS_mmap2 192
+#define mmap(addr, len, prot, flags, fd, off) ({ (void *)syscall(SYS_mmap2, addr, len, prot, flags, fd, (off) >> 12); })
+#else
+#define mmap(addr, len, prot, flags, fd, off) ({ (void *)syscall(SYS_mmap, addr, len, prot, flags, fd, off); })
+#endif
+
+#define noinline __attribute__((noinline))
+
+static noinline long __sys_exit(int code)
 {
 	syscall(SYS_exit, code);
 	__builtin_unreachable();
@@ -84,21 +93,46 @@ static long __sys_exit(int code)
 }
 #define _exit __sys_exit
 
+static noinline long __sys_close(int fd)
+{ 
+	return syscall(SYS_close, fd);
+}
+#define close __sys_close
+
+static noinline long __sys_openat(const char *path, int flags, int mode)
+{
+	return syscall(SYS_openat, AT_FDCWD, path, flags, mode);
+}
+#define __open_impl(path, flags, mode, ...) __sys_openat(path, flags, mode)
+#define open(path, flags, ...) __open_impl(path, flags, ##__VA_ARGS__, 0)
+
+static noinline long __sys_read(int fd, void *buf, size_t count)
+{
+	return syscall(SYS_read, fd, buf, count);
+}
+#define read __sys_read
+
 #if defined(__arm__) // map to fstatat64
 #define SYS_newfstatat SYS_fstatat64
 #endif
-#define fstat(fd, st)		syscall(SYS_newfstatat, fd, "", st, AT_EMPTY_PATH)
-#define lstat(path, st)		syscall(SYS_newfstatat, AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW)
+static noinline long __sys_newfstatat(int dirfd, const char *path, struct stat *st, int flags)
+{
+	return syscall(SYS_newfstatat, dirfd, path, st, flags);
+}
+#define fstat(fd, st)		__sys_newfstatat(fd, "", st, AT_EMPTY_PATH)
+#define lstat(path, st)		__sys_newfstatat(AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW)
 
-#define fork()			syscall(SYS_clone, SIGCHLD, 0, 0, 0, 0)
-#define waitpid(a, b, c)	syscall(SYS_wait4, a, b, c, 0)
-#define setpgid(pid, pgid)	syscall(SYS_setpgid, pid, pgid)
-#define execve(fn, arg, env)	syscall(SYS_execve, fn, arg, env)
+static noinline pid_t __sys_waitpid(pid_t pid, int *status, int options)
+{
+	return syscall(SYS_wait4, pid, status, options, 0);
+}
+#define waitpid __sys_waitpid
 
-#define pipe2(pipefd, flags)	syscall(SYS_pipe2, pipefd, flags)
-#define kill(pid, sig)		syscall(SYS_kill, pid, sig)
-
-#define nanosleep(req, rem)	syscall(SYS_nanosleep, req, rem)
+static noinline int __sys_kill(pid_t pid, int sig)
+{
+	return syscall(SYS_kill, pid, sig);
+}
+#define kill __sys_kill
 
 /**
  * map clock_gettime specifically, we do NOT want a vdso call.
@@ -106,9 +140,9 @@ static long __sys_exit(int code)
  * it can truncate on Y2038 but not a big deal.
  */
 #if defined(__arm__)
-struct old_timespec32 { int32_t tv_sec; int32_t	tv_nsec; };
 static int __sys_clock_gettime_shim(int clk, struct timespec *ts)
 {
+	struct old_timespec32 { int32_t tv_sec; int32_t	tv_nsec; };
 	struct old_timespec32 ts32;
 #define SYS_clock_gettime32 263
 	int ret = syscall(SYS_clock_gettime32, clk, &ts32);
@@ -143,15 +177,6 @@ static int __sys_poll(struct pollfd *fds, nfds_t nfds, int timeout_ms)
 		NULL, _NSIG / 8);
 }
 #define poll __sys_poll
-
-#if defined(__arm__) // https://elixir.bootlin.com/linux/v3.0.101/source/arch/arm/kernel/entry-common.S#L580
-#define SYS_mmap2 192
-#define mmap(addr, len, prot, flags, fd, off) ({ (void *)syscall(SYS_mmap2, addr, len, prot, flags, fd, (off) >> 12); })
-#else
-#define mmap(addr, len, prot, flags, fd, off) ({ (void *)syscall(SYS_mmap, addr, len, prot, flags, fd, off); })
-#endif
-
-#define munmap(addr, len) syscall(SYS_munmap, addr, len)
 
 #define __NR_init_module	SYS_init_module
 #define __NR_finit_module	SYS_finit_module
