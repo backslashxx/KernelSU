@@ -26,6 +26,8 @@ CFLAGS_ksu.o += -DKSU_PACKAGE_NAME=\"$(KSU_PACKAGE_NAME)\"
 CFLAGS_ksu.o += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 CFLAGS_ksu.o += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
 
+CFLAGS_ksu.o += -DKSU_PREINIT_RUNNER_BIN=$(MDIR)/preinit/runner/runner_binary
+
 ifeq ($(shell grep -q "^struct security_operations selinux_ops" $(srctree)/security/selinux/hooks.c; echo $$?),0)
 $(info -- KernelSU/compat: exported selinux_ops found!)
 CFLAGS_ksu.o += -DKSU_HAS_EXPORTED_SELINUX_OPS

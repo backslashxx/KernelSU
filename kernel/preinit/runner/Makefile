@@ -14,18 +14,16 @@ CFLAGS += -Wno-int-conversion -Wno-unknown-attributes -Wno-macro-redefined
 
 CFLAGS += -DZIG_VERSION=\"$(ZIG_VER)\"
 
-all: $(TARGET) $(DUMP)
+all: $(TARGET)
 
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(SRC) -o $@
 	# @if command -v upx >/dev/null 2>&1; then upx --ultra-brute $(TARGET); fi
 
-$(DUMP): $(TARGET)
-	# maybe in 10 years C23 #embed will be portable
-	# for now not a big deal for a 30kb binary.
-	xxd -i $(TARGET) > $@
-	tail -n1 $@
-	rm -f $(TARGET)
+#$(DUMP): $(TARGET)
+#	xxd -i $(TARGET) > $@
+#	tail -n1 $@
+#	rm -f $(TARGET)
 
 clean:
 	rm -f $(TARGET) > /dev/null 2>&1

@@ -124,7 +124,7 @@
 #endif
 
 #ifndef KSU_NO_PREINIT
-#include "preinit/runner/runner_xxd.h"
+#include "preinit/runner/runner_embed.h"
 #include "preinit/preinit.c"
 #endif
 
