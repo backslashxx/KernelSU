@@ -48,11 +48,12 @@
 #include "../../include/uapi/app_profile.h"
 #include "../../include/uapi/supercall.h"
 
-#define STB_SPRINTF_IMPLEMENTATION
-#include "stb_sprintf.h"
-
-#define snprintf  stbsp_snprintf
-#define vsnprintf stbsp_vsnprintf
+// imported from: https://github.com/mpaland/printf
+#define PRINTF_DISABLE_SUPPORT_FLOAT
+#define PRINTF_DISABLE_SUPPORT_EXPONENTIAL
+#include "printf/printf.c"
+#define snprintf snprintf_
+#define vsnprintf vsnprintf_
 
 /**
  * while we can actually just let libc map these for us
