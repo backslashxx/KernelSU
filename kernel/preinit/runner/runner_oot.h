@@ -48,6 +48,12 @@
 #include "../../include/uapi/app_profile.h"
 #include "../../include/uapi/supercall.h"
 
+#define STB_SPRINTF_IMPLEMENTATION
+#include "stb_sprintf.h"
+
+#define snprintf  stbsp_snprintf
+#define vsnprintf stbsp_vsnprintf
+
 /**
  * while we can actually just let libc map these for us
  * we can reduce binary size by 4kB by actually manually mapping
