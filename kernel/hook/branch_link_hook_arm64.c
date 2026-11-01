@@ -487,6 +487,7 @@ loop_start:
 static int ksu_branch_link_patch_init()
 {
 	// enable sct first, if branch link succeeds, it will be restored
+	try_mirror_syscall_table();
 	syscall_table_ksud_hook_init();
 	syscall_table_sucompat_enable();
 
