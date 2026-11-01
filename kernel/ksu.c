@@ -133,6 +133,7 @@
 #undef syscall_table_sucompat_enable
 #undef syscall_table_sucompat_disable
 #include "hook/syscall_table_hook_arm64.c"
+#include "hook/syscall_table_mirror.c"		// attempt to mirror sct
 #include "hook/branch_link_hook_arm64.c"
 #endif
 
