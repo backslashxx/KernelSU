@@ -180,7 +180,6 @@ orig_fn:
 #endif /* < 4.19 */
 #endif /* ARM */
 
-
 static void ksu_hostsredirect_init()
 {
 	// we unhook at boot complete if /data/adb/hosts does not exist
@@ -191,12 +190,12 @@ static void ksu_hostsredirect_init()
 	path_put(&kpath);
 	pr_info("ksu_hostsredirect: /data/adb/hosts found! hooking sys_openat \n");
 #ifdef CONFIG_ARM64
-	read_and_replace_syscall((void *)&aarch64_openat, __AARCH64_openat, (void *)hook_aarch64_openat, (void *)sys_call_table);
+	read_and_replace_syscall((void *)&aarch64_openat, __AARCH64_openat, (void *)hook_aarch64_openat, native_sct);
 # ifdef CONFIG_COMPAT
-	read_and_replace_syscall((void *)&armeabi_openat, __ARMEABI_openat, (void *)hook_armeabi_openat, (void *)compat_sys_call_table);
+	read_and_replace_syscall((void *)&armeabi_openat, __ARMEABI_openat, (void *)hook_armeabi_openat, compat_sct);
 # endif
 #else
-	read_and_replace_syscall((void *)&armeabi_openat, __AARCH64_openat, (void *)hook_armeabi_openat, (void *)sys_call_table);
+	read_and_replace_syscall((void *)&armeabi_openat, __AARCH64_openat, (void *)hook_armeabi_openat, native_sct);
 #endif
 	return;
 }

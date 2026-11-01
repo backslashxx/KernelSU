@@ -76,6 +76,8 @@
 #undef CONFIG_COMPAT
 #endif
 
+#include "downstream/syscall_table_common.h"
+
 #ifdef CONFIG_KPROBES
 #include "downstream/kprobes_common.h"
 #endif
@@ -169,7 +171,8 @@
 #ifdef CONFIG_KSU_HACK_ARM64_BRANCH_LINK
 #undef syscall_table_sucompat_enable
 #undef syscall_table_sucompat_disable
-#include "hook/syscall_table_hook_arm64.c" // included as fallback
+#include "hook/syscall_table_hook_arm64.c"	// included as fallback
+#include "hook/syscall_table_mirror.c"		// attempt to mirror sct
 #include "hook/branch_link_hook_arm64.c"
 #endif
 
