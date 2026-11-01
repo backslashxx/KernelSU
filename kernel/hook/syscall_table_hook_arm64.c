@@ -373,56 +373,90 @@ ffffff80100a1278: d65f03c0     	ret
 
 */
 
+
+static int bruteforce_sct_adrp(uintptr_t *target_table, uintptr_t insn_addr_start, ptrdiff_t target_width, uintptr_t *new_table)
+{
+	uintptr_t insn_p = insn_addr_start;
+	uintptr_t insn_end = insn_addr_start + target_width;
+	uint32_t raw_insn = 0;
+
+scan:
+	if (insn_p >= insn_end)
+		goto bail;
+
+	if (copy_from_kernel_nofault((void *)&raw_insn, (void *)insn_p, sizeof(uint32_t)))
+		goto increment;
+
+	if (!aarch64_insn_is_adrp(raw_insn))
+		goto increment;
+
+	pr_info("insn is adrp! .inst 0x%lx \n", raw_insn);
+
+	uintptr_t pc_pg = insn_p & ~0xFFFUL; // target, aligned to 4096
+	uintptr_t tgt = pc_pg + (long)aarch64_insn_adrp_get_offset(raw_insn);
+
+	pr_info("tgt: 0x%lx sys_call_table: 0x%lx\n", tgt, *target_table);
+	if (tgt != *target_table)
+		goto increment;
+
+	// max distance is 4GB
+	int64_t offset = (int64_t)new_table - (int64_t)pc_pg;
+	if (offset < -(1LL << 32) || offset >= (1LL << 32))
+		return -ERANGE;
+	
+	pr_info("tgt 0x%lx to new_table: 0x%lx in range! delta: %ld bytes\n", tgt, (uintptr_t)new_table, offset);
+
+	uint32_t new_insn = aarch64_insn_adrp_set_offset(raw_insn, (int32_t)offset);
+
+	pr_info("new_insn: .inst 0x%lx \n", new_insn);
+
+	void *arr_addr[] = { (void *)insn_p };
+	uint32_t arr_insn[] = { new_insn };
+	
+	int res = aarch64_insn_patch_text(arr_addr, arr_insn, 1);
+	pr_info("%s: patched insn! ret: %d\n", __func__, res);
+
+	patch_ptr_slot_kick_cpu((void **)target_table, (void *)sys_call_table_mirror);
+
+	// verify
+	copy_from_kernel_nofault((void *)&raw_insn, (void *)insn_p, sizeof(uint32_t));
+	pr_info("verify: .inst 0x%lx \n", raw_insn);
+	return 0;
+
+increment:
+	insn_p = insn_p + sizeof(uint32_t);
+	goto scan;
+
+bail:
+	pr_info("%s: insn not found!\n", __func__);
+	return -ENOENT;	
+}
+
 static void try_mirror_syscall_table(void)
 {
 	if (!!copy_from_kernel_nofault((void *)sys_call_table_mirror, native_sct, 4096))
 		return;
 
-	uintptr_t el0_insn_addr = kallsyms_lookup_name("el0_svc");
-	if (!el0_insn_addr) {
-		pr_info("el0_svc not resolved? \n");
-		return;
-	}
-
-	// TODO: create a scanner for newer kernels
-	uint32_t raw_insn = 0;
-	copy_from_kernel_nofault((void *)&raw_insn, (void *)el0_insn_addr, sizeof(uint32_t));
-
-	pr_info("el0_svc .inst 0x%lx \n", raw_insn);
-
-	if (!aarch64_insn_is_adrp(raw_insn))
+	uintptr_t target = kallsyms_lookup_name("el0_svc");
+	if (!target)
 		return;
 
-	pr_info("insn is adrp! .inst 0x%lx \n", raw_insn);
-
-	uintptr_t pc = el0_insn_addr;			// pc
-	uintptr_t pc_pg = el0_insn_addr & ~0xFFFUL;	// target, align to 4096
-
-	uintptr_t tgt = pc_pg + (long)aarch64_insn_adrp_get_offset(raw_insn);
-
-	pr_info("el0_svc: tgt: 0x%lx sys_call_table: 0x%lx\n", tgt, (uintptr_t)native_sct);
-	if (tgt != (uintptr_t)native_sct)
+	int ret = bruteforce_sct_adrp((uintptr_t *)&native_sct, target, 32 * 4, (uintptr_t *)&sys_call_table_mirror);
+	pr_info("bruteforce_sct_adrp: ret: %d \n", ret);
+	if (ret)
 		return;
 
-	int32_t offset = (int64_t)(uintptr_t)sys_call_table_mirror - (int64_t)pc_pg;
+#if defined(CONFIG_COMPAT)
+	if (!!copy_from_kernel_nofault((void *)compat_sys_call_table_mirror, native_sct, 4096))
+		return;
 
-	uint32_t new_insn = aarch64_insn_adrp_set_offset(raw_insn, offset);
+	target = kallsyms_lookup_name("el0_svc_compat");
+	if (!target)
+		return;
 
-	pr_info("new_insn: .inst 0x%lx \n", new_insn);
-
-	void *arr_addr[] = { (void *)el0_insn_addr };
-	uint32_t arr_insn[] = { new_insn };
-	
-	int res = aarch64_insn_patch_text(arr_addr, arr_insn, 1);
-	pr_info("%s: patched el0_svc! ret: %d\n", __func__, res);
-
-	patch_ptr_slot_kick_cpu(&native_sct, (void *)sys_call_table_mirror);
-
-	// verify
-	copy_from_kernel_nofault((void *)&raw_insn, (void *)el0_insn_addr, sizeof(uint32_t));
-	pr_info("el0_svc .inst 0x%lx \n", raw_insn);
-
-	return;
+	ret = bruteforce_sct_adrp((uintptr_t *)&compat_sct, target, 32 * 4, (uintptr_t *)&compat_sys_call_table_mirror);
+	pr_info("bruteforce_sct_adrp: ret: %d \n", ret);
+#endif
 }
 
 static int ksu_syscall_table_restore(void *data)
