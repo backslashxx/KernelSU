@@ -323,29 +323,27 @@ __weak void ext4_unregister_sysfs(struct super_block *sb)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 16, 0) && !defined(strscpy)
 /**
- * hand-rolled strscpy from builtins.
- *
+ * single-pass, per-byte strscpy implementation
  * not 1:1, no aligned/per-word optimization.
+ *
+ * restricted, "The behavior is undefined if the string buffers overlap."
  * discardable since 4.16: https://github.com/torvalds/linux/commit/08a77676f9c5
  */
-static ssize_t ksu_strscpy(char *dest, const char *src, size_t count)
+static ssize_t ksu_strscpy(char *restrict dest, const char *restrict src, size_t count)
 {
 	if (!count)
 		return -E2BIG;
 
-	// look for the first null terminator w/in count
-	// alternatively, strnlen?
-	const char *end = __builtin_memchr(src, '\0', count);
-	if (!end)
-		goto no_null_term;
+	for (size_t i = 0; i < count; i++) {
+		char a = src[i];
+		dest[i] = a;
 
-	size_t copy_len = end - src; 
-	__builtin_memcpy(dest, src, copy_len + 1); // +1 to copy \0
-	return copy_len;
+		// returns strlen, null-1
+		if (!a)
+			return i;
+	}
 
-no_null_term:
-	__builtin_memcpy(dest, src, count - 1);
-	dest[count - 1] = '\0';
+	dest[count - 1] = 0;
 	return -E2BIG;
 }
 #define strscpy ksu_strscpy
