@@ -372,6 +372,101 @@ hook_classic:
 #define ksu_init_hook_sel_handle_status_ops_open patch_branch_sel_open_handle_status
 #endif // ARM64 && KALLSYMS
 
+#ifdef SAMSUNG_EL2_WORKAROUND // TODO: maybe patch adrp
+static int selinux_tx_write_pre(struct kretprobe_instance *p, struct pt_regs *regs)
+{
+
+	uintptr_t *arg = (uintptr_t *)p->data;	
+	struct file *file = (struct file *)PT_REGS_PARM1(regs);
+	const char __user **pbuf = (const char __user **)&PT_REGS_PARM2(regs); // **
+	size_t size = (size_t)PT_REGS_PARM3(regs);
+	
+	arg[0] = (uintptr_t)file;
+
+	if (unlikely(!ksu_selinux_hide_enabled))
+		goto skip_destroy;
+
+	if (!ksu_is_seccomp_enabled())
+		goto skip_destroy;
+
+	if (current_uid().val < 10000)
+		goto skip_destroy;
+
+#define SEL_CONTEXT 5
+#define SEL_ACCESS 6
+	ino_t ino = file_inode(file)->i_ino;
+	if (ino != SEL_CONTEXT && ino != SEL_ACCESS)
+		goto skip_destroy;
+
+	// two cachelines
+	char kbuf[128];
+	size_t len = (size < 128) ? size : 127;
+
+	if (!!copy_from_user(kbuf, *pbuf, len))
+		goto skip_destroy;
+
+	kbuf[len] = '\0';
+	if (ksu_should_destroy_context(kbuf, len)) {
+		pr_info("selinux_hide: selinux_tx_write_pre: destroy: %s \n", kbuf);
+		*pbuf = (const char __user *)current->mm->start_stack;
+	}
+
+skip_destroy:
+	return 0;
+}
+
+static int selinux_tx_write_post(struct kretprobe_instance *p, struct pt_regs *regs)
+{
+	uintptr_t *arg = (uintptr_t *)p->data;
+	struct file *file = (struct file *)arg[0];
+	ssize_t rc = (ssize_t)PT_REGS_RC(regs);
+
+	if (unlikely(!ksu_selinux_hide_enabled))
+		return 0;
+
+	if (!ksu_is_seccomp_enabled())
+		return 0;
+
+	if (current_uid().val < 10000)
+		return 0;
+
+	// we dont care on error ret
+	if (rc < 0)
+		return 0;
+
+	if (!file)
+		return 0;
+
+	struct simple_transaction_argresp *ar = file->private_data;
+	if (!ar)
+		return 0;
+
+	uint32_t avd_allowed, ff, avd_auditallow, avd_auditdeny, avd_seqno, avd_flags;
+	if (sscanf(ar->data, "%x %x %x %x %u %x", &avd_allowed, &ff, &avd_auditallow, &avd_auditdeny, &avd_seqno, &avd_flags) != 6)
+		return 0;
+
+	avd_seqno = 1; // simple_transaction_set()
+	ar->size = scnprintf(ar->data, SIMPLE_TRANSACTION_LIMIT, "%x %x %x %x %u %x", avd_allowed, ff, avd_auditallow, avd_auditdeny, avd_seqno, avd_flags);
+
+	return 0;
+}
+
+static struct kretprobe selinux_tx_write_rp = {
+	.kp.symbol_name = "selinux_transaction_write",
+	.entry_handler = selinux_tx_write_pre,
+	.handler = selinux_tx_write_post,
+	.data_size = sizeof(uintptr_t), // to pass on file *
+};
+
+static int register_selinux_tx_write_rp(void)
+{
+	int ret = register_kretprobe(&selinux_tx_write_rp);
+	pr_info("%s: selinux_tx_write_rp: %d\n", __func__, ret);
+	return ret;
+}
+#define ksu_init_hook_transaction_ops_write register_selinux_tx_write_rp
+#endif // SAMSUNG_EL2_WORKAROUND
+
 // init kthread
 static int ksu_selinux_hide_init_thread(void *data)
 {
