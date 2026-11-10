@@ -151,7 +151,7 @@ static int escape_to_root(bool is_forced)
 	setup_groups(profile, cred);
 	setup_selinux(profile->selinux_domain, cred);
 
-	commit_creds(cred);
+	ksu_commit_creds(cred);
 
 	if (ksu_is_seccomp_enabled())
 		disable_seccomp();
