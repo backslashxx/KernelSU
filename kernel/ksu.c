@@ -19,6 +19,10 @@
 
 #include "kernel_includes.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0) && defined(MODULE)
+#define SAMSUNG_EL2_WORKAROUND
+#endif
+
 // selinux includes
 #include "avc_ss.h"
 #include "objsec.h"
@@ -40,6 +44,13 @@
 #include "include/arch.h"
 #include "include/klog.h"
 #include "include/ksu.h"
+
+#ifdef SAMSUNG_EL2_WORKAROUND
+#include "kdp.c"
+#else
+#define kdp_jb_init() do { } while(0)
+#define ksu_commit_creds commit_creds
+#endif
 
 // kernel compat
 #include "kernel_compat.h"
@@ -144,7 +155,7 @@
 #include "hook/setuid_hook.c"
 
 #ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
-	#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) || defined(SAMSUNG_EL2_WORKAROUND)
 	#include "hook/lsm_hooks_static.c"
 	#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
 	#include "hook/lsm_hooks_list.c"
@@ -255,6 +266,8 @@ static int __init kernelsu_init(void)
 #endif
 	if (allow_shell)
 		pr_alert("shell is allowed at init!");
+
+	kdp_jb_init();
 
 	ksu_cred = prepare_creds();
 	if (!ksu_cred) {
