@@ -97,12 +97,21 @@ static int ksu_security_file_permission(struct file *file, int mask)
 	return security_file_permission(file, mask);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) 
 extern int security_setprocattr(int lsmid, const char *name, void *value, size_t size);
 static int ksu_setprocattr(int lsmid, const char *name, void *value, size_t size)
 {
 	ksu_hide_setprocattr_inline(name, value, size);
 	return security_setprocattr(lsmid, name, value, size);
 }
+#else
+extern int security_setprocattr(const char *lsm, const char *name, void *value, size_t size);
+static int ksu_setprocattr(const char *lsm, const char *name, void *value, size_t size)
+{
+	ksu_hide_setprocattr_inline(name, value, size);
+	return security_setprocattr(lsm, name, value, size);
+}
+#endif
 
 extern int security_inode_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
 			const char *name, const void *value, size_t size, int flags);
