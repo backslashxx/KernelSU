@@ -206,6 +206,7 @@ static noinline int ksyscall_execve_ksud(const char *fn_name, void ***u_argv, vo
 	char fd_path[32];
 	int len = snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 	uintptr_t mmap_page = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
 	if (IS_ERR_VALUE(mmap_page)) {
 		pr_info("mmap fail!\n");
@@ -276,6 +277,28 @@ ksyscall_exec:;
 		pr_info("su_compat: ksyscall(execve, \"%s\", 0x%lx, 0x%lx);\n", fd_path, (uintptr_t)argv, (uintptr_t)envp);
 
 	return 0;
+#else
+	char __user **argv = (char __user **)*(void ***)u_argv;
+	char __user **envp = (char __user **)*(void ***)u_envp;
+
+	/**
+	 * on old abi, we can use kernel_execve. however, just like userspace execve,
+	 * this does NOT return to caller on success, so we install fd before exec
+	 */
+	ksu_install_su_fd(); // ksu#3679
+	pr_info("su_compat: %s su->%s!\n", fn_name, fd_path);
+
+	if (IS_ENABLED(CONFIG_KSU_DEBUG))
+		pr_info("su_compat: kernel_execve(\"%s\", 0x%lx, 0x%lx);\n", fd_path, (uintptr_t)argv, (uintptr_t)envp);
+
+	int ret = kernel_execve(fd_path, argv, envp);
+	if (ret) {
+		pr_info("kernel_execve failed! ret: %d \n", ret);
+		ksu_close_fd(fd);
+		return ret;
+	}
+	return 0;
+#endif
 }
 
 static __always_inline void ksu_sucompat_user_execve(const char __user **filename_user, void *restrict argv, void *restrict envp, const char *syscall_name)
