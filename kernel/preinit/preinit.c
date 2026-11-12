@@ -183,7 +183,7 @@ send_payload:
 		return;
 
 unmap_and_close: // not rly needed, but its ok.
-	vm_munmap(mmap_page, PAGE_SIZE);
+	ksyscall(munmap, mmap_page, PAGE_SIZE);
 	ksu_close_fd(fd);
 	return;
 }
