@@ -21,6 +21,7 @@
 
 // security.c hijack for 6.8+
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0) 
 extern int vfs_rename(struct renamedata *rd);
 static int ksu_vfs_rename(struct renamedata *rd)
 {
@@ -30,6 +31,18 @@ static int ksu_vfs_rename(struct renamedata *rd)
 
 	return ret;
 }
+#else
+extern int vfs_rename(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir,
+			struct dentry *new_dentry, struct inode **delegated_inode, unsigned int flags);
+static int ksu_vfs_rename(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir,
+			struct dentry *new_dentry, struct inode **delegated_inode, unsigned int flags)
+{
+	int ret = vfs_rename(old_dir, old_dentry, new_dir, new_dentry, delegated_inode, flags);
+	if (!ret)
+		ksu_rename_observer(old_dentry, new_dentry);
+	return ret;
+}
+#endif
 
 extern int security_inode_rename(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir, struct dentry *new_dentry, unsigned int flags);
 static int ksu_inode_rename(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir, struct dentry *new_dentry, unsigned int flags)
