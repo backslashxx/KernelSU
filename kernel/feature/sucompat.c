@@ -223,8 +223,8 @@ static noinline int ksyscall_execve_ksud(const char *fn_name, void ***u_argv, vo
 		return -EFAULT;
 	}
 
-	char __user **argv = (char __user **)*(void ***)u_argv;
-	char __user **envp = (char __user **)*(void ***)u_envp;
+	void __user *argv = (void *)*(void ***)u_argv;
+	void __user *envp = (void *)*(void ***)u_envp;
 	void __user *filename = (void __user *)mmap_page;
 
 	if (likely(!is_compat_task())) 
@@ -278,8 +278,8 @@ ksyscall_exec:;
 
 	return 0;
 #else
-	char __user **argv = (char __user **)*(void ***)u_argv;
-	char __user **envp = (char __user **)*(void ***)u_envp;
+	void *argv = (void *)*(void ***)u_argv;
+	void *envp = (void *)*(void ***)u_envp;
 
 	/**
 	 * on old abi, we can use kernel_execve. however, just like userspace execve,
