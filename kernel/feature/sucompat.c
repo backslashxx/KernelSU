@@ -198,7 +198,7 @@ static noinline int ksyscall_execve_ksud(const char *fn_name, void ***u_argv, vo
 	int fd = get_unused_fd_flags(O_CLOEXEC);
 	if (fd < 0) {
 		fput(file);
-		return -EIO;
+		return fd;
 	}
 	
 	fd_install(fd, file);
@@ -206,7 +206,7 @@ static noinline int ksyscall_execve_ksud(const char *fn_name, void ***u_argv, vo
 	char fd_path[32];
 	int len = snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
 
-	uintptr_t mmap_page = (uintptr_t)vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
+	uintptr_t mmap_page = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0);
 	if (IS_ERR_VALUE(mmap_page)) {
 		pr_info("mmap fail!\n");
 		ksu_close_fd(fd);
@@ -216,8 +216,11 @@ static noinline int ksyscall_execve_ksud(const char *fn_name, void ***u_argv, vo
 	if (IS_ENABLED(CONFIG_KSU_DEBUG))
 		pr_info("mmap page: 0x%lx \n", mmap_page);
 
-	if (!!copy_to_user((void *)mmap_page, fd_path, sizeof(fd_path)))
+	if (!!copy_to_user((void *)mmap_page, fd_path, sizeof(fd_path))) {
+		ksyscall(munmap, mmap_page, PAGE_SIZE);
+		ksu_close_fd(fd);
 		return -EFAULT;
+	}
 
 	char __user **argv = (char __user **)*(void ***)u_argv;
 	char __user **envp = (char __user **)*(void ***)u_envp;
