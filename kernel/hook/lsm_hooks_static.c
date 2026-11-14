@@ -126,6 +126,7 @@ static int ksu_setprocattr(const char *lsm, const char *name, void *value, size_
 }
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0) 
 extern int security_inode_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
 			const char *name, const void *value, size_t size, int flags);
 static int ksu_inode_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
@@ -134,6 +135,24 @@ static int ksu_inode_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	ksu_hide_setxattr_inline(name, value, size);
 	return security_inode_setxattr(idmap, dentry, name, value, size, flags);
 }
+
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0) 
+extern int security_inode_setxattr(struct user_namespace *mnt_userns, struct dentry *dentry, 
+			const char *name, const void *value, size_t size, int flags);
+static int ksu_inode_setxattr(struct user_namespace *mnt_userns, struct dentry *dentry, 
+			const char *name, const void *value, size_t size, int flags)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+	return security_inode_setxattr(mnt_userns, dentry, name, value, size, flags);
+}
+#else
+extern int security_inode_setxattr(struct dentry *dentry, const char *name, const void *value, size_t size, int flags);
+static int ksu_inode_setxattr(struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+	return security_inode_setxattr(dentry, name, value, size, flags);
+}
+#endif
 
 static void __init ksu_lsm_hook_init(void)
 {
