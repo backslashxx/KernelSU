@@ -91,6 +91,9 @@
 
 #ifdef CONFIG_ARM64
 #include "downstream/arm64_branch_insn.h"
+#ifdef CONFIG_KALLSYMS
+#include "downstream/arm64_tiny_trampoline.h"
+#endif
 #endif
 
 #include "downstream/slow_avc_audit_defs.h"
