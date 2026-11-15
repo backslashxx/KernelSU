@@ -123,10 +123,26 @@ static int patch_and_create_landing_pad(uintptr_t target)
 	uintptr_t trampoline_end  = (uintptr_t)cave_end;
 	uintptr_t trampoline_start = trampoline_end - 4 * sizeof(uint32_t);
 
+	uint32_t arr_insn[4] = { 0 };
+	void *arr_addr[] = { 
+		(void*)(trampoline_start + 0 * sizeof(uint32_t)),
+		(void*)(trampoline_start + 1 * sizeof(uint32_t)),
+		(void*)(trampoline_start + 2 * sizeof(uint32_t)),
+		(void*)(trampoline_start + 3 * sizeof(uint32_t))
+	};
 
+	int gen = generate_trampoline(arr_insn, target);
+	if (gen) {
+		pr_info("generate_trampoline: ret: %d\n", gen);	
+		return gen;
+	}
 
-
-
+	// debug
+	pr_info("insn0: 0x%x to 0x%lx\n", __func__, arr_insn[0], (uintptr_t)arr_addr[0]);
+	pr_info("insn1: 0x%x to 0x%lx\n", __func__, arr_insn[1], (uintptr_t)arr_addr[1]);
+	pr_info("insn2: 0x%x to 0x%lx\n", __func__, arr_insn[2], (uintptr_t)arr_addr[2]);
+	pr_info("insn3: 0x%x to 0x%lx\n", __func__, arr_insn[3], (uintptr_t)arr_addr[3]);
+	return 0;
 
 }
 
