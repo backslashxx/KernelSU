@@ -23,7 +23,7 @@
 #include <asm/patching.h>
 #endif
 
-static void hunt_entry_text_code_cave(void)
+static void *hunt_entry_text_code_cave(void)
 {
 	// look for code cave inside __entry_text_start[], __entry_text_end[];
 	uintptr_t entry_text_start_p = (uintptr_t)kallsyms_lookup_name("__entry_text_start");
@@ -72,8 +72,62 @@ bail:;
 	char cbuf[KSYM_SYMBOL_LEN];
 	sprint_symbol(cbuf, best_addr_end);
 	pr_info("%s: highest: %u end_addr: 0x%lx owned by: %s\n", __func__, highest, best_addr_end, cbuf);
-	return (void *)best_addr_end;
+	if (highest > 4)
+		return (void *)best_addr_end;
+
+	return nullptr;
 }
 
+/**
+ *  printf '%s\n' '.text' '.global tp' 'tp:' 'ldr x16, #8' 'br x16' '.quad 0x12345678FFFFFFFF' | aarch64-linux-gnu-as -o test.o
+ *
+ * 0:	58000050 	ldr	x16, #8 
+ * 4:	d61f0200 	br	x16
+ * 8:	ffffffff 	.word	0xffffffff
+ * c:	12345678 	.word	0x12345678
+ */
+#if !defined(__aarch64__)
+static_assert(1 == 0, "ARM64 only!");
+#endif
+
+nodiscard static int generate_trampoline(uint32_t buf[], uint64_t target)
+{
+	if (!buf || !target)
+		return -EINVAL;
+
+	uint32_t ibuf; // test that target is reachable
+	if (!!copy_from_kernel_nofault(&ibuf, (void *)target, sizeof(uint32_t)))
+		return -EFAULT;
+
+	buf[0] = 0x58000050u;
+	buf[1] = 0xd61f0200u;
+
+	// now cut it up
+	buf[2] = (uint32_t)(target & 0xFFFFFFFFULL);
+	buf[3] = (uint32_t)(target >> 32);
+
+	return 0;
+}
+
+static int patch_and_create_landing_pad(uintptr_t target)
+{
+	if (!target)
+		return -EINVAL;
+
+	void *cave_end = hunt_entry_text_code_cave();
+	if (!cave_end) {
+		pr_info("no sizeable code cave found! \n");
+		return -ENXIO;
+	}
+
+	uintptr_t trampoline_end  = (uintptr_t)cave_end;
+	uintptr_t trampoline_start = trampoline_end - 4 * sizeof(uint32_t);
+
+
+
+
+
+
+}
 
 #endif // __H_ARM64_TINY_TRAMPOLINE
