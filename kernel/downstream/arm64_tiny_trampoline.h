@@ -27,7 +27,7 @@
 static_assert(1 == 0, "ARM64 only!");
 #endif
 
-static void *hunt_entry_text_code_cave(void)
+nodiscard static void *hunt_entry_text_code_cave(void)
 {
 	// look for code cave inside __entry_text_start[], __entry_text_end[];
 	uintptr_t entry_text_start_p = (uintptr_t)kallsyms_lookup_name("__entry_text_start");
@@ -83,7 +83,12 @@ bail:;
 }
 
 /**
- *  printf '%s\n' '.text' '.global tp' 'tp:' 'ldr x16, #8' 'br x16' '.quad 0x12345678FFFFFFFF' | aarch64-linux-gnu-as -o test.o
+ * small trampoline
+ *
+ * in reality, its more of a landing pad.
+ * all this does is extend the branching range to full 64 bit address space.
+ *
+ * printf '%s\n' '.text' '.global tp' 'tp:' 'ldr x16, #8' 'br x16' '.quad 0x12345678FFFFFFFF' | aarch64-linux-gnu-as -o test.o
  *
  * 0:	58000050 	ldr	x16, #8 
  * 4:	d61f0200 	br	x16
@@ -94,15 +99,8 @@ bail:;
  * hiwever encoding/decoding and offset_in_age has to be handled. maybe later.
  */
 
-nodiscard static int generate_trampoline(uint32_t buf[], uint64_t target)
+static inline int generate_trampoline(uint32_t buf[], uint64_t target)
 {
-	if (!buf || !target)
-		return -EINVAL;
-
-	uint32_t ibuf; // test that target is reachable
-	if (!!copy_from_kernel_nofault(&ibuf, (void *)target, sizeof(uint32_t)))
-		return -EFAULT;
-
 	buf[0] = 0x58000050u;
 	buf[1] = 0xd61f0200u;
 
@@ -113,21 +111,32 @@ nodiscard static int generate_trampoline(uint32_t buf[], uint64_t target)
 	return 0;
 }
 
-static uintptr_t create_landing_pad(uintptr_t target)
+static DEFINE_MUTEX(trampoline_routine_mutex);
+
+nodiscard static uintptr_t create_landing_pad(uintptr_t target)
 {
+	guarded_mutex_lock(&trampoline_routine_mutex);
+
 	if (!target)
 		return 0x0;
 
 	might_sleep();
 
-	void *cave_end = hunt_entry_text_code_cave();
-	if (!cave_end) {
-		pr_info("no sizeable code cave found! \n");
+	uint32_t ibuf; // test that target is reachable
+	if (!!copy_from_kernel_nofault(&ibuf, (void *)target, sizeof(uint32_t))) {
+		pr_info("%s: target unreachable!\n", __func__);
 		return 0x0;
 	}
 
-	uintptr_t trampoline_end  = (uintptr_t)cave_end;
-	uintptr_t trampoline_start = trampoline_end - 4 * sizeof(uint32_t);
+	void *cave_end = hunt_entry_text_code_cave();
+	if (!cave_end) {
+		pr_info("%s: no sizeable code cave found!\n", __func__);
+		return 0x0;
+	}
+
+	// we get the address of last nop
+	uintptr_t last_nop_addr  = (uintptr_t)cave_end;
+	uintptr_t trampoline_start = last_nop_addr - 3 * sizeof(uint32_t);
 
 	uint32_t arr_insn[4] = { 0 };
 	void *arr_addr[] = { 
@@ -138,17 +147,13 @@ static uintptr_t create_landing_pad(uintptr_t target)
 	};
 
 	int gen = generate_trampoline(arr_insn, target);
-	if (gen) {
-		pr_info("generate_trampoline: ret: %d\n", gen);	
-		return gen;
-	}
 
-	// debug
-	pr_info("%s: insn0: 0x%x to 0x%lx\n", __func__, arr_insn[0], (uintptr_t)arr_addr[0]);
-	pr_info("%s: insn1: 0x%x to 0x%lx\n", __func__, arr_insn[1], (uintptr_t)arr_addr[1]);
-	pr_info("%s: insn2: 0x%x to 0x%lx\n", __func__, arr_insn[2], (uintptr_t)arr_addr[2]);
-	pr_info("%s: insn3: 0x%x to 0x%lx\n", __func__, arr_insn[3], (uintptr_t)arr_addr[3]);
-
+#if 1	// debug
+	pr_info("%s: .inst 0x%x to 0x%lx\n", __func__, arr_insn[0], (uintptr_t)arr_addr[0]);
+	pr_info("%s: .inst 0x%x to 0x%lx\n", __func__, arr_insn[1], (uintptr_t)arr_addr[1]);
+	pr_info("%s: .inst 0x%x to 0x%lx\n", __func__, arr_insn[2], (uintptr_t)arr_addr[2]);
+	pr_info("%s: .inst 0x%x to 0x%lx\n", __func__, arr_insn[3], (uintptr_t)arr_addr[3]);
+#endif
 	int res = aarch64_insn_patch_text(arr_addr, arr_insn, 4);
 	if (res) {
 		pr_info("%s: err: %d\n", __func__, res);
