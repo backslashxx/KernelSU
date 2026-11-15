@@ -318,6 +318,60 @@ bail_out:
 	path_put(&path);
 }
 
+#if defined(CONFIG_ARM64) && defined(CONFIG_KALLSYMS)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
+struct page *hook_selinux_kernel_status_page(struct selinux_state *state)
+#else
+struct page *hook_selinux_kernel_status_page(void)
+#endif
+{
+	if (unlikely(!ksu_selinux_hide_enabled))
+		goto orig_page;
+
+	if (!ksu_is_seccomp_enabled())
+		goto orig_page;
+
+	if (current_uid().val < 10000)
+		goto orig_page;
+
+	assume(!!ksu_fake_status_page);
+	if (unlikely(!ksu_fake_status_page))
+		goto orig_page;
+
+	pr_info("selinux_hide: sel_open_handle_status: served fake_page\n");
+	return ksu_fake_status_page;
+
+orig_page:
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
+	return selinux_kernel_status_page(&selinux_state);
+#else
+	return selinux_kernel_status_page();
+#endif
+}
+
+static int ksu_init_hook_selinux_kernel_status_page(void)
+{
+	uintptr_t target_callsite = kallsyms_lookup_retry("sel_open_handle_status");
+	uintptr_t symbol_addr = kallsyms_lookup_retry("selinux_kernel_status_page");
+	if (!symbol_addr || !target_callsite)
+		goto fallback;		
+
+	// for demo purposes
+	uintptr_t landing_pad = create_landing_pad((uintptr_t)&hook_selinux_kernel_status_page);
+	if (!landing_pad)
+		goto fallback;
+
+	int ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), symbol_addr, landing_pad);
+	pr_info("hook_site: sel_open_handle_status->selinux_kernel_status_page ret: %d \n", ret);
+	if (!ret)
+		return ret;
+fallback:;
+	ksu_init_hook_sel_handle_status_ops_open();
+	return 0;
+}
+#define ksu_init_hook_sel_handle_status_ops_open ksu_init_hook_selinux_kernel_status_page
+#endif // CONFIG_ARM64 && CONFIG_KALLSYMS
+
 // init kthread
 static int ksu_selinux_hide_init_thread(void *data)
 {

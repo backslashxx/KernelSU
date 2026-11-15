@@ -23,6 +23,10 @@
 #include <asm/patching.h>
 #endif
 
+#if !defined(__aarch64__)
+static_assert(1 == 0, "ARM64 only!");
+#endif
+
 static void *hunt_entry_text_code_cave(void)
 {
 	// look for code cave inside __entry_text_start[], __entry_text_end[];
@@ -72,7 +76,7 @@ bail:;
 	char cbuf[KSYM_SYMBOL_LEN];
 	sprint_symbol(cbuf, best_addr_end);
 	pr_info("%s: highest: %u end_addr: 0x%lx owned by: %s\n", __func__, highest, best_addr_end, cbuf);
-	if (highest > 32)
+	if (highest > 16)
 		return (void *)best_addr_end;
 
 	return nullptr;
@@ -89,9 +93,6 @@ bail:;
  * alternative: printf '%s\n' '.text' '.global tp' 'tp:' 'adrp x16, 0x0' 'add x16, x16, #123' 'br x16' | aarch64-linux-gnu-as -o test.o
  * hiwever encoding/decoding and offset_in_age has to be handled. maybe later.
  */
-#if !defined(__aarch64__)
-static_assert(1 == 0, "ARM64 only!");
-#endif
 
 nodiscard static int generate_trampoline(uint32_t buf[], uint64_t target)
 {
@@ -112,15 +113,17 @@ nodiscard static int generate_trampoline(uint32_t buf[], uint64_t target)
 	return 0;
 }
 
-static int patch_and_create_landing_pad(uintptr_t target)
+static uintptr_t create_landing_pad(uintptr_t target)
 {
 	if (!target)
-		return -EINVAL;
+		return 0x0;
+
+	might_sleep();
 
 	void *cave_end = hunt_entry_text_code_cave();
 	if (!cave_end) {
 		pr_info("no sizeable code cave found! \n");
-		return -ENXIO;
+		return 0x0;
 	}
 
 	uintptr_t trampoline_end  = (uintptr_t)cave_end;
@@ -145,7 +148,15 @@ static int patch_and_create_landing_pad(uintptr_t target)
 	pr_info("%s: insn1: 0x%x to 0x%lx\n", __func__, arr_insn[1], (uintptr_t)arr_addr[1]);
 	pr_info("%s: insn2: 0x%x to 0x%lx\n", __func__, arr_insn[2], (uintptr_t)arr_addr[2]);
 	pr_info("%s: insn3: 0x%x to 0x%lx\n", __func__, arr_insn[3], (uintptr_t)arr_addr[3]);
-	return 0;
+
+	int res = aarch64_insn_patch_text(arr_addr, arr_insn, 4);
+	if (res) {
+		pr_info("%s: err: %d\n", __func__, res);
+		return 0x0;
+	}
+
+	pr_info("%s: trampoline written to: 0x%lx ret: %d\n", __func__, trampoline_start, res);
+	return trampoline_start;
 }
 
 #endif // __H_ARM64_TINY_TRAMPOLINE
