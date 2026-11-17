@@ -71,11 +71,20 @@ nodiscard static noinline int arm64_branch_patch(uintptr_t target_callsite, ptrd
 
 	might_sleep();
 
+	constexpr ptrdiff_t bl_max_delta = (1L << 25) * sizeof(uint32_t); // 26 bits signed * insn size
 	uintptr_t start_addr = (uintptr_t)target_callsite;
 	uintptr_t end_addr = start_addr + target_width;
+
+	ptrdiff_t hook_to_start = (ptrdiff_t)hook_addr - (ptrdiff_t)start_addr;
+	ptrdiff_t hook_to_end = (ptrdiff_t)hook_addr - (ptrdiff_t)end_addr;
+	if (__builtin_labs(hook_to_start) >= bl_max_delta || __builtin_labs(hook_to_end) >= bl_max_delta) {
+		pr_info("%s: scan window start: 0x%lx end: 0x%lx out of range to hook: 0x%lx!\n", __func__, start_addr, end_addr, hook_addr);
+		return -ERANGE;
+	}
+//	pr_info("%s: scan window start: 0x%lx end: 0x%lx in range to hook: 0x%lx deltas: %ld / %ld \n", __func__, start_addr, end_addr, hook_addr, hook_to_start, hook_to_end);
+
 	uintptr_t curr_addr = start_addr;
 	uint32_t raw_instruction; // arm64 wordsize
-	constexpr ptrdiff_t bl_max_delta = (1L << 25) * sizeof(uint32_t); // 26 bits signed * insn size
 	unsigned int patched = 0;
 
 start_scan:
@@ -113,10 +122,10 @@ start_scan:
 	pr_info("%s: found call site at 0x%lx w/ .inst 0x%x \n", __func__, curr_addr, raw_instruction);
 
 	ptrdiff_t delta = hook_addr - curr_addr;
-	if (!patched && __builtin_labs(delta) >= (bl_max_delta - target_width)) {
-		pr_info("%s: callsite 0x%lx to hook 0x%lx out of range! (delta: %ld bytes)\n",  __func__, curr_addr, hook_addr, delta);
-		return -ERANGE;
-	}
+//	if (__builtin_labs(delta) >= bl_max_delta) {
+//		pr_info("%s: callsite 0x%lx to hook 0x%lx out of range! (delta: %ld bytes)\n",  __func__, curr_addr, hook_addr, delta);
+//		return -ERANGE;
+//	}
 
 	pr_info("%s: callsite 0x%lx to hook 0x%lx inside range! (delta: %ld bytes)\n",  __func__, curr_addr, hook_addr, delta);
 
