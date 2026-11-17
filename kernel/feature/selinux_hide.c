@@ -324,6 +324,201 @@ bail_out:
 	path_put(&path);
 }
 
+#if defined(CONFIG_ARM64) && defined(CONFIG_KALLSYMS)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
+__attribute__((used)) struct page *hook_selinux_kernel_status_page(struct selinux_state *state)
+#else
+__attribute__((used)) struct page *hook_selinux_kernel_status_page(void)
+#endif
+{
+	if (unlikely(!ksu_selinux_hide_enabled))
+		goto orig_page;
+
+	if (!ksu_is_seccomp_enabled())
+		goto orig_page;
+
+	if (current_uid().val < 10000)
+		goto orig_page;
+
+	assume(!!ksu_fake_status_page);
+	if (unlikely(!ksu_fake_status_page))
+		goto orig_page;
+
+	pr_info("selinux_hide: sel_open_handle_status: served fake_page\n");
+	return ksu_fake_status_page;
+
+orig_page:
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
+	return selinux_kernel_status_page(&selinux_state);
+#else
+	return selinux_kernel_status_page();
+#endif
+}
+
+static void patch_branch_sel_open_handle_status(void)
+{
+	uintptr_t target_callsite = kallsyms_lookup_retry("sel_open_handle_status");
+	uintptr_t symbol_addr = kallsyms_lookup_retry("selinux_kernel_status_page");
+	if (!symbol_addr || !target_callsite)
+		goto hook_classic;
+
+
+	int ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), symbol_addr, (uintptr_t)&hook_selinux_kernel_status_page);
+	if (ret == -ERANGE) {
+		uintptr_t landing_pad = create_landing_pad_kernel((uintptr_t)&hook_selinux_kernel_status_page);
+		if (landing_pad)
+			ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), symbol_addr, landing_pad);
+	}
+	pr_info("selinux_hide: hook_site: sel_open_handle_status->selinux_kernel_status_page ret: %d \n", ret);
+	if (!ret)
+		return;
+hook_classic:
+	pr_info("selinux_hide: fallback to function pointer hook!\n");
+	ksu_init_hook_sel_handle_status_ops_open();
+}
+#define ksu_init_hook_sel_handle_status_ops_open patch_branch_sel_open_handle_status
+
+static char *ksu_simple_transaction_get(struct file *file, const char __user *buf, size_t size)
+{
+	if (unlikely(!ksu_selinux_hide_enabled))
+		goto skip_destroy;
+
+	if (!ksu_is_seccomp_enabled())
+		goto skip_destroy;
+
+	if (current_uid().val < 10000)
+		goto skip_destroy;
+
+#define SEL_CONTEXT 5
+#define SEL_ACCESS 6
+	ino_t ino = file_inode(file)->i_ino;
+	if (ino != SEL_CONTEXT && ino != SEL_ACCESS)
+		goto skip_destroy;
+
+	// two cachelines
+	char kbuf[128];
+	size_t len = (size < 128) ? size : 127;
+
+	if (!!copy_from_user(kbuf, buf, len))
+		goto skip_destroy;
+
+	kbuf[len] = '\0';
+	if (ksu_should_destroy_context(kbuf, len)) {
+		pr_info("selinux_hide: simple_transaction_get: destroy: %s \n", kbuf);
+		buf = (const char __user *)current->mm->start_stack;
+	}
+
+skip_destroy:;
+	return simple_transaction_get(file, buf, size);
+}
+
+static void ksu_simple_transaction_set(struct file *file, size_t n)
+{
+	simple_transaction_set(file, n);
+
+	if (unlikely(!ksu_selinux_hide_enabled))
+		return;
+
+	if (!ksu_is_seccomp_enabled())
+		return;
+
+	if (current_uid().val < 10000)
+		return;
+
+	ino_t ino = file_inode(file)->i_ino;
+	if (ino != SEL_ACCESS)
+		return;
+
+	// simple_transaction_get()
+	struct simple_transaction_argresp *ar = file->private_data;
+	if (!ar)
+		return;
+
+	uint32_t avd_allowed, ff, avd_auditallow, avd_auditdeny, avd_seqno, avd_flags;
+	if (sscanf(ar->data, "%x %x %x %x %u %x", &avd_allowed, &ff, &avd_auditallow, &avd_auditdeny, &avd_seqno, &avd_flags) != 6)
+		return;
+
+	if (IS_ENABLED(CONFIG_KSU_DEBUG))
+		pr_info("ar->data: before: %s \n", ar->data);
+
+	avd_seqno = 1; // simple_transaction_set()
+	ar->size = scnprintf(ar->data, SIMPLE_TRANSACTION_LIMIT, "%x %x %x %x %u %x", avd_allowed, ff, avd_auditallow, avd_auditdeny, avd_seqno, avd_flags);
+
+	if (IS_ENABLED(CONFIG_KSU_DEBUG))
+		pr_info("ar->data: after: %s \n", ar->data);
+}
+
+static void patch_branches_selinux_transaction_write(void)
+{
+	uintptr_t target_callsite = kallsyms_lookup_retry("selinux_transaction_write");
+	uintptr_t symbol_addr = kallsyms_lookup_retry("simple_transaction_get");
+	if (!symbol_addr || !target_callsite)
+		goto hook_classic;
+
+	uintptr_t landing_pad1 = 0x0;
+	int ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), symbol_addr, (uintptr_t)&ksu_simple_transaction_get);
+	if (ret == -ERANGE) {
+		landing_pad1 = create_landing_pad_kernel((uintptr_t)&ksu_simple_transaction_get);
+		if (!!landing_pad1)
+			ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), symbol_addr, landing_pad1);
+	}
+	pr_info("selinux_hide: hook_site: selinux_transaction_write->simple_transaction_get ret: %d \n", ret);
+	if (ret)
+		goto hook_classic;
+
+	symbol_addr = kallsyms_lookup_retry("simple_transaction_set");
+	ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), symbol_addr, (uintptr_t)&ksu_simple_transaction_set);
+	if (ret == -ERANGE) {
+		uintptr_t landing_pad2 = create_landing_pad_kernel((uintptr_t)&ksu_simple_transaction_set);
+		if (!!landing_pad2)
+			ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), symbol_addr, landing_pad2);
+	}
+	pr_info("selinux_hide: hook_site: selinux_transaction_write->simple_transaction_set ret: %d \n", ret);
+	if (!ret)
+		return;
+
+	/**
+	 * on LTO + CONFIG_MODULES=n this can fail. (EXPORT_SYMBOL becomes useless, compiler inlines simple_transaction_set)
+	 * 
+	 * inline, melted.
+	 * ffffff80104ea128: f100041f     	cmp	x0, #0x1
+	 * ffffff80104ea12c: 54fffdab     	b.lt	0xffffff80104ea0e0 <selinux_transaction_write+0x30>
+	 * ffffff80104ea130: f13fe41f     	cmp	x0, #0xff9
+	 * ffffff80104ea134: 540000c2     	b.hs	0xffffff80104ea14c <selinux_transaction_write+0x9c>
+	 * ffffff80104ea138: f9406688     	ldr	x8, [x20, #0xc8]	// ar = file->private_data; 
+	 * ffffff80104ea13c: d5033bbf     	dmb	ish			// smp_mb()
+	 * ffffff80104ea140: f9000100     	str	x0, [x8]		// ar->size = n;
+	 * ffffff80104ea144: aa1303e0     	mov	x0, x19
+	 * ffffff80104ea148: 17ffffe6     	b	0xffffff80104ea0e0 <selinux_transaction_write+0x30>
+	 * ffffff80104ea14c: d4210000     	brk	#0x800 			// BUG_ON()
+	 * ffffff80104ea150: 14000000     	b	0xffffff80104ea150 <selinux_transaction_write+0xa0>
+	 *
+	 * non-inlined here, as normal.
+	 * ffffff8010470194: f100041f     	cmp	x0, #0x1
+	 * ffffff8010470198: 540000ab     	b.lt	0xffffff80104701ac <selinux_transaction_write+0x8c>
+	 * ffffff801047019c: aa1403e0     	mov	x0, x20
+	 * ffffff80104701a0: 97f8d990     	bl	0xffffff80102a67e0 <simple_transaction_set>
+	 *
+	 * however lets be opportunistic here, we keep the code, maybe we can get lucky
+	 * so if second hook fails, we just gc the first one and fallback to fnptr
+	 */
+	symbol_addr = kallsyms_lookup_retry("simple_transaction_get");
+	assume(!!symbol_addr);
+	if (!!landing_pad1)
+		ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), landing_pad1, symbol_addr);
+	else
+		ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), (uintptr_t)&ksu_simple_transaction_get, symbol_addr);
+	pr_info("selinux_hide: unhook_site: selinux_transaction_write->transaction_get ret: %d \n", ret);
+	if (ret) // uh oh, indeterminate state, just warn and limp on
+		pr_info("selinux_hide: unhook_site: selinux_transaction_write->transaction_get unhook failed! indeterminate state!\n");
+
+hook_classic:
+	pr_info("selinux_hide: fallback to function pointer hook!\n");
+	ksu_init_hook_transaction_ops_write();
+}
+#define ksu_init_hook_transaction_ops_write patch_branches_selinux_transaction_write
+#endif // ARM64 && KALLSYMS
+
 // init kthread
 static int ksu_selinux_hide_init_thread(void *data)
 {
