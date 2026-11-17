@@ -222,7 +222,7 @@ static void __init ksu_lsm_hook_init(void)
 	uintptr_t target_callsite;
 	uintptr_t symbol_addr;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0) 
+#if 0 // LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0) 
 	target_callsite = kallsyms_lookup_retry("filename_renameat2"); // k7.0
 	if (!target_callsite)
 		target_callsite = kallsyms_lookup_retry("do_renameat2");
