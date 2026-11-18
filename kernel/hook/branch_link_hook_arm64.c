@@ -218,6 +218,7 @@ static int bl_hook_faccessat(void *data)
 	uintptr_t symbol_addr;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+	// we do NOT bother with trampolines on this one
 	if (!__builtin_types_compatible_p(typeof(getname_flags), typeof(ksu_getname_flags)))
 		goto not_compatible;
 
@@ -234,7 +235,7 @@ static int bl_hook_faccessat(void *data)
 bail:
 not_compatible:;
 #endif
-
+	const uintptr_t target_hook = (uintptr_t)&ksu_do_faccessat;
 	target_callsite = syscall_lookup("sys_faccessat");
 	symbol_addr = kallsyms_lookup_retry("do_faccessat");
 	if (!symbol_addr)
@@ -245,7 +246,12 @@ not_compatible:;
 	if (ret)
 		return ret;
 
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_do_faccessat);
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
+	if (ret == -ERANGE) {
+		uintptr_t trampoline = create_landing_pad_kernel(target_hook);
+		if (!!trampoline)
+			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
+	}
 	pr_info("hook_site: sys_faccessat->do_faccessat ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct;
@@ -259,7 +265,6 @@ unhook_sct:
 #endif
 	return ret;
 }
-
 
 static inline int bl_hook_vfs_statx(void)
 {
