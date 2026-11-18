@@ -191,7 +191,6 @@ KEEP_SYMBOL_NO_TAIL int ksu_do_execve_common(const char *filename, struct user_a
 
 #define ksu_get_ksym_size32(addr)	ksu_get_ksym_size(addr, (32 * sizeof(uint32_t)))
 
-#ifdef MODULE
 #define ksu_self_patch_hook(hook_fn, tgt) ({									\
 	uintptr_t hook_p = kernel_function_lookup(hook_fn);							\
 	int ret = arm64_branch_patch_trampolined(hook_p, ksu_get_ksym_size32(hook_p), hook_p, tgt, false);	\
@@ -200,7 +199,8 @@ KEEP_SYMBOL_NO_TAIL int ksu_do_execve_common(const char *filename, struct user_a
 })
 #define patch_arm64_branches(callsite, symbol_addr, hook) \
 	arm64_branch_patch_trampolined(callsite, ksu_get_ksym_size32(callsite), symbol_addr, (uintptr_t)hook, true)
-#else /* ! MODULE */
+
+#if 0 /* old impl */
 #define ksu_self_patch_hook(hook_fn, tgt) ({							\
 	uintptr_t hook_p = kernel_function_lookup(hook_fn);					\
 	int ret = arm64_b_or_bl_patch(hook_p, ksu_get_ksym_size32(hook_p), hook_p, tgt);	\
@@ -209,7 +209,7 @@ KEEP_SYMBOL_NO_TAIL int ksu_do_execve_common(const char *filename, struct user_a
 })
 #define patch_arm64_branches(callsite, symbol_addr, hook) \
 	arm64_b_or_bl_patch(callsite, ksu_get_ksym_size32(callsite), symbol_addr, (uintptr_t)hook)
-#endif /* ! MODULE */
+#endif /* old impl */
 
 static int bl_hook_faccessat(void *data)
 {
