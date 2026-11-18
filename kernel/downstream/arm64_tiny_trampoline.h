@@ -128,11 +128,10 @@ static DEFINE_MUTEX(trampoline_routine_mutex);
 
 nodiscard static uintptr_t create_landing_pad_kernel(uintptr_t target)
 {
-	guarded_mutex_lock(&trampoline_routine_mutex);
-
 	if (!target)
 		return 0x0;
 
+	guarded_mutex_lock(&trampoline_routine_mutex);
 	might_sleep();
 
 	uint32_t ibuf; // test that target is reachable
@@ -177,7 +176,7 @@ nodiscard static uintptr_t create_landing_pad_kernel(uintptr_t target)
 	return trampoline_start;
 }
 
-#define NOP_COUNT 256
+#define NOP_COUNT 64
 #define __tt_stringify2(x) #x
 #define __tt_stringify(x) __tt_stringify2(x)
 asm(
@@ -191,7 +190,7 @@ asm(
 );
 extern char a_bunch_of_nops[];
 static const uint128_t *arm64_nop_bank = (uint128_t *)a_bunch_of_nops;
-constexpr unsigned int arm64_nop_bank_max = NOP_COUNT / (4 * sizeof(uint32_t));
+constexpr unsigned int arm64_nop_bank_max = NOP_COUNT / 4; // 4 nops per trampoline
 static unsigned int arm64_nop_bank_curr = 0;
 
 // tiny bump allocator, locally owned nops
