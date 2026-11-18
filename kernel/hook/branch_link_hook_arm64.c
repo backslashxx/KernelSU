@@ -197,8 +197,9 @@ KEEP_SYMBOL_NO_TAIL int ksu_do_execve_common(const char *filename, struct user_a
 	pr_info("patch_hook: %s ret: %d \n", #hook_fn, ret);							\
 	ret;													\
 })
+
 #define patch_arm64_branches(callsite, symbol_addr, hook) \
-	arm64_branch_patch_trampolined(callsite, ksu_get_ksym_size32(callsite), symbol_addr, (uintptr_t)hook, true)
+	arm64_b_or_bl_patch(callsite, ksu_get_ksym_size32(callsite), symbol_addr, (uintptr_t)hook)
 
 #if 0 /* old impl */
 #define ksu_self_patch_hook(hook_fn, tgt) ({							\
@@ -207,9 +208,8 @@ KEEP_SYMBOL_NO_TAIL int ksu_do_execve_common(const char *filename, struct user_a
 	pr_info("patch_hook: %s ret: %d \n", #hook_fn, ret);					\
 	ret;											\
 })
-#define patch_arm64_branches(callsite, symbol_addr, hook) \
-	arm64_b_or_bl_patch(callsite, ksu_get_ksym_size32(callsite), symbol_addr, (uintptr_t)hook)
 #endif /* old impl */
+
 
 static int bl_hook_faccessat(void *data)
 {
@@ -332,59 +332,162 @@ unhook_sct_compat:
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
-static int bl_hook_execve(void *data)
+static inline int bl_hook_do_execveat_common(void)
 {
-	int ret = -ENOENT;
-	int ret2 = -ENOENT;
+	int ret, ret2;
 	uintptr_t symbol_addr;
 	uintptr_t target_callsite;
 	uintptr_t target_callsite2;
+	uintptr_t trampoline = 0x0;
+	const uintptr_t target_hook = (uintptr_t)&ksu_do_execveat_common;
 
 	target_callsite = syscall_lookup("sys_execve");
 	target_callsite2 = syscall_lookup("sys_execveat");
 	symbol_addr = kallsyms_lookup_retry("do_execveat_common");
 	if (!symbol_addr)
-		goto hook2;
+		return -ENOENT;
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_do_execveat_common, symbol_addr);
 	if (ret)
 		return ret;
 
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_do_execveat_common);
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
+	if (ret == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook)
+		if (!!trampoline)
+			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
+	}
 	pr_info("hook_site: sys_execve->do_execveat_common ret: %d \n", ret);
 	if (!ret)
 		restore_syscall((void *)&aarch64_execve, __AARCH64_execve, (void *)hook_aarch64_execve, native_sct);
 
-	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, (uintptr_t)&ksu_do_execveat_common);
+	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, target_hook);
+	if (ret2 == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook);
+		if (!!trampoline)
+			ret2 = patch_arm64_branches(target_callsite2, symbol_addr, trampoline);
+	}
 	pr_info("hook_site: sys_execveat->do_execveat_common ret: %d \n", ret2);
 	if (!ret2)
 		restore_syscall((void *)&aarch64_execveat, __AARCH64_execveat, (void *)hook_aarch64_execveat, native_sct);
-	goto compat;
-hook2:
+
+#ifdef CONFIG_COMPAT
+	target_callsite = syscall_lookup("compat_sys_execve");
+	target_callsite2 = syscall_lookup("compat_sys_execveat");
+
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
+	if (ret == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook);
+		if (!!trampoline)
+			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
+	}
+	pr_info("hook_site: compat_sys_execve->do_execveat_common ret: %d \n", ret);
+	if (!ret)
+		restore_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, compat_sct);
+
+	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, target_hook);
+	if (ret2 == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook)
+		if (!!trampoline)
+			ret2 = patch_arm64_branches(target_callsite2, symbol_addr, trampoline);
+	}
+	pr_info("hook_site: compat_sys_execveat->do_execveat_common ret: %d \n", ret2);
+	if (!ret2)
+		restore_syscall((void *)&armeabi_execveat, __ARMEABI_execveat, (void *)hook_armeabi_execveat, compat_sct);
+#endif
+	return ret;
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+static inline int bl_hook_do_execve_file(void)
+{
+	int ret, ret2;
+	uintptr_t symbol_addr;
+	uintptr_t target_callsite;
+	uintptr_t target_callsite2;
+	uintptr_t trampoline = 0x0;
+	const uintptr_t target_hook = (uintptr_t)&ksu_do_execve_file;
+
+	target_callsite = syscall_lookup("sys_execve");
+	target_callsite2 = syscall_lookup("sys_execveat");
 	symbol_addr = kallsyms_lookup_retry("__do_execve_file");
 	if (!symbol_addr)
-		goto hook3;
+		return -ENOENT;
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_do_execve_file, symbol_addr);
 	if (ret)
 		return ret;
 
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_do_execve_file);
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
+	if (ret == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook)
+		if (!!trampoline)
+			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
+	}
 	pr_info("hook_site: sys_execve->__do_execve_file ret: %d \n", ret);
 	if (!ret)
 		restore_syscall((void *)&aarch64_execve, __AARCH64_execve, (void *)hook_aarch64_execve, native_sct);
 
-	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, (uintptr_t)&ksu_do_execve_file);
+	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, target_hook;
+	if (ret2 == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook)
+		if (!!trampoline)
+			ret2 = patch_arm64_branches(target_callsite2, symbol_addr, trampoline);
+	}
 	pr_info("hook_site: sys_execveat->__do_execve_file ret: %d \n", ret2);
 	if (!ret2)
 		restore_syscall((void *)&aarch64_execveat, __AARCH64_execveat, (void *)hook_aarch64_execveat, native_sct);
-	goto compat;
-#endif // < 5.9
-hook3:
+
+#ifdef CONFIG_COMPAT
+	target_callsite = syscall_lookup("compat_sys_execve");
+	target_callsite2 = syscall_lookup("compat_sys_execveat");
+
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
+	if (ret == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook)
+		if (!!trampoline)
+			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
+	}
+	pr_info("hook_site: compat_sys_execve->__do_execve_file ret: %d \n", ret);
+	if (!ret)
+		restore_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, compat_sct);
+
+	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, target_hook);
+	if (ret2 == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook)
+		if (!!trampoline)
+			ret2 = patch_arm64_branches(target_callsite2, symbol_addr, trampoline);
+	}
+	pr_info("hook_site: compat_sys_execveat->__do_execve_file ret: %d \n", ret2);
+	if (!ret2)
+		restore_syscall((void *)&armeabi_execveat, __ARMEABI_execveat, (void *)hook_armeabi_execveat, compat_sct);
+#endif
+
+	return ret;
+}
+#endif
+
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
+static inline int bl_hook_do_execve_common(void *data)
+{
+	int ret;
+	uintptr_t symbol_addr;
+	uintptr_t target_callsite;
+	const uintptr_t target_hook = (uintptr_t)&ksu_do_execve_common;
+
+	// we do NOT bother with trampolines on this one
+	target_callsite = syscall_lookup("sys_execve");
 	symbol_addr = kallsyms_lookup_retry("do_execve_common"); // this symbol doesn't handle execveat
 	if (!symbol_addr)
 		return -ENOENT;
@@ -394,68 +497,37 @@ hook3:
 	if (ret)
 		return ret;
 
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_do_execve_common);
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
 	pr_info("hook_site: sys_execve->do_execve_common ret: %d \n", ret);
 	if (!ret)
 		restore_syscall((void *)&aarch64_execve, __AARCH64_execve, (void *)hook_aarch64_execve, native_sct);
-	goto compat;
-#endif // < 3.19
 
-compat:
-#ifdef CONFIG_COMPAT
 	target_callsite = syscall_lookup("compat_sys_execve");
-	target_callsite2 = syscall_lookup("compat_sys_execveat");
 
-	symbol_addr = kallsyms_lookup_retry("do_execveat_common");
-	if (!symbol_addr)
-		goto hook2c;
-
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_do_execveat_common);
-	pr_info("hook_site: compat_sys_execve->do_execveat_common ret: %d \n", ret);
-	if (!ret)
-		restore_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, compat_sct);
-
-	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, (uintptr_t)&ksu_do_execveat_common);
-	pr_info("hook_site: compat_sys_execveat->do_execveat_common ret: %d \n", ret2);
-	if (!ret2)
-		restore_syscall((void *)&armeabi_execveat, __ARMEABI_execveat, (void *)hook_armeabi_execveat, compat_sct);
-
-	return ret;
-hook2c:
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
-	symbol_addr = kallsyms_lookup_retry("__do_execve_file");
-	if (!symbol_addr)
-		goto hook3c;
-
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_do_execve_file);
-	pr_info("hook_site: compat_sys_execve->__do_execve_file ret: %d \n", ret);
-	if (!ret)
-		restore_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, compat_sct);
-
-	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, (uintptr_t)&ksu_do_execve_file);
-	pr_info("hook_site: compat_sys_execveat->__do_execve_file ret: %d \n", ret2);
-	if (!ret2)
-		restore_syscall((void *)&armeabi_execveat, __ARMEABI_execveat, (void *)hook_armeabi_execveat, compat_sct);
-
-	return ret;
-#endif // < 5.9
-hook3c:
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-	symbol_addr = kallsyms_lookup_retry("do_execve_common");
-	if (!symbol_addr)
-		return -ENOENT;
-
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_do_execve_common);
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
 	pr_info("hook_site: compat_sys_execve->do_execve_common ret: %d \n", ret);
 	if (!ret)
 		restore_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, compat_sct);
 
 	return ret;
-#endif // < 3.19
-#endif // COMPAT
-
-	return ret;
 }
+#endif
+
+static int bl_hook_execve(void *data)
+{
+	int res = bl_hook_do_execveat_common();
+	if (!res) return res;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+	int res = bl_hook_do_execve_file();
+	if (!res) return res;
+#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
+	int res = bl_hook_do_execve_common();
+	if (!res) return res;
+#endif
+	return res;
+}
+
 #else /* < 3.14 */
 static int bl_hook_execve(void *data)
 {
@@ -463,6 +535,7 @@ static int bl_hook_execve(void *data)
 	uintptr_t target_callsite;
 	uintptr_t symbol_addr;
 
+	// we do NOT bother with trampolines on this one
 	target_callsite = syscall_lookup("sys_execve");
 	symbol_addr = kallsyms_lookup_retry("do_execve_common");
 	if (!symbol_addr)
