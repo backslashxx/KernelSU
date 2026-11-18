@@ -260,28 +260,65 @@ unhook_sct:
 	return ret;
 }
 
-static int bl_hook_newfstatat(void *data)
+
+static inline int bl_hook_vfs_statx(void)
 {
 	int ret;
 	uintptr_t target_callsite;
 	uintptr_t symbol_addr;
+	uintptr_t target_hook = (uintptr_t)&ksu_vfs_statx;
+	uintptr_t trampoline = 0x0;
 
 	target_callsite = syscall_lookup("sys_newfstatat");
 	symbol_addr = kallsyms_lookup_retry("vfs_statx");
 	if (!symbol_addr)
-		goto hook2;
+		return -ENOENT;
 
 	// patch our hook handler first
 	ret = ksu_self_patch_hook(ksu_vfs_statx, symbol_addr);
 	if (ret)
 		return ret;
 
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_vfs_statx);
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
+	if (ret == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook);
+		if (!!trampoline)
+			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
+	}
 	pr_info("hook_site: sys_newfstatat->vfs_statx ret: %d \n", ret);
 	if (!ret)
-		goto unhook_sct_native;
+		restore_syscall((void *)&aarch64_newfstatat, __AARCH64_newfstatat, (void *)hook_aarch64_newfstatat, native_sct);
 
-hook2:
+#ifdef CONFIG_COMPAT
+	target_callsite = syscall_lookup("sys_fstatat64");
+	symbol_addr = kallsyms_lookup_retry("vfs_statx");
+	if (!symbol_addr)
+		return -ENOENT;
+
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
+	if (ret == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook);
+		if (!!trampoline)
+			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
+	}
+	pr_info("hook_site: sys_fstatat64->vfs_statx ret: %d \n", ret);
+	if (!ret)
+		restore_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, compat_sct);
+#endif
+	return ret;
+}
+
+static inline int bl_hook_vfs_fstatat(void)
+{
+	int ret;
+	uintptr_t target_callsite;
+	uintptr_t symbol_addr;
+	uintptr_t target_hook = (uintptr_t)&ksu_vfs_fstatat;
+	uintptr_t trampoline = 0x0;
+
+	target_callsite = syscall_lookup("sys_newfstatat");
 	symbol_addr = kallsyms_lookup_retry("vfs_fstatat");
 	if (!symbol_addr)
 		return -ENOENT;
@@ -291,44 +328,40 @@ hook2:
 	if (ret)
 		return ret;
 
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_vfs_fstatat);
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
+	if (ret == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook);
+		if (!!trampoline)
+			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
+	}
 	pr_info("hook_site: sys_newfstatat->vfs_fstatat ret: %d \n", ret);
 	if (!ret)
-		goto unhook_sct_native;
-
-	return ret;
-
-unhook_sct_native:
-	restore_syscall((void *)&aarch64_newfstatat, __AARCH64_newfstatat, (void *)hook_aarch64_newfstatat, native_sct);
+		restore_syscall((void *)&aarch64_newfstatat, __AARCH64_newfstatat, (void *)hook_aarch64_newfstatat, native_sct);
 
 #ifdef CONFIG_COMPAT
 	target_callsite = syscall_lookup("sys_fstatat64");
-	symbol_addr = kallsyms_lookup_retry("vfs_statx");
-	if (!symbol_addr)
-		goto hook2c;
 
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_vfs_statx);
-	pr_info("hook_site: sys_fstatat64->vfs_statx ret: %d \n", ret);
-	if (!ret)
-		goto unhook_sct_compat;
-
-hook2c:
-	symbol_addr = kallsyms_lookup_retry("vfs_fstatat");
-	if (!symbol_addr)
-		return -ENOENT;
-
-	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_vfs_fstatat);
+	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
+	if (ret == -ERANGE) {
+		if (!trampoline)
+			trampoline = create_landing_pad_kernel(target_hook);
+		if (!!trampoline)
+			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
+	}
 	pr_info("hook_site: sys_fstatat64->vfs_fstatat ret: %d \n", ret);
 	if (!ret)
-		goto unhook_sct_compat;
-
+		restore_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, compat_sct);
+#endif
 	return ret;
+}
 
-unhook_sct_compat:
-	restore_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, compat_sct);
-#endif // CONFIG_COMPAT
-
-	return ret;
+static int bl_hook_newfstatat(void *data)
+{
+	int ret = bl_hook_vfs_statx();
+	if (!ret)
+		return ret;
+	return bl_hook_vfs_fstatat();
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
