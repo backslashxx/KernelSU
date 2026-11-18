@@ -355,7 +355,7 @@ static inline int bl_hook_do_execveat_common(void)
 	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
 	if (ret == -ERANGE) {
 		if (!trampoline)
-			trampoline = create_landing_pad_kernel(target_hook)
+			trampoline = create_landing_pad_kernel(target_hook);
 		if (!!trampoline)
 			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
 	}
@@ -392,7 +392,7 @@ static inline int bl_hook_do_execveat_common(void)
 	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, target_hook);
 	if (ret2 == -ERANGE) {
 		if (!trampoline)
-			trampoline = create_landing_pad_kernel(target_hook)
+			trampoline = create_landing_pad_kernel(target_hook);
 		if (!!trampoline)
 			ret2 = patch_arm64_branches(target_callsite2, symbol_addr, trampoline);
 	}
@@ -427,7 +427,7 @@ static inline int bl_hook_do_execve_file(void)
 	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
 	if (ret == -ERANGE) {
 		if (!trampoline)
-			trampoline = create_landing_pad_kernel(target_hook)
+			trampoline = create_landing_pad_kernel(target_hook);
 		if (!!trampoline)
 			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
 	}
@@ -435,10 +435,10 @@ static inline int bl_hook_do_execve_file(void)
 	if (!ret)
 		restore_syscall((void *)&aarch64_execve, __AARCH64_execve, (void *)hook_aarch64_execve, native_sct);
 
-	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, target_hook;
+	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, target_hook);
 	if (ret2 == -ERANGE) {
 		if (!trampoline)
-			trampoline = create_landing_pad_kernel(target_hook)
+			trampoline = create_landing_pad_kernel(target_hook);
 		if (!!trampoline)
 			ret2 = patch_arm64_branches(target_callsite2, symbol_addr, trampoline);
 	}
@@ -453,7 +453,7 @@ static inline int bl_hook_do_execve_file(void)
 	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
 	if (ret == -ERANGE) {
 		if (!trampoline)
-			trampoline = create_landing_pad_kernel(target_hook)
+			trampoline = create_landing_pad_kernel(target_hook);
 		if (!!trampoline)
 			ret = patch_arm64_branches(target_callsite, symbol_addr, trampoline);
 	}
@@ -464,7 +464,7 @@ static inline int bl_hook_do_execve_file(void)
 	ret2 = patch_arm64_branches(target_callsite2, symbol_addr, target_hook);
 	if (ret2 == -ERANGE) {
 		if (!trampoline)
-			trampoline = create_landing_pad_kernel(target_hook)
+			trampoline = create_landing_pad_kernel(target_hook);
 		if (!!trampoline)
 			ret2 = patch_arm64_branches(target_callsite2, symbol_addr, trampoline);
 	}
@@ -502,13 +502,13 @@ static inline int bl_hook_do_execve_common(void *data)
 	if (!ret)
 		restore_syscall((void *)&aarch64_execve, __AARCH64_execve, (void *)hook_aarch64_execve, native_sct);
 
+#ifdef CONFIG_COMPAT
 	target_callsite = syscall_lookup("compat_sys_execve");
-
 	ret = patch_arm64_branches(target_callsite, symbol_addr, target_hook);
 	pr_info("hook_site: compat_sys_execve->do_execve_common ret: %d \n", ret);
 	if (!ret)
 		restore_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, compat_sct);
-
+#endif
 	return ret;
 }
 #endif
@@ -518,11 +518,11 @@ static int bl_hook_execve(void *data)
 	int res = bl_hook_do_execveat_common();
 	if (!res) return res;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
-	int res = bl_hook_do_execve_file();
+	res = bl_hook_do_execve_file();
 	if (!res) return res;
 #endif
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-	int res = bl_hook_do_execve_common();
+	res = bl_hook_do_execve_common();
 	if (!res) return res;
 #endif
 	return res;
