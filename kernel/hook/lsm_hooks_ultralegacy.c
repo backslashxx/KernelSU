@@ -262,8 +262,6 @@ static inline void ksu_register_lsm_hook(void)
 {
 	LSM_HACK_INIT(task_fix_setuid, hook_task_fix_setuid);
 	LSM_HACK_INIT(inode_rename, hook_inode_rename);
-
-	return 0;
 }
 
 static void __init ksu_lsm_hook_init(void)
