@@ -244,7 +244,7 @@ rename_hook_done:
 	if (!target_callsite)
 		target_callsite = kallsyms_lookup_retry("__arm64_sys_setresuid");
 	symbol_addr = kallsyms_lookup_retry("security_task_fix_setuid");
-	ret = patch_arm64_branches(target_callsite, symbol_addr, ksu_task_fix_setuid);
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_task_fix_setuid);
 	if (ret) {
 		pr_info("LSM: security_task_fix_setuid: err: %d ! fallback to sys_setresuid!\n", ret);
 		replace_syscall((void *)&aarch64_setresuid, __AARCH64_setresuid, (void *)hook_aarch64_setresuid, native_sct);
