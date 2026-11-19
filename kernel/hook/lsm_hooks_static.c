@@ -194,7 +194,7 @@ static void print_branch_targets(uintptr_t callsite, uintptr_t symbol_addr, char
 	sprint_symbol_no_offset(buf1, symbol_addr);
 	pr_info("LSM: Initializing hook for %s -> %s \n", buf1, hook_name);
 }
-#define patch_arm64_branches(callsite, symbol_addr, hook) ({							\
+#define patch_arm64_branches_trampolined(callsite, symbol_addr, hook) ({					\
 	print_branch_targets(callsite, symbol_addr, #hook);							\
 	arm64_branch_patch_trampolined(callsite, __ksym_size(callsite), symbol_addr, (uintptr_t)hook, true);	\
 })
@@ -217,7 +217,7 @@ static void __init ksu_lsm_hook_init(void)
 	if (!target_callsite)
 		target_callsite = kallsyms_lookup_retry("do_renameat2");
 	symbol_addr = kallsyms_lookup_retry("vfs_rename");
-	ret = patch_arm64_branches(target_callsite, symbol_addr, ksu_vfs_rename);
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_vfs_rename);
 	pr_info("LSM: vfs_rename: ret %d \n", ret);
 	if (!ret)
 		goto rename_hook_done;
@@ -226,7 +226,7 @@ static void __init ksu_lsm_hook_init(void)
 	if (!target_callsite)
 		target_callsite = kallsyms_lookup_retry("vfs_rename");
 	symbol_addr = kallsyms_lookup_retry("security_inode_rename");
-	ret = patch_arm64_branches(target_callsite, symbol_addr, ksu_inode_rename);
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_inode_rename);
 	pr_info("LSM: security_inode_rename: ret %d \n", ret);
 rename_hook_done:
 
