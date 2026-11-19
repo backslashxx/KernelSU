@@ -95,7 +95,10 @@ struct mnt_idmap;
 #define INODE_SETXATTR_TYPE_idmap	struct mnt_idmap *idmap, struct dentry *dentry, const char *name, const void *value, size_t size, int flags
 __overloaded static __nocfi int ksu_inode_setxattr_idmap(INODE_SETXATTR_TYPE_idmap)
 {
-	ksu_hide_setxattr_inline(name, value, size);
+	int ret = ksu_hide_setxattr_inline(dentry, name, value, size);
+	if (ret)
+		return ret;
+
 	return ((typeof(ksu_inode_setxattr_idmap) *)inode_setxattr_fn)(idmap, dentry, name, value, size, flags);
 }
 
@@ -103,14 +106,20 @@ struct user_namespace;
 #define INODE_SETXATTR_TYPE_userns	struct user_namespace *mnt_userns, struct dentry *dentry, const char *name, const void *value, size_t size, int flags
 __overloaded static __nocfi int ksu_inode_setxattr_userns(INODE_SETXATTR_TYPE_userns)
 {
-	ksu_hide_setxattr_inline(name, value, size);
+	int ret = ksu_hide_setxattr_inline(dentry, name, value, size);
+	if (ret)
+		return ret;
+
 	return ((typeof(ksu_inode_setxattr_userns) *)inode_setxattr_fn)(mnt_userns, dentry, name, value, size, flags);
 }
 
 #define INODE_SETXATTR_TYPE_legacy	struct dentry *dentry, const char *name, const void *value, size_t size, int flags
 __overloaded static __nocfi int ksu_inode_setxattr_legacy(INODE_SETXATTR_TYPE_legacy)
 {
-	ksu_hide_setxattr_inline(name, value, size);
+	int ret = ksu_hide_setxattr_inline(dentry, name, value, size);
+	if (ret)
+		return ret;
+
 	return ((typeof(ksu_inode_setxattr_legacy) *)inode_setxattr_fn)(dentry, name, value, size, flags);
 }
 

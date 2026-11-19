@@ -70,7 +70,7 @@ static __always_inline int ksu_hide_setprocattr_inline(const char *name, void *v
 	return 0;
 }
 
-static __always_inline int ksu_hide_setxattr_inline(const char *name, void *value, size_t size)
+static __always_inline int ksu_hide_setxattr_inline(struct dentry *dentry, const char *name, void *value, size_t size)
 {
 	if (unlikely(!ksu_selinux_hide_enabled))
 		return 0;
@@ -94,6 +94,9 @@ static __always_inline int ksu_hide_setxattr_inline(const char *name, void *valu
 	if (!!memcmp_inline(name, c, sizeof(c)))
 		return 0;
 
+	// blah blah blah more checks here maybe later
+	// deduce from dentry
+
 	char *str = (char *)value;
 	if (!str || !str[0])
 		return 0;
@@ -101,23 +104,21 @@ static __always_inline int ksu_hide_setxattr_inline(const char *name, void *valu
 	if (!ksu_should_destroy_context(str, size))
 		return 0;
 
- // this is wrong, this just fucks up ratelimit, rethink later, also better to catch in userspace
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0) && defined(CONFIG_AUDIT)
-	for (int i = 0; i < 16; i++) {
-		struct audit_buffer *ab = audit_log_start(audit_context(), GFP_ATOMIC, AUDIT_SELINUX_ERR);
-		if (!i) {
-			audit_log_format(ab, "op=setxattr invalid_context=");
-			audit_log_n_untrustedstring(ab, str, size);
-		} else
-			audit_log_format(ab, "");
-		audit_log_end(ab);
-	}
-#endif
-	// destroy
+	// destroy, will probaably be too fast
+	// security_context_to_sid branches are visible though
+	// maybe move later
 	pr_info("selinux_hide: inode_setxattr: destroy: %.*s\n", size, str);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)
+#ifdef CONFIG_AUDIT
+	struct audit_buffer *ab = audit_log_start(audit_context(), GFP_ATOMIC, AUDIT_SELINUX_ERR);
+	audit_log_format(ab, "op=setxattr invalid_context=");
+	audit_log_n_untrustedstring(ab, str, size);
+#endif
+	return -EINVAL;
+#else /* < 3.5 */
 	str[1] = ';';
-
 	return 0;
+#endif
 }
 
 // selinux_transaction_write hijack

@@ -57,7 +57,10 @@ int ksu_hide_setprocattr(const char *name, void *value, size_t size)
 // NOTE: 4-args only. other args unused.
 int ksu_hide_inode_setxattr(struct dentry *dentry, const char *name, void *value, size_t *size, int *flags)
 {
-	ksu_hide_setxattr_inline(name, value, *size);
+	int ret = ksu_hide_setxattr_inline(dentry, name, value, *size);
+	if (ret)
+		return ret;
+
 	return 0;
 }
 

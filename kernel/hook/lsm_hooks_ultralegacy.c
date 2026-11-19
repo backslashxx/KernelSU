@@ -25,7 +25,9 @@ static int hook_setprocattr(struct task_struct *p, char *name, void *value, size
 static int (*orig_inode_setxattr) (struct dentry *dentry, const char *name, const void *value, size_t size, int flags) __read_mostly = nullptr;
 static int hook_inode_setxattr(struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
 {
-	ksu_hide_setxattr_inline(name, value, size);
+	int ret = ksu_hide_setxattr_inline(dentry, name, value, size);
+	if (ret)
+		return ret;
 	return orig_inode_setxattr(dentry, name, value, size, flags);
 }
 
