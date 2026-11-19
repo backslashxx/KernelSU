@@ -54,7 +54,7 @@ static inline bool verify_selinux_cred_free(void *fn_ptr)
 	if ((unsigned long)*(void **)&dummy_cred.security == 0x7UL)
 		success = true;
 
-	pr_info("selinux_cred_free: 0x%lx cred->security: 0x%lx success: %d\n", (unsigned long)fn_ptr, (unsigned long)dummy_cred.security, success);
+	pr_info("LSM: selinux_cred_free: 0x%lx cred->security: 0x%lx success: %d\n", (unsigned long)fn_ptr, (unsigned long)dummy_cred.security, success);
 
 	return success;
 }
@@ -94,7 +94,7 @@ next_iter:
 	if (i < total_slots)
 		goto density_verify_start;
 
-	pr_info("%s: density: valid: %lu slots: %lu \n", __func__, valid_ptr, total_slots);
+	pr_info("LSM: %s: density: valid: %lu slots: %lu \n", __func__, valid_ptr, total_slots);
 
 	// maybe increase to 75% or something?
 	return (valid_ptr > (total_slots / 2));
@@ -112,7 +112,7 @@ static inline bool check_candidate(uintptr_t addr)
 		return false;
 
 	// candidate found!
-	pr_info("%s: candidate selinux_ops at 0x%lx\n", __func__, (long)addr);
+	pr_info("LSM: %s: candidate selinux_ops at 0x%lx\n", __func__, (long)addr);
 
 	// check ptr density	
 	if (!is_selinux_ops_valid(addr))
@@ -131,7 +131,7 @@ static inline bool check_candidate(uintptr_t addr)
 test_fn:
 #endif
 	// oh yeah I am so confident that this is it
-	pr_info("%s: candidate selinux_cred_free at 0x%lx\n", __func__, (long)candidate->cred_free);
+	pr_info("LSM: %s: candidate selinux_cred_free at 0x%lx\n", __func__, (long)candidate->cred_free);
 	return verify_selinux_cred_free((void *)candidate->cred_free);
 }
 
@@ -154,7 +154,7 @@ static noinline void *hunt_for_selinux_ops(void *heuristic_ptr)
 
 	uintptr_t start = anchor - max_index * sizeof(void *);
 	uintptr_t end = anchor + max_index * sizeof(void *);
-	pr_info("%s: scan range: 0x%lx - 0x%lx anchor: 0x%lx\n", __func__, (long)start, (long)end, (long)anchor);
+	pr_info("LSM: %s: scan range: 0x%lx - 0x%lx anchor: 0x%lx\n", __func__, (long)start, (long)end, (long)anchor);
 
 scan_up:
 	if (i >= max_index) {
@@ -185,11 +185,11 @@ scan_down:
 	goto scan_down;
 
 found:
-	pr_info("%s: found selinux_ops at 0x%lx iter_count: %lu \n", __func__, curr, iter_count);
+	pr_info("LSM: %s: found selinux_ops at 0x%lx iter_count: %lu \n", __func__, curr, iter_count);
 	return (void *)curr;
 
 not_found:
-	pr_info("%s: selinux_ops not found in range! iter_count: %lu \n", __func__, iter_count);
+	pr_info("LSM: %s: selinux_ops not found in range! iter_count: %lu \n", __func__, iter_count);
 	return nullptr;
 }
 
@@ -205,7 +205,7 @@ static inline void set_selinux_ops()
 	// if user exports selinux_ops, we just go for it!
 	extern struct security_operations selinux_ops __weak;
 	if (!!&selinux_ops) {
-		pr_info("%s: exported selinux_ops: 0x%lx \n", __func__, (uintptr_t)&selinux_ops);
+		pr_info("LSM: exported selinux_ops: 0x%lx \n", (uintptr_t)&selinux_ops);
 		ops = (struct security_operations *)&selinux_ops;
 	}
 
@@ -233,16 +233,35 @@ static inline void set_selinux_ops()
 	selinux_ops_addr = (uintptr_t)ops;	
 }
 
-// stop_machine
-static int ksu_register_lsm_hook(void *data)
+#define LSM_HACK_INIT(lsm_name, hook_fn)							\
+do {												\
+	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;	\
+	if (!ops) break;									\
+	pr_info("LSM: Initializing hook for %s -> %s\n", #lsm_name, #hook_fn);			\
+	patch_ptr_slot_kick_cpu((void **)&orig_##lsm_name, (void *)ops->lsm_name);		\
+	pr_info("LSM: %s: slot: 0x%lx hook: 0x%lx\n", 						\
+		#lsm_name, (uintptr_t)&ops->lsm_name, (uintptr_t)ops->lsm_name);		\
+	int ret = patch_ro_slot((uintptr_t)&ops->lsm_name, (uintptr_t)hook_fn);			\
+	pr_info("LSM: %s: slot: 0x%lx hook: 0x%lx ret: %d\n", 					\
+		#lsm_name, (uintptr_t)&ops->lsm_name, (uintptr_t)ops->lsm_name, ret);		\
+} while (0)
+
+#define LSM_HACK_RESTORE(lsm_name)								\
+do {												\
+	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;	\
+	if (!ops || !orig_##lsm_name) break;							\
+	pr_info("LSM: Restoring hook for %s\n", #lsm_name);					\
+	pr_info("LSM: %s: slot: 0x%lx hook: 0x%lx\n", 						\
+		#lsm_name, (uintptr_t)&ops->lsm_name, (uintptr_t)ops->lsm_name);		\
+	int ret = patch_ro_slot((uintptr_t)&ops->lsm_name, (uintptr_t)orig_##lsm_name);		\
+	pr_info("LSM: %s: slot: 0x%lx hook: 0x%lx ret: %d\n", 					\
+		#lsm_name, (uintptr_t)&ops->lsm_name, (uintptr_t)ops->lsm_name, ret);		\
+} while (0)
+
+static inline void ksu_register_lsm_hook(void)
 {
-	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
-
-	orig_inode_rename = ops->inode_rename;
-	ops->inode_rename = hook_inode_rename;
-
-	orig_task_fix_setuid = ops->task_fix_setuid;
-	ops->task_fix_setuid = hook_task_fix_setuid;
+	LSM_HACK_INIT(task_fix_setuid, hook_task_fix_setuid);
+	LSM_HACK_INIT(inode_rename, hook_inode_rename);
 
 	return 0;
 }
@@ -258,9 +277,8 @@ static void __init ksu_lsm_hook_init(void)
 	if (!!memcmp_inline(ops, "selinux", sizeof("selinux")))
 		return;
 
-	pr_info("%s: selinux_ops: 0x%lx .name = %s\n", __func__, (long)ops, (const char *)ops );
-
-	stop_machine(ksu_register_lsm_hook, NULL, NULL);
+	pr_info("LSM: selinux_ops: 0x%lx .name = %s\n", (long)ops, (const char *)ops );
+	ksu_register_lsm_hook();
 
 	return;
 }
