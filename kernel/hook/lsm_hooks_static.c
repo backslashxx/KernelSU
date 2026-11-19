@@ -232,12 +232,12 @@ rename_hook_done:
 
 	target_callsite = kallsyms_lookup_retry("proc_pid_attr_write"); // fn ptr on dispatch table
 	symbol_addr = kallsyms_lookup_retry("security_setprocattr");
-	ret = patch_arm64_branches(target_callsite, symbol_addr, ksu_setprocattr_overloaded);
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_setprocattr_overloaded);
 	pr_info("LSM: security_setprocattr: ret %d \n", ret);
 
 	target_callsite = kallsyms_lookup_retry("__vfs_setxattr_locked"); // exported symbol
 	symbol_addr = kallsyms_lookup_retry("security_inode_setxattr");
-	ret = patch_arm64_branches(target_callsite, symbol_addr, ksu_inode_setxattr_overloaded);
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_inode_setxattr_overloaded);
 	pr_info("LSM: security_inode_setxattr: ret %d \n", ret);
 
 	target_callsite = kallsyms_lookup_retry("__sys_setresuid");
