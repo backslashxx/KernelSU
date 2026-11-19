@@ -287,6 +287,13 @@ static int ksu_restore_bprm_set_creds(void *data)
 }
 #endif
 
+static void ksu_decide_inode_setxattr(bool sh_hooked)
+{
+	if (!sh_hooked)
+		return;
+	LSM_HACK_RESTORE(inode_setxattr);
+}
+
 static __init void ksu_lsm_hook_init(void)
 {
 	LSM_HACK_INIT(task_fix_setuid, ksu_task_fix_setuid);

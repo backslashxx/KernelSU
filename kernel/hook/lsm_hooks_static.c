@@ -228,11 +228,6 @@ rename_hook_done:
 	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_setprocattr_overloaded);
 	pr_info("LSM: security_setprocattr: ret %d \n", ret);
 
-	target_callsite = kallsyms_lookup_retry("__vfs_setxattr_locked"); // exported symbol
-	symbol_addr = kallsyms_lookup_retry("security_inode_setxattr");
-	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_inode_setxattr_overloaded);
-	pr_info("LSM: security_inode_setxattr: ret %d \n", ret);
-
 	target_callsite = kallsyms_lookup_retry("__sys_setresuid");
 	if (!target_callsite)
 		target_callsite = kallsyms_lookup_retry("__arm64_sys_setresuid");
@@ -255,6 +250,16 @@ rename_hook_done:
 	kthread_run(ksu_syscall_table_restore, NULL, "kthread");
 #endif // !CONFIG_KSU_TAMPER_SYSCALL_TABLE && !CONFIG_KSU_HACK_ARM64_BRANCH_LINK
 
+}
+
+static void ksu_decide_inode_setxattr(bool sh_hooked)
+{
+	if (sh_hooked)
+		return;
+	uintptr_t target_callsite = kallsyms_lookup_retry("__vfs_setxattr_locked"); // exported symbol
+	uintptr_t symbol_addr = kallsyms_lookup_retry("security_inode_setxattr");
+	int ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_inode_setxattr_overloaded);
+	pr_info("LSM: security_inode_setxattr: ret %d \n", ret);
 }
 
 #undef patch_arm64_branches_trampolined

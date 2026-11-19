@@ -55,13 +55,23 @@ int ksu_hide_setprocattr(const char *name, void *value, size_t size)
 }
 
 // NOTE: 4-args only. other args unused.
+static bool lsm_setxattr_hook __read_mostly = true;
 int ksu_hide_inode_setxattr(struct dentry *dentry, const char *name, void *value, size_t *size, int *flags)
 {
-	ksu_hide_setxattr_inline(name, value, *size);
+	if (lsm_setxattr_hook)
+		ksu_hide_setxattr_inline(name, value, *size);
 	return 0;
 }
 
 static void __init ksu_lsm_hook_init(void)
 {
 	pr_info("%s: Automated LSM hooking disabled. Make sure manual security hooks are implemented!\n", __func__);
+}
+
+static void ksu_decide_inode_setxattr(bool sh_hooked)
+{
+	if (!sh_hooked)
+		return;
+	lsm_setxattr_hook = false;
+	pr_info("LSM: security_inode_setxattr unhooked!\n");
 }
