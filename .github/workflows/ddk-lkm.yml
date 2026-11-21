@@ -80,6 +80,7 @@ jobs:
         echo "Copied to: $OUT_DIR/$OUTPUT_NAME"
         ls -la "$OUT_DIR/$OUTPUT_NAME"
         echo "Size: $(du -h "$OUT_DIR/$OUTPUT_NAME" | cut -f1)"
+        llvm-objdump -dr "$OUT_DIR/$OUTPUT_NAME" | grep -E -A50 'ksu_setprocattr|ksu_inode_setxattr|security_context_to_sid|ksu_slow_avc_audit'
         llvm-strip -d "$OUT_DIR/$OUTPUT_NAME"
         echo "Size after stripping: $(du -h "$OUT_DIR/$OUTPUT_NAME" | cut -f1)"
 
