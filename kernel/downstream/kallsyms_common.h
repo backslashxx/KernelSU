@@ -177,7 +177,7 @@ static __nocfi int ksu_kallsyms_lookup_size_offset(unsigned long addr, unsigned 
 #define kallsyms_lookup_size_offset ksu_kallsyms_lookup_size_offset
 #endif
 
-static void dotted_kallsyms_build_hash_array(void)
+static noinline void dotted_kallsyms_build_hash_array(void)
 {
 	extern char _stext[], _etext[];
 	uintptr_t start = (uintptr_t)_stext;
@@ -238,7 +238,7 @@ step_up:;
 	return;
 }
 
-static uintptr_t kallsyms_lookup_hashed_name(const char *name)
+static noinline uintptr_t kallsyms_lookup_hashed_name(const char *name)
 {
 	if (!name || !kallsyms_hash_array)
 		return 0x0;
