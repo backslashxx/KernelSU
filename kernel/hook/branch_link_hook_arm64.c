@@ -75,7 +75,7 @@ KEEP_SYMBOL_NO_TAIL long ksu_do_faccessat(int dfd, const char __user *filename, 
 #endif // 5.7+ || faccessat2
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 // on 4.14 with LTO, sys_faccessat branches here. we might as well use it.
 static struct filename *ksu_getname_flags(const char __user *filename, int flags, int *empty)
 {
@@ -221,7 +221,7 @@ KEEP_SYMBOL_NO_TAIL int ksu_do_execve_common(const char *filename, struct user_a
 })
 #endif /* old impl */
 
-static int bl_hook_faccessat(void *data)
+static int bl_hook_faccessat(void)
 {
 	int ret;
 	uintptr_t target_callsite;
@@ -229,7 +229,7 @@ static int bl_hook_faccessat(void *data)
 
 // we do NOT bother with trampolines on these ones
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 	if (!__builtin_types_compatible_p(typeof(getname_flags), typeof(ksu_getname_flags)))
 		goto not_compatible;
 
@@ -358,7 +358,7 @@ static inline int bl_hook_vfs_fstatat(void)
 	return ret;
 }
 
-static int bl_hook_newfstatat(void *data)
+static int bl_hook_newfstatat(void)
 {
 	int ret = bl_hook_vfs_statx();
 	if (!ret)
@@ -466,7 +466,7 @@ static inline int bl_hook_do_execve_file(void)
 
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-static inline int bl_hook_do_execve_common(void *data)
+static inline int bl_hook_do_execve_common(void)
 {
 	int ret;
 	uintptr_t symbol_addr;
@@ -500,7 +500,7 @@ static inline int bl_hook_do_execve_common(void *data)
 }
 #endif
 
-static int bl_hook_execve(void *data)
+static int bl_hook_execve(void)
 {
 	int res = bl_hook_do_execveat_common();
 	if (!res) return res;
@@ -516,7 +516,7 @@ static int bl_hook_execve(void *data)
 }
 
 #else /* < 3.14 */
-static int bl_hook_execve(void *data)
+static int bl_hook_execve(void)
 {
 	int ret;
 	uintptr_t target_callsite;
@@ -578,9 +578,9 @@ loop_start:
 
 	msleep(1000);
 
-	bool faccessat = !!!bl_hook_faccessat(data);
-	bool newfstatat = !!!bl_hook_newfstatat(data);
-	bool execve = !!!bl_hook_execve(data);
+	bool faccessat = !!!bl_hook_faccessat();
+	bool newfstatat = !!!bl_hook_newfstatat();
+	bool execve = !!!bl_hook_execve();
 
 	pr_info("branch_link: done! faccessat: %s newfstatat: %s execve: %s\n", (faccessat) ? "ok" : "fail", (newfstatat) ? "ok" : "fail", (execve) ? "ok" : "fail");
 
@@ -602,7 +602,7 @@ static int ksu_branch_link_patch_init()
 	 *  it somewhat takes 0.5 ~ 1s to scan whole kernel _stext to _etext
 	 *  so this better be offloaded
 	 */
-	kthread_run(bl_hack_init_thread, NULL, "kthread");
+	kthread_run(bl_hack_init_thread, nullptr, "kthread");
 
 	return 0;
 }
