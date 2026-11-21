@@ -123,7 +123,7 @@ __overloaded static int ksu_setprocattr_lsmid(SETPROCATTR_TYPE_lsmid)
 	ksu_hide_setprocattr_inline(name, value, size);
 
 	assume(!!&security_setprocattr);
-	return ((typeof(ksu_setprocattr_lsmid) *)security_setprocattr)(lsmid, name, value, size);
+	return ((typeof(ksu_setprocattr_lsmid) *)(void *)security_setprocattr)(lsmid, name, value, size);
 }
 
 #define SETPROCATTR_TYPE_lsm	const char *lsm, const char *name, void *value, size_t size
@@ -132,7 +132,7 @@ __overloaded static int ksu_setprocattr_lsm(SETPROCATTR_TYPE_lsm)
 	ksu_hide_setprocattr_inline(name, value, size);
 
 	assume(!!&security_setprocattr);
-	return ((typeof(ksu_setprocattr_lsm) *)security_setprocattr)(lsm, name, value, size);
+	return ((typeof(ksu_setprocattr_lsm) *)(void *)security_setprocattr)(lsm, name, value, size);
 }
 
 #define SETPROCATTR_TYPE_name	const char *name, void *value, size_t size
@@ -141,7 +141,7 @@ __overloaded static int ksu_setprocattr_name(SETPROCATTR_TYPE_name)
 	ksu_hide_setprocattr_inline(name, value, size);
 
 	assume(!!&security_setprocattr);
-	return ((typeof(ksu_setprocattr_name) *)security_setprocattr)(name, value, size);
+	return ((typeof(ksu_setprocattr_name) *)(void *)security_setprocattr)(name, value, size);
 }
 
 #define ksu_setprocattr_overloaded _Generic(			\
@@ -158,7 +158,7 @@ __overloaded static int ksu_inode_setxattr_idmap(INODE_SETXATTR_TYPE_idmap)
 	ksu_hide_setxattr_inline(name, value, size);
 
 	assume(!!&security_inode_setxattr);
-	return ((typeof(ksu_inode_setxattr_idmap) *)security_inode_setxattr)(idmap, dentry, name, value, size, flags);
+	return ((typeof(ksu_inode_setxattr_idmap) *)(void *)security_inode_setxattr)(idmap, dentry, name, value, size, flags);
 }
 
 struct user_namespace;
@@ -168,7 +168,7 @@ __overloaded static int ksu_inode_setxattr_userns(INODE_SETXATTR_TYPE_userns)
 	ksu_hide_setxattr_inline(name, value, size);
 
 	assume(!!&security_inode_setxattr);
-	return ((typeof(ksu_inode_setxattr_userns) *)security_inode_setxattr)(mnt_userns, dentry, name, value, size, flags);
+	return ((typeof(ksu_inode_setxattr_userns) *)(void *)security_inode_setxattr)(mnt_userns, dentry, name, value, size, flags);
 }
 
 #define INODE_SETXATTR_TYPE_legacy	struct dentry *dentry, const char *name, const void *value, size_t size, int flags
@@ -177,7 +177,7 @@ __overloaded static int ksu_inode_setxattr_legacy(INODE_SETXATTR_TYPE_legacy)
 	ksu_hide_setxattr_inline(name, value, size);
 
 	assume(!!&security_inode_setxattr);
-	return ((typeof(ksu_inode_setxattr_legacy) *)security_inode_setxattr)(dentry, name, value, size, flags);
+	return ((typeof(ksu_inode_setxattr_legacy) *)(void *)security_inode_setxattr)(dentry, name, value, size, flags);
 }
 
 #define ksu_inode_setxattr_overloaded _Generic(				\

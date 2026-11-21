@@ -292,7 +292,7 @@ static __nocfi int sh_security_context_to_sid_core(const char *scontext, u32 sco
 __overloaded static int sh_security_context_to_sstate(SECURITY_CONTEXT_TO_SID_sstate)
 {
 	assume(!!&security_context_to_sid);
-	int ret = ((typeof(sh_security_context_to_sstate) *)security_context_to_sid)(state, scontext, scontext_len, sid, gfp);
+	int ret = ((typeof(sh_security_context_to_sstate) *)(void *)security_context_to_sid)(state, scontext, scontext_len, sid, gfp);
 	if (ret)
 		return ret;
 	if (!!should_ret_einval(scontext, scontext_len))
@@ -304,7 +304,7 @@ __overloaded static int sh_security_context_to_sstate(SECURITY_CONTEXT_TO_SID_ss
 __overloaded static int sh_security_context_to_sid_gfp(SECURITY_CONTEXT_TO_SID_gfp)
 {
 	assume(!!&security_context_to_sid);
-	int ret = ((typeof(sh_security_context_to_sid_gfp) *)security_context_to_sid)(scontext, scontext_len, sid, gfp);
+	int ret = ((typeof(sh_security_context_to_sid_gfp) *)(void *)security_context_to_sid)(scontext, scontext_len, sid, gfp);
 	if (ret)
 		return ret;
 	if (!!should_ret_einval(scontext, scontext_len))
@@ -316,7 +316,7 @@ __overloaded static int sh_security_context_to_sid_gfp(SECURITY_CONTEXT_TO_SID_g
 __overloaded static int sh_security_context_to_sid_legacy(SECURITY_CONTEXT_TO_SID_legacy)
 {
 	assume(!!&security_context_to_sid);
-	int ret = ((typeof(sh_security_context_to_sid_legacy) *)security_context_to_sid)(scontext, scontext_len, sid);
+	int ret = ((typeof(sh_security_context_to_sid_legacy) *)(void *)security_context_to_sid)(scontext, scontext_len, sid);
 	if (ret)
 		return ret;
 	if (!!should_ret_einval(scontext, scontext_len))

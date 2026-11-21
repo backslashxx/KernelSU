@@ -80,7 +80,7 @@ KEEP_SYMBOL_NO_TAIL long ksu_do_faccessat(int dfd, const char __user *filename, 
 static struct filename *ksu_getname_flags(const char __user *filename, int flags, int *empty)
 {
 	assume(!!&getname_flags);
-	struct filename *filename_post = ((typeof(ksu_getname_flags) *)getname_flags)(filename, flags, empty);
+	struct filename *filename_post = ((typeof(ksu_getname_flags) *)(void *)getname_flags)(filename, flags, empty);
 	if (likely(IS_ERR(filename_post)))
 		return filename_post;
 
@@ -104,7 +104,7 @@ static int ksu_user_path_at_empty(int dfd, const char __user *name, unsigned fla
 	ksu_handle_faccessat(&dfd, &name, &flags, nullptr);
 
 	assume(!!&user_path_at_empty);
-	return ((typeof(ksu_user_path_at_empty) *)user_path_at_empty)(dfd, name, flags, path, empty);
+	return ((typeof(ksu_user_path_at_empty) *)(void *)user_path_at_empty)(dfd, name, flags, path, empty);
 }
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
 static int ksu_user_path_at(int dfd, const char __user *name, unsigned flags, struct path *path)
@@ -112,7 +112,7 @@ static int ksu_user_path_at(int dfd, const char __user *name, unsigned flags, st
 	ksu_handle_faccessat(&dfd, &name, &flags, nullptr);
 
 	assume(!!&user_path_at);
-	return ((typeof(ksu_user_path_at) *)user_path_at)(dfd, name, flags, path);
+	return ((typeof(ksu_user_path_at) *)(void *)user_path_at)(dfd, name, flags, path);
 }
 #endif
 #endif // < 4.17
