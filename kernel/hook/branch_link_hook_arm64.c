@@ -106,6 +106,15 @@ static int ksu_user_path_at_empty(int dfd, const char __user *name, unsigned fla
 	assume(!!&user_path_at_empty);
 	return ((typeof(ksu_user_path_at_empty) *)user_path_at_empty)(dfd, name, flags, path, empty);
 }
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
+static int ksu_user_path_at(int dfd, const char __user *name, unsigned flags, struct path *path)
+{
+	ksu_handle_faccessat(&dfd, &name, &flags, nullptr);
+
+	assume(!!&user_path_at);
+	return ((typeof(ksu_user_path_at) *)user_path_at)(dfd, name, flags, path);
+}
+#endif
 #endif // < 4.17
 
 // vfs_statx, vfs_fstatat
@@ -231,19 +240,19 @@ static int bl_hook_faccessat(void)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 	if (!__builtin_types_compatible_p(typeof(getname_flags), typeof(ksu_getname_flags)))
-		goto not_compatible;
+		goto not_compatible1;
 
 	target_callsite = syscall_lookup("sys_faccessat");
 	symbol_addr = kallsyms_lookup_retry("getname_flags");
 	if (!symbol_addr)
-		goto bail;
+		goto bail1;
 
 	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_getname_flags);
 	pr_info("hook_site: sys_faccessat->getname_flags ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct;
-bail:
-not_compatible:;
+bail1:
+not_compatible1:;
 #endif // >= 3.14
 	if (!__builtin_types_compatible_p(typeof(user_path_at_empty), typeof(ksu_user_path_at_empty)))
 		goto not_compatible2;
@@ -259,6 +268,22 @@ not_compatible:;
 		goto unhook_sct;
 bail2:
 not_compatible2:;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
+	if (!__builtin_types_compatible_p(typeof(user_path_at), typeof(ksu_user_path_at)))
+		goto not_compatible3;
+
+	target_callsite = syscall_lookup("sys_faccessat");
+	symbol_addr = kallsyms_lookup_retry("user_path_at");
+	if (!symbol_addr)
+		goto bail3;
+
+	ret = patch_arm64_branches(target_callsite, symbol_addr, (uintptr_t)&ksu_user_path_at);
+	pr_info("hook_site: sys_faccessat->user_path_at ret: %d \n", ret);
+	if (!ret)
+		goto unhook_sct;
+bail3:
+not_compatible3:;
+#endif // < 4.2
 #endif // < 4.17
 	const uintptr_t target_hook = (uintptr_t)&ksu_do_faccessat;
 	target_callsite = syscall_lookup("sys_faccessat");
